@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  savd-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev-deps
+    image: savd-app:dev
+    container_name: savd-app-dev
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      # Bind mount source code for hot reloading
+      - type: bind
+        source: .
+        target: /app
+        bind:
+          propagation: cached
+      # Use named volumes for node_modules and .next to avoid conflicts
+      - node_modules:/app/node_modules
+      - next_cache:/app/.next
+    command: >
+      sh -c "npm install && npm run dev"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - savd-network
+
+  # Uncomment and configure these services as needed for your development environment
+  
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: savd-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - savd-network
+
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: savd-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: ${POSTGRES_DB:-savddb}
+  #     POSTGRES_USER: ${POSTGRES_USER:-savd}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - savd-network
+
+volumes:
+  node_modules:
+  next_cache:
+  # redis_data:
+  # postgres_data:
+
+networks:
+  savd-network:
+    driver: bridge

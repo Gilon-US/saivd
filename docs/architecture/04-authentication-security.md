@@ -1,0 +1,981 @@
+# SAVD App - Authentication & Security
+
+## Overview
+
+The SAVD App implements a comprehensive security strategy to protect user data, video content, and system integrity. This document outlines the authentication mechanisms, authorization controls, and security measures implemented throughout the application.
+
+## Local Development with Supabase
+
+For local development and testing, the SAVD App can be configured to use a local Supabase instance running in Docker. This provides a complete development environment with authentication, database, and storage capabilities without relying on a production Supabase instance.
+
+### Local Supabase Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            Docker Environment                                   │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │                      Docker Network                                     │    │
+│  │                                                                         │    │
+│  │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────┐  │    │
+│  │  │                 │    │                 │    │                     │  │    │
+│  │  │  SAVD App       │    │  Supabase       │    │  Supabase Studio    │  │    │
+│  │  │  Container      │◀───▶  Services       │◀───▶  (Admin UI)         │  │    │
+│  │  │  (Port 3000)    │    │  (Port 8000)    │    │  (Port 8000)        │  │    │
+│  │  │                 │    │                 │    │                     │  │    │
+│  │  └─────────────────┘    └─────────────────┘    └─────────────────────┘  │    │
+│  │         │                       │                       │               │    │
+│  │         ▼                       ▼                       ▼               │    │
+│  │  ┌─────────────┐        ┌─────────────────┐     ┌─────────────────┐     │    │
+│  │  │ next_cache  │        │ postgres_data   │     │ storage_data    │     │    │
+│  │  │  Volume     │        │  Volume         │     │  Volume         │     │    │
+│  │  └─────────────┘        └─────────────────┘     └─────────────────┘     │    │
+│  │                                                                         │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Setting Up Local Supabase
+
+#### 1. Clone the Supabase Repository
+
+```bash
+# Clone the Supabase repository
+git clone --depth 1 https://github.com/supabase/supabase
+
+# Create a directory for local Supabase
+mkdir -p supabase-local
+
+# Copy the Docker configuration files
+cp -r supabase/docker/* supabase-local/
+
+# Copy the example environment file
+cp supabase/docker/.env.example supabase-local/.env
+
+# Navigate to the local Supabase directory
+cd supabase-local
+```
+
+#### 2. Configure Environment Variables
+
+Edit the `.env` file in the `supabase-local` directory:
+
+```bash
+# General
+COMPOSE_PROJECT_NAME=supabase
+
+# API URL
+SUPABASE_PUBLIC_URL=http://localhost:8000
+
+# Database
+POSTGRES_PASSWORD=your-secure-postgres-password
+POSTGRES_DB=postgres
+POSTGRES_HOST=db
+POSTGRES_PORT=5432
+
+# JWT
+JWT_SECRET=your-super-secret-jwt-key-at-least-32-characters-long
+ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+
+# Dashboard
+DASHBOARD_USERNAME=admin
+DASHBOARD_PASSWORD=secure-dashboard-password
+
+# Pooler
+POOLER_TENANT_ID=your-tenant-id
+POOLER_PROXY_PORT_TRANSACTION=6543
+
+# SMTP for auth emails
+SMTP_HOST=mail
+SMTP_PORT=2500
+SMTP_USER=
+SMTP_PASS=
+SMTP_SENDER_NAME=Supabase
+```
+
+**Important**: For security, generate your own JWT secret and update the `ANON_KEY` and `SERVICE_ROLE_KEY` values.
+
+#### 3. Start the Supabase Services
+
+```bash
+# Pull the latest images
+docker compose pull
+
+# Start the services in detached mode
+docker compose up -d
+```
+
+### Integrating with SAVD Application
+
+#### 1. Create a Combined Docker Compose Setup
+
+Create a new `docker-compose.supabase.yml` file in your SAVD project root:
+
+```yaml
+version: '3.8'
+
+services:
+  # Import existing SAVD app service
+  savd-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev-deps
+    image: savd-app:dev
+    container_name: savd-app-dev
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      # Add Supabase environment variables
+      - NEXT_PUBLIC_SUPABASE_URL=http://kong:8000
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - type: bind
+        source: .
+        target: /app
+        bind:
+          propagation: cached
+      - node_modules:/app/node_modules
+      - next_cache:/app/.next
+    command: >
+      sh -c "npm install && npm run dev"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - savd-network
+      - supabase-network  # Connect to Supabase network
+
+networks:
+  savd-network:
+    driver: bridge
+  supabase-network:
+    external: true
+    name: supabase-local_default  # Use the network created by Supabase Docker Compose
+
+volumes:
+  node_modules:
+  next_cache:
+```
+
+#### 2. Create a `.env.docker` File for the SAVD App
+
+```
+# SAVD App Configuration
+APP_PORT=3000
+
+# Supabase Configuration - these should match your Supabase local setup
+NEXT_PUBLIC_SUPABASE_URL=http://kong:8000
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+```
+
+#### 3. Create a Script to Start Both Services
+
+Create a script called `scripts/start-dev-with-supabase.sh`:
+
+```bash
+#!/bin/bash
+
+# Start Supabase services if not already running
+echo "Starting Supabase services..."
+cd supabase-local
+docker compose up -d
+cd ..
+
+# Wait for Supabase to be ready
+echo "Waiting for Supabase services to be ready..."
+until $(curl --output /dev/null --silent --head --fail http://localhost:8000/rest/v1/); do
+  printf '.'
+  sleep 5
+done
+echo "Supabase is ready!"
+
+# Start SAVD app with Supabase integration
+echo "Starting SAVD app with Supabase integration..."
+docker compose -f docker-compose.supabase.yml up -d
+
+echo "Development environment is ready!"
+echo "- SAVD app: http://localhost:3000"
+echo "- Supabase Studio: http://localhost:8000"
+echo "  Username: admin"
+echo "  Password: secure-dashboard-password"
+```
+
+Make the script executable:
+
+```bash
+chmod +x scripts/start-dev-with-supabase.sh
+```
+
+### Database Schema Setup
+
+Create a file called `supabase-local/volumes/db/init/01-profiles-schema.sql`:
+
+```sql
+-- Create profiles table that extends the auth.users table
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID REFERENCES auth.users(id) PRIMARY KEY,
+  email TEXT NOT NULL,
+  display_name TEXT,
+  avatar_url TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Set up Row Level Security (RLS)
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- Create policies
+-- Allow users to view their own profile
+CREATE POLICY "Users can view their own profile" 
+  ON public.profiles 
+  FOR SELECT 
+  USING (auth.uid() = id);
+
+-- Allow users to update their own profile
+CREATE POLICY "Users can update their own profile" 
+  ON public.profiles 
+  FOR UPDATE 
+  USING (auth.uid() = id);
+
+-- Create a trigger to create a profile when a user is created
+CREATE OR REPLACE FUNCTION public.handle_new_user() 
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email)
+  VALUES (NEW.id, NEW.email);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger the function every time a user is created
+CREATE OR REPLACE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+```
+
+### Testing the Setup
+
+#### 1. Start the Development Environment
+
+```bash
+./scripts/start-dev-with-supabase.sh
+```
+
+#### 2. Access Supabase Studio
+
+1. Open your browser and navigate to http://localhost:8000
+2. Log in with the credentials you set in the `.env` file:
+   - Username: admin
+   - Password: secure-dashboard-password
+
+#### 3. Test Authentication Flow
+
+1. Access your SAVD app at http://localhost:3000
+2. Test the registration and login functionality
+3. Verify that user data is correctly stored in the Supabase database
+
+### Troubleshooting
+
+#### Network Connectivity Issues
+
+If the SAVD app cannot connect to Supabase, check that:
+
+1. Both containers are running: `docker ps`
+2. Both containers are on the same network: `docker network inspect supabase-local_default`
+3. The environment variables are correctly set in the SAVD app
+
+#### Database Schema Issues
+
+If the profiles table is not created:
+
+1. Access the Postgres database directly:
+   ```bash
+   docker exec -it supabase-local_db_1 psql -U postgres -d postgres
+   ```
+2. Check if the table exists:
+   ```sql
+   \dt public.profiles;
+   ```
+3. If not, manually run the SQL script:
+   ```sql
+   \i /docker-entrypoint-initdb.d/01-profiles-schema.sql
+   ```
+
+#### Authentication Issues
+
+If authentication is not working:
+
+1. Check that the JWT keys match between Supabase and your application
+2. Verify that the Supabase URL is correctly set
+3. Check the browser console for any CORS errors
+
+### Best Practices
+
+1. **Data Persistence**: Use volumes to persist data between container restarts
+2. **Security**: Never use default credentials in any environment
+3. **Environment Separation**: Keep development and production environments separate
+4. **Backup**: Regularly backup your local database for development continuity
+5. **Version Control**: Keep Docker and database configuration in version control
+6. **Secrets Management**: Use environment variables for sensitive information
+
+## Authentication Architecture
+
+The application uses Supabase Auth for authentication, providing a secure and scalable solution for user management.
+
+### Authentication Flow
+
+```
+┌──────────┐     ┌───────────────┐     ┌───────────────┐     ┌──────────────┐
+│          │  1  │               │  2  │               │  3  │              │
+│  Client  │────▶│  Next.js API  │────▶│  Supabase     │────▶│  JWT Token   │
+│          │     │               │     │  Auth         │     │              │
+└──────────┘     └───────────────┘     └───────────────┘     └──────────────┘
+      ▲                                                              │
+      │                                                              │
+      └──────────────────────────────────────────────────────────────┘
+                                   4
+```
+
+1. Client submits credentials to Next.js API
+2. API forwards authentication request to Supabase Auth
+3. Supabase validates credentials and issues JWT token
+4. Token is returned to client for subsequent requests
+### Authentication Implementation
+
+#### Supabase Client Setup
+
+```typescript
+// src/lib/supabase.ts
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+```
+
+#### Server-Side Authentication
+
+```typescript
+// src/lib/supabase-server.ts
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+
+export function createServerSupabase() {
+  return createServerComponentClient({ cookies });
+}
+```
+
+#### Route Handler Authentication
+
+```typescript
+// src/lib/supabase-route-handler.ts
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+
+export function createRouteHandlerSupabase() {
+  return createRouteHandlerClient({ cookies });
+}
+```
+
+#### Authentication Middleware
+
+```typescript
+// src/middleware.ts
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
+
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next();
+  const supabase = createMiddlewareClient({ req, res });
+  
+  // Check if user is authenticated
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  // Protected routes pattern
+  const isProtectedRoute = req.nextUrl.pathname.startsWith('/dashboard');
+  const isAuthRoute = req.nextUrl.pathname.startsWith('/login') || 
+                      req.nextUrl.pathname.startsWith('/register');
+
+  // Redirect if accessing protected route without authentication
+  if (isProtectedRoute && !session) {
+    const redirectUrl = new URL('/login', req.url);
+    redirectUrl.searchParams.set('redirectTo', req.nextUrl.pathname);
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // Redirect if accessing auth routes while authenticated
+  if (isAuthRoute && session) {
+    return NextResponse.redirect(new URL('/dashboard', req.url));
+  }
+
+  return res;
+}
+
+export const config = {
+  matcher: ['/dashboard/:path*', '/login', '/register'],
+};
+```
+
+## Authorization Controls
+
+### Row-Level Security (RLS)
+
+The application uses Supabase's Row-Level Security to enforce authorization at the database level:
+
+```sql
+-- Example RLS policy for videos table
+CREATE POLICY "Users can view their own videos"
+  ON public.videos
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own videos"
+  ON public.videos
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own videos"
+  ON public.videos
+  FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own videos"
+  ON public.videos
+  FOR DELETE
+  USING (auth.uid() = user_id);
+```
+
+### API Authorization
+
+API routes implement authorization checks to ensure users can only access their own resources:
+
+```typescript
+// Example API route with authorization check
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const videoId = params.id;
+    
+    // Get authenticated user
+    const supabase = createRouteHandlerClient({ cookies });
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: { code: 'unauthorized', message: 'Authentication required' } },
+        { status: 401 }
+      );
+    }
+    
+    // Get video with authorization check (RLS will enforce user_id = auth.uid())
+    const { data: video, error } = await supabase
+      .from('videos')
+      .select('*')
+      .eq('id', videoId)
+      .single();
+      
+    if (error) {
+      return NextResponse.json(
+        { success: false, error: { code: 'not_found', message: 'Video not found' } },
+        { status: 404 }
+      );
+    }
+    
+    return NextResponse.json({
+      success: true,
+      data: video
+    });
+  } catch (error: any) {
+    console.error('Error fetching video:', error);
+    return NextResponse.json(
+      { success: false, error: { code: 'server_error', message: 'Internal server error' } },
+      { status: 500 }
+    );
+  }
+}
+```
+
+## Data Security
+
+### Secure Storage
+
+1. **Video Storage Security**:
+   - Videos are stored in Wasabi S3-compatible storage
+   - Access is controlled through pre-signed URLs with expiration
+   - Original videos are never publicly accessible
+   - Watermarked videos are only accessible through secure tokens
+
+2. **Database Security**:
+   - Sensitive data is protected by Row-Level Security
+   - Passwords are never stored (handled by Supabase Auth)
+   - API keys and secrets are stored as environment variables
+
+### Data in Transit
+
+1. **HTTPS Everywhere**:
+   - All communication uses HTTPS
+   - Strict Transport Security (HSTS) is enabled
+   - Secure cookies with HttpOnly and SameSite flags
+
+2. **API Security**:
+   - JWT tokens for authentication
+   - CORS configuration to prevent unauthorized access
+   - Content Security Policy (CSP) headers
+
+## Public URL Security
+
+The application implements a secure token system for public video sharing:
+
+1. **Token Generation**:
+   - Secure random tokens using nanoid
+   - Tokens stored in database with expiration date
+   - Association with specific watermarked videos only
+
+2. **Token Validation**:
+   - Tokens are validated on each request
+   - Expired tokens are rejected
+   - Revoked tokens are rejected
+
+3. **Access Control**:
+   - Public URLs only provide access to watermarked videos
+   - Original videos are never accessible via public URLs
+   - Users can revoke access at any time
+
+```typescript
+// Public URL validation example
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { token: string } }
+) {
+  try {
+    const token = params.token;
+    
+    // Create direct Supabase client (no auth required)
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    
+    // Validate token
+    const { data: accessToken, error } = await supabase
+      .from('public_access_tokens')
+      .select('*, watermarked_videos(*)')
+      .eq('token', token)
+      .eq('is_active', true)
+      .gt('expires_at', new Date().toISOString())
+      .single();
+      
+    if (error || !accessToken) {
+      return NextResponse.json(
+        { success: false, error: { code: 'invalid_token', message: 'Invalid or expired token' } },
+        { status: 404 }
+      );
+    }
+    
+    // Return watermarked video details
+    return NextResponse.json({
+      success: true,
+      data: {
+        watermarkedUrl: accessToken.watermarked_videos.watermarked_url,
+        watermarkedThumbnailUrl: accessToken.watermarked_videos.watermarked_thumbnail_url,
+      }
+    });
+  } catch (error: any) {
+    console.error('Error validating token:', error);
+    return NextResponse.json(
+      { success: false, error: { code: 'server_error', message: 'Internal server error' } },
+      { status: 500 }
+    );
+  }
+}
+```
+## External Service Security
+
+### Watermarking Service Integration
+
+1. **API Authentication**:
+   - API key authentication for requests to watermarking service
+   - Keys stored as environment variables
+   - Keys rotated periodically
+
+2. **Callback Security**:
+   - Secure callback tokens for webhook validation
+   - Tokens validated on each callback request
+   - Rate limiting for callback endpoints
+
+```typescript
+// Callback validation example
+export async function POST(request: NextRequest) {
+  try {
+    // Get callback token from URL
+    const url = new URL(request.url);
+    const token = url.searchParams.get('token');
+    
+    if (!token) {
+      return NextResponse.json(
+        { success: false, error: { code: 'unauthorized', message: 'Missing callback token' } },
+        { status: 401 }
+      );
+    }
+    
+    // Create direct Supabase client with service role key
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
+    // Verify token and get job
+    const { data: job, error } = await supabase
+      .from('watermarking_jobs')
+      .select('*')
+      .eq('callback_token', token)
+      .single();
+      
+    if (error || !job) {
+      return NextResponse.json(
+        { success: false, error: { code: 'not_found', message: 'Invalid callback token' } },
+        { status: 404 }
+      );
+    }
+    
+    // Process callback...
+  } catch (error: any) {
+    console.error('Error processing callback:', error);
+    return NextResponse.json(
+      { success: false, error: { code: 'server_error', message: 'Internal server error' } },
+      { status: 500 }
+    );
+  }
+}
+```
+
+### Wasabi Storage Integration
+
+1. **Access Control**:
+   - IAM policies for Wasabi access
+   - Least privilege principle for access keys
+   - Pre-signed URLs for direct uploads and downloads
+
+2. **Bucket Security**:
+   - Private bucket with no public access
+   - CORS configuration for allowed origins
+   - Bucket policies for access control
+
+## Input Validation & Sanitization
+
+### API Input Validation
+
+All API endpoints implement thorough input validation:
+
+```typescript
+// Example input validation
+const { filename, contentType, filesize } = await request.json();
+
+// Validate required fields
+if (!filename || !contentType || !filesize) {
+  return NextResponse.json(
+    { 
+      success: false, 
+      error: { 
+        code: 'validation_error', 
+        message: 'Missing required fields',
+        details: {
+          filename: !filename ? 'Filename is required' : undefined,
+          contentType: !contentType ? 'Content type is required' : undefined,
+          filesize: !filesize ? 'File size is required' : undefined,
+        }
+      } 
+    },
+    { status: 400 }
+  );
+}
+
+// Validate file type
+const allowedTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'];
+if (!allowedTypes.includes(contentType)) {
+  return NextResponse.json(
+    { 
+      success: false, 
+      error: { 
+        code: 'validation_error', 
+        message: 'Invalid file type',
+        details: {
+          contentType: `File type ${contentType} is not supported. Supported types: ${allowedTypes.join(', ')}`
+        }
+      } 
+    },
+    { status: 400 }
+  );
+}
+
+// Validate file size
+const maxSize = 500 * 1024 * 1024; // 500MB
+if (filesize > maxSize) {
+  return NextResponse.json(
+    { 
+      success: false, 
+      error: { 
+        code: 'validation_error', 
+        message: 'File too large',
+        details: {
+          filesize: `File size exceeds the maximum allowed size of 500MB`
+        }
+      } 
+    },
+    { status: 400 }
+  );
+}
+```
+
+### Frontend Validation
+
+Client-side validation is implemented to provide immediate feedback:
+
+```typescript
+// Example form validation
+const validateForm = () => {
+  const errors: Record<string, string> = {};
+  
+  if (!email) {
+    errors.email = 'Email is required';
+  } else if (!/\S+@\S+\.\S+/.test(email)) {
+    errors.email = 'Email is invalid';
+  }
+  
+  if (!password) {
+    errors.password = 'Password is required';
+  } else if (password.length < 8) {
+    errors.password = 'Password must be at least 8 characters';
+  }
+  
+  return errors;
+};
+```
+
+## Error Handling & Logging
+
+### Structured Error Responses
+
+All API endpoints return structured error responses:
+
+```typescript
+{
+  success: false,
+  error: {
+    code: 'error_code',
+    message: 'Human-readable error message',
+    details: { ... } // Optional additional details
+  }
+}
+```
+
+### Secure Error Handling
+
+Errors are handled securely to prevent information leakage:
+
+```typescript
+try {
+  // Operation that might fail
+} catch (error: any) {
+  console.error('Operation failed:', error);
+  
+  // Return sanitized error to client
+  return NextResponse.json(
+    { 
+      success: false, 
+      error: { 
+        code: 'server_error', 
+        message: 'An unexpected error occurred',
+        reference: uuidv4() // For server-side logging reference
+      } 
+    },
+    { status: 500 }
+  );
+}
+```
+
+### Logging Strategy
+
+1. **Structured Logging**:
+   - JSON-formatted logs for machine readability
+   - Consistent log levels (debug, info, warn, error)
+   - Context-rich log entries
+
+2. **Security Event Logging**:
+   - Authentication attempts (success/failure)
+   - Authorization violations
+   - Resource access
+   - Configuration changes
+
+3. **Privacy Considerations**:
+   - No sensitive data in logs
+   - PII redaction
+   - Compliance with data protection regulations
+
+## Security Headers
+
+The application implements security headers to protect against common web vulnerabilities:
+
+```typescript
+// src/middleware.ts (security headers)
+const securityHeaders = [
+  {
+    key: 'X-DNS-Prefetch-Control',
+    value: 'on',
+  },
+  {
+    key: 'Strict-Transport-Security',
+    value: 'max-age=63072000; includeSubDomains; preload',
+  },
+  {
+    key: 'X-XSS-Protection',
+    value: '1; mode=block',
+  },
+  {
+    key: 'X-Frame-Options',
+    value: 'SAMEORIGIN',
+  },
+  {
+    key: 'X-Content-Type-Options',
+    value: 'nosniff',
+  },
+  {
+    key: 'Referrer-Policy',
+    value: 'origin-when-cross-origin',
+  },
+  {
+    key: 'Content-Security-Policy',
+    value: ContentSecurityPolicy.replace(/\s{2,}/g, ' ').trim(),
+  },
+];
+
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next();
+  
+  // Apply security headers
+  securityHeaders.forEach((header) => {
+    res.headers.set(header.key, header.value);
+  });
+  
+  // Rest of middleware...
+}
+```
+## Rate Limiting
+
+The application implements rate limiting to prevent abuse:
+
+```typescript
+// src/middleware.ts (rate limiting)
+import { RateLimiter } from '@/lib/rate-limiter';
+
+const apiLimiter = new RateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+});
+
+const authLimiter = new RateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // limit each IP to 5 auth requests per minute
+});
+
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next();
+  
+  // Apply rate limiting
+  const isAuthRoute = req.nextUrl.pathname.startsWith('/api/auth');
+  
+  if (isAuthRoute) {
+    const rateLimited = await authLimiter.check(req, res);
+    if (rateLimited) {
+      return rateLimited;
+    }
+  } else if (req.nextUrl.pathname.startsWith('/api/')) {
+    const rateLimited = await apiLimiter.check(req, res);
+    if (rateLimited) {
+      return rateLimited;
+    }
+  }
+  
+  // Rest of middleware...
+}
+```
+
+## Security Testing
+
+The application undergoes regular security testing:
+
+1. **Automated Testing**:
+   - Static Application Security Testing (SAST)
+   - Dynamic Application Security Testing (DAST)
+   - Dependency vulnerability scanning
+
+2. **Manual Testing**:
+   - Authentication bypass attempts
+   - Authorization control testing
+   - Input validation testing
+   - File upload security testing
+
+3. **Continuous Monitoring**:
+   - Real-time threat detection
+   - Anomaly detection
+   - Security event monitoring
+
+## Security Compliance
+
+The application is designed to comply with relevant security standards:
+
+1. **OWASP Top 10**:
+   - Protection against common web vulnerabilities
+   - Regular security assessments
+   - Developer security training
+
+2. **GDPR Compliance**:
+   - Data minimization
+   - User consent management
+   - Right to access and erasure
+
+3. **Security Best Practices**:
+   - Defense in depth
+   - Least privilege principle
+   - Regular security updates
+
+## Implementation Guidelines
+
+1. **Authentication Implementation**:
+   - Use Supabase Auth for user management
+   - Implement proper session handling
+   - Apply authentication middleware
+
+2. **Authorization Implementation**:
+   - Use Row-Level Security in database
+   - Implement authorization checks in API routes
+   - Apply principle of least privilege
+
+3. **Security Headers Implementation**:
+   - Configure security headers in middleware
+   - Implement Content Security Policy
+   - Enable HTTPS with HSTS
+
+4. **Error Handling Implementation**:
+   - Implement structured error responses
+   - Apply secure error handling practices
+   - Set up proper logging

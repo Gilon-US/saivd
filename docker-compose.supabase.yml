@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # Import existing SAVD app service
+  savd-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev-deps
+    image: savd-app:dev
+    container_name: savd-app-dev
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      # Add Supabase environment variables
+      - NEXT_PUBLIC_SUPABASE_URL=http://kong:8000
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - type: bind
+        source: .
+        target: /app
+        bind:
+          propagation: cached
+      - node_modules:/app/node_modules
+      - next_cache:/app/.next
+    command: >
+      sh -c "npm install && npm run dev"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - savd-network
+      - supabase-network  # Connect to Supabase network
+
+networks:
+  savd-network:
+    driver: bridge
+  supabase-network:
+    external: true
+    name: supabase-local_supabase-network  # Use the network created by Supabase Docker Compose
+
+volumes:
+  node_modules:
+  next_cache:
