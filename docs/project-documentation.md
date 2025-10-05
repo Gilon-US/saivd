@@ -287,7 +287,7 @@ For non-Docker deployments:
 |----------|-------------|----------|
 | `WASABI_ACCESS_KEY_ID` | Wasabi access key ID | Yes |
 | `WASABI_SECRET_ACCESS_KEY` | Wasabi secret access key | Yes |
-| `WASABI_REGION` | Wasabi region (default: us-east-1) | Yes |
+| `WASABI_REGION` | Wasabi region for your bucket | Yes |
 | `WASABI_BUCKET_NAME` | Wasabi bucket name | Yes |
 | `WASABI_ENDPOINT` | Wasabi endpoint URL | Yes |
 | `NEXT_PUBLIC_APP_URL` | App URL for CORS | No |

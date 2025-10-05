@@ -174,7 +174,7 @@ Get a pre-signed URL for uploading a video to Wasabi storage.
 {
   "success": true,
   "data": {
-    "uploadUrl": "https://wasabi-bucket.s3.wasabisys.com",
+    "uploadUrl": "https://your-bucket.s3.your-region.wasabisys.com",
     "fields": {
       "key": "uploads/user-uuid/timestamp-example.mp4",
       "Content-Type": "video/mp4",
@@ -212,8 +212,8 @@ Confirm a successful upload and create the video record in the database.
   "data": {
     "id": "video-uuid",
     "filename": "example.mp4",
-    "originalUrl": "https://wasabi-bucket.s3.wasabisys.com/uploads/user-uuid/timestamp-example.mp4",
-    "originalThumbnailUrl": "https://wasabi-bucket.s3.wasabisys.com/thumbnails/user-uuid/timestamp-example.jpg"
+    "originalUrl": "https://your-bucket.s3.your-region.wasabisys.com/uploads/user-uuid/timestamp-example.mp4",
+    "originalThumbnailUrl": "https://your-bucket.s3.your-region.wasabisys.com/thumbnails/user-uuid/timestamp-example.jpg"
   }
 }
 ```
@@ -377,8 +377,8 @@ Endpoint for the external watermarking service to notify when processing is comp
 {
   "jobId": "external-job-id",
   "status": "completed",
-  "videoUrl": "https://wasabi-bucket.s3.wasabisys.com/watermarked/user-uuid/timestamp-example.mp4",
-  "thumbnailUrl": "https://wasabi-bucket.s3.wasabisys.com/thumbnails/watermarked/user-uuid/timestamp-example.jpg",
+  "videoUrl": "https://your-bucket.s3.your-region.wasabisys.com/watermarked/user-uuid/timestamp-example.mp4",
+  "thumbnailUrl": "https://your-bucket.s3.your-region.wasabisys.com/thumbnails/watermarked/user-uuid/timestamp-example.jpg",
   "metadata": {
     "processingTime": 120,
     "watermarkPosition": "center",

@@ -234,11 +234,11 @@ export async function POST(request: NextRequest) {
     }
     
     // Generate URLs for the video and thumbnail
-    const videoUrl = `https://${WASABI_BUCKET}.s3.wasabisys.com/${key}`;
+    const videoUrl = `https://${WASABI_BUCKET}.s3.${process.env.WASABI_REGION}.wasabisys.com/${key}`;
     
     // Generate thumbnail (in a real implementation, this would be a background job)
     const thumbnailKey = await generateThumbnail(key);
-    const thumbnailUrl = `https://${WASABI_BUCKET}.s3.wasabisys.com/${thumbnailKey}`;
+    const thumbnailUrl = `https://${WASABI_BUCKET}.s3.${process.env.WASABI_REGION}.wasabisys.com/${thumbnailKey}`;
     
     // Store video metadata in Supabase
     const { data: video, error } = await supabase

@@ -107,7 +107,7 @@ A comprehensive video management platform built with Next.js for uploading, proc
 | ------------------------------- | ---------------------------------- | ------------ |
 | `WASABI_ACCESS_KEY_ID`          | Your Wasabi access key ID          | Yes          |
 | `WASABI_SECRET_ACCESS_KEY`      | Your Wasabi secret access key      | Yes          |
-| `WASABI_REGION`                 | Wasabi region (default: us-east-1) | Yes          |
+| `WASABI_REGION`                 | Wasabi region for your bucket      | Yes          |
 | `WASABI_BUCKET_NAME`            | Your Wasabi bucket name            | Yes          |
 | `WASABI_ENDPOINT`               | Wasabi endpoint URL                | Yes          |
 | `NEXT_PUBLIC_APP_URL`           | Your app URL (for CORS)            | No           |
@@ -227,8 +227,8 @@ Lists all videos for the authenticated user with pagination.
       {
         "id": "uuid",
         "filename": "video.mp4",
-        "original_url": "https://bucket.s3.wasabisys.com/...",
-        "original_thumbnail_url": "https://bucket.s3.wasabisys.com/...",
+        "original_url": "https://your-bucket.s3.your-region.wasabisys.com/...",
+        "original_thumbnail_url": "https://your-bucket.s3.your-region.wasabisys.com/...",
         "processed_url": null,
         "processed_thumbnail_url": null,
         "status": "uploaded",
@@ -264,7 +264,7 @@ Generates pre-signed URL for video upload.
 {
   "success": true,
   "data": {
-    "uploadUrl": "https://bucket.s3.wasabisys.com/...",
+    "uploadUrl": "https://your-bucket.s3.your-region.wasabisys.com/...",
     "fields": {
       "key": "videos/user-id/timestamp-video.mp4",
       "Content-Type": "video/mp4"
@@ -284,8 +284,8 @@ Confirms video upload completion and saves metadata.
 {
   "videoId": "uuid",
   "filename": "video.mp4",
-  "originalUrl": "https://bucket.s3.wasabisys.com/...",
-  "thumbnailUrl": "https://bucket.s3.wasabisys.com/..."
+  "originalUrl": "https://your-bucket.s3.your-region.wasabisys.com/...",
+  "thumbnailUrl": "https://your-bucket.s3.your-region.wasabisys.com/..."
 }
 ```
 
