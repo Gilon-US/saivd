@@ -69,9 +69,9 @@ A comprehensive video management platform built with Next.js for uploading, proc
    # Wasabi Configuration
    WASABI_ACCESS_KEY_ID=your_wasabi_access_key_here
    WASABI_SECRET_ACCESS_KEY=your_wasabi_secret_key_here
-   WASABI_REGION=us-east-1
+   WASABI_REGION=
    WASABI_BUCKET_NAME=your_bucket_name_here
-   WASABI_ENDPOINT=https://s3.wasabisys.com
+   WASABI_ENDPOINT=
 
    # Supabase Configuration
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url_here

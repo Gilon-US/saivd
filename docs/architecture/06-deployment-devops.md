@@ -128,7 +128,7 @@ CMD ["node", "server.js"]
 
 ```yaml
 # docker-compose.yml
-version: '3.8'
+version: "3.8"
 
 services:
   savd-app:
@@ -181,7 +181,7 @@ networks:
 
 ```yaml
 # docker-compose.prod.yml
-version: '3.8'
+version: "3.8"
 
 services:
   nginx:
@@ -247,7 +247,7 @@ networks:
 server {
     listen 80;
     server_name example.com www.example.com;
-    
+
     # Redirect HTTP to HTTPS
     location / {
         return 301 https://$host$request_uri;
@@ -257,7 +257,7 @@ server {
 server {
     listen 443 ssl http2;
     server_name example.com www.example.com;
-    
+
     # SSL Configuration
     ssl_certificate /etc/nginx/ssl/fullchain.pem;
     ssl_certificate_key /etc/nginx/ssl/privkey.pem;
@@ -267,17 +267,17 @@ server {
     ssl_session_timeout 1d;
     ssl_session_cache shared:SSL:10m;
     ssl_session_tickets off;
-    
+
     # HSTS Configuration
     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
-    
+
     # Security Headers
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' https://api.example.com; media-src 'self' blob: https:; object-src 'none'; frame-ancestors 'self'; form-action 'self'; base-uri 'self'; upgrade-insecure-requests;" always;
-    
+
     # Proxy Configuration
     location / {
         proxy_pass http://savd-app:3000;
@@ -290,7 +290,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
     }
-    
+
     # Static Files Caching
     location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg)$ {
         proxy_pass http://savd-app:3000;
@@ -298,7 +298,7 @@ server {
         proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
         add_header Cache-Control "public, max-age=31536000, immutable";
     }
-    
+
     # Large Media Files
     location ~* \.(mp4|webm|mov)$ {
         proxy_pass http://savd-app:3000;
@@ -309,7 +309,7 @@ server {
         proxy_max_temp_file_size 0;
         client_max_body_size 0;
     }
-    
+
     # Gzip Configuration
     gzip on;
     gzip_comp_level 5;
@@ -326,7 +326,7 @@ server {
         text/javascript
         text/plain
         text/xml;
-    
+
     # Error Pages
     error_page 404 /404.html;
     error_page 500 502 503 504 /50x.html;
@@ -343,52 +343,52 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '20'
-          cache: 'npm'
-          
+          node-version: "20"
+          cache: "npm"
+
       - name: Install dependencies
         run: npm ci
-        
+
       - name: Lint
         run: npm run lint
-        
+
       - name: Type check
         run: npm run type-check
-        
+
       - name: Run tests
         run: npm test
-  
+
   build:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-        
+
       - name: Login to DockerHub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          
+
       - name: Build and push
         uses: docker/build-push-action@v4
         with:
@@ -399,12 +399,12 @@ jobs:
             yourusername/savd-app:${{ github.sha }}
           cache-from: type=registry,ref=yourusername/savd-app:buildcache
           cache-to: type=registry,ref=yourusername/savd-app:buildcache,mode=max
-  
+
   deploy:
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+
     steps:
       - name: Deploy to production
         uses: appleboy/ssh-action@master
@@ -512,8 +512,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
 # Wasabi
-WASABI_REGION=us-east-1
-WASABI_ENDPOINT=https://s3.wasabisys.com
+WASABI_REGION=
+WASABI_ENDPOINT=
 WASABI_ACCESS_KEY_ID=your-wasabi-access-key
 WASABI_SECRET_ACCESS_KEY=your-wasabi-secret-key
 WASABI_BUCKET_NAME=your-wasabi-bucket
@@ -537,8 +537,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
 # Wasabi
-WASABI_REGION=us-east-1
-WASABI_ENDPOINT=https://s3.wasabisys.com
+WASABI_REGION=
+WASABI_ENDPOINT=
 WASABI_ACCESS_KEY_ID=your-wasabi-access-key
 WASABI_SECRET_ACCESS_KEY=your-wasabi-secret-key
 WASABI_BUCKET_NAME=your-wasabi-bucket
@@ -557,30 +557,30 @@ REDIS_URL=redis://redis:6379
 
 ```typescript
 // src/app/api/health/route.ts
-import { NextResponse } from 'next/server';
+import {NextResponse} from "next/server";
 
 export async function GET() {
   try {
     // Perform basic health checks
     const healthData = {
-      status: 'healthy',
+      status: "healthy",
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       environment: process.env.NODE_ENV,
-      version: process.env.npm_package_version || '1.0.0',
+      version: process.env.npm_package_version || "1.0.0",
     };
 
-    return NextResponse.json(healthData, { status: 200 });
+    return NextResponse.json(healthData, {status: 200});
   } catch (error) {
-    console.error('Health check failed:', error);
-    
+    console.error("Health check failed:", error);
+
     return NextResponse.json(
-      { 
-        status: 'unhealthy', 
+      {
+        status: "unhealthy",
         timestamp: new Date().toISOString(),
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      {status: 500}
     );
   }
 }
@@ -589,12 +589,14 @@ export async function GET() {
 ### Logging Strategy
 
 1. **Application Logs**:
+
    - Structured JSON logging for machine readability
    - Log levels (debug, info, warn, error)
    - Request/response logging for API endpoints
    - Error logging with stack traces
 
 2. **Infrastructure Logs**:
+
    - Container logs collected via Docker logging driver
    - Nginx access and error logs
    - System metrics (CPU, memory, disk usage)
@@ -607,11 +609,13 @@ export async function GET() {
 ### Monitoring Tools
 
 1. **Application Monitoring**:
+
    - Health check endpoints
    - Performance metrics
    - Error rate tracking
 
 2. **Infrastructure Monitoring**:
+
    - Container health and resource usage
    - Host metrics
    - Network traffic
@@ -626,6 +630,7 @@ export async function GET() {
 ### Database Backup
 
 1. **Supabase Backups**:
+
    - Automated daily backups
    - Point-in-time recovery
    - Manual backup before major changes
@@ -638,6 +643,7 @@ export async function GET() {
 ### Application Recovery
 
 1. **Rollback Strategy**:
+
    - Docker image versioning
    - Database migration rollback plans
    - Configuration version control
@@ -652,11 +658,13 @@ export async function GET() {
 ### Infrastructure Security
 
 1. **Network Security**:
+
    - Firewall configuration
    - VPC/subnet isolation
    - HTTPS everywhere
 
 2. **Container Security**:
+
    - Minimal base images
    - Non-root user execution
    - Regular security updates
@@ -669,11 +677,13 @@ export async function GET() {
 ### Application Security
 
 1. **Authentication & Authorization**:
+
    - JWT token validation
    - Role-based access control
    - Session management
 
 2. **Input Validation**:
+
    - Server-side validation
    - Parameterized queries
    - Content Security Policy
@@ -688,6 +698,7 @@ export async function GET() {
 ### Horizontal Scaling
 
 1. **Container Orchestration**:
+
    - Docker Swarm or Kubernetes for production
    - Load balancing across instances
    - Auto-scaling based on metrics
@@ -700,6 +711,7 @@ export async function GET() {
 ### Performance Optimization
 
 1. **Caching Strategy**:
+
    - Redis for session and data caching
    - Browser caching for static assets
    - CDN integration for media delivery
@@ -712,16 +724,19 @@ export async function GET() {
 ## Implementation Guidelines
 
 1. **Development Workflow**:
+
    - Use feature branches
    - Pull request reviews
    - Automated testing before merge
 
 2. **Deployment Process**:
+
    - Blue-green deployments
    - Canary releases for critical changes
    - Rollback procedures
 
 3. **Operational Procedures**:
+
    - Incident response plan
    - Change management process
    - Regular security audits

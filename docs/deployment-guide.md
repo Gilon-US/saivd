@@ -45,15 +45,15 @@ This guide provides detailed instructions for deploying the SAVD App in both dev
 
 ### Required Environment Variables
 
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `WASABI_ACCESS_KEY_ID` | Wasabi access key ID | Yes | - |
-| `WASABI_SECRET_ACCESS_KEY` | Wasabi secret access key | Yes | - |
-| `WASABI_REGION` | Wasabi region | Yes | us-east-1 |
-| `WASABI_BUCKET_NAME` | Wasabi bucket name | Yes | - |
-| `WASABI_ENDPOINT` | Wasabi endpoint URL | Yes | https://s3.wasabisys.com |
-| `NEXT_PUBLIC_APP_URL` | App URL for CORS | No | http://localhost:3000 |
-| `NODE_ENV` | Environment (development/production) | No | development |
+| Variable                   | Description                          | Required | Default                  |
+| -------------------------- | ------------------------------------ | -------- | ------------------------ |
+| `WASABI_ACCESS_KEY_ID`     | Wasabi access key ID                 | Yes      | -                        |
+| `WASABI_SECRET_ACCESS_KEY` | Wasabi secret access key             | Yes      | -                        |
+| `WASABI_REGION`            | Wasabi region                        | Yes      | us-east-1                |
+| `WASABI_BUCKET_NAME`       | Wasabi bucket name                   | Yes      | -                        |
+| `WASABI_ENDPOINT`          | Wasabi endpoint URL                  | Yes      | https://s3.wasabisys.com |
+| `NEXT_PUBLIC_APP_URL`      | App URL for CORS                     | No       | http://localhost:3000    |
+| `NODE_ENV`                 | Environment (development/production) | No       | development              |
 
 ### Environment Files
 
@@ -64,12 +64,13 @@ The project uses different environment files depending on the deployment method:
 - `.env.docker.prod` - Docker production environment
 
 Example `.env.local`:
+
 ```
 WASABI_ACCESS_KEY_ID=your_wasabi_access_key_here
 WASABI_SECRET_ACCESS_KEY=your_wasabi_secret_key_here
-WASABI_REGION=us-east-1
+WASABI_REGION=
 WASABI_BUCKET_NAME=your_bucket_name_here
-WASABI_ENDPOINT=https://s3.wasabisys.com
+WASABI_ENDPOINT=
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
@@ -82,6 +83,7 @@ Docker is the recommended deployment method as it provides consistency across en
 #### Setup
 
 1. **Create environment file**:
+
    ```bash
    cp .env.docker.example .env.docker
    ```
@@ -90,9 +92,9 @@ Docker is the recommended deployment method as it provides consistency across en
    ```
    WASABI_ACCESS_KEY_ID=your_wasabi_access_key_here
    WASABI_SECRET_ACCESS_KEY=your_wasabi_secret_key_here
-   WASABI_REGION=us-east-1
+   WASABI_REGION=
    WASABI_BUCKET_NAME=your_bucket_name_here
-   WASABI_ENDPOINT=https://s3.wasabisys.com
+   WASABI_ENDPOINT=
    APP_PORT=3000
    ```
 
@@ -106,14 +108,14 @@ npm run docker:dev
 
 #### Development Commands
 
-| Command | Description |
-|---------|-------------|
-| `npm run docker:dev` | Start development environment |
-| `npm run docker:dev:down` | Stop development environment |
-| `npm run docker:dev:logs` | View logs |
-| `npm run docker:dev:shell` | Access container shell |
-| `npm run docker:dev:rebuild` | Rebuild and restart |
-| `npm run docker:dev:clean` | Clean up everything |
+| Command                      | Description                   |
+| ---------------------------- | ----------------------------- |
+| `npm run docker:dev`         | Start development environment |
+| `npm run docker:dev:down`    | Stop development environment  |
+| `npm run docker:dev:logs`    | View logs                     |
+| `npm run docker:dev:shell`   | Access container shell        |
+| `npm run docker:dev:rebuild` | Rebuild and restart           |
+| `npm run docker:dev:clean`   | Clean up everything           |
 
 #### Development Features
 
@@ -127,6 +129,7 @@ npm run docker:dev
 #### Setup
 
 1. **Create production environment file**:
+
    ```bash
    cp .env.docker.prod.example .env.docker.prod
    ```
@@ -135,9 +138,9 @@ npm run docker:dev
    ```
    WASABI_ACCESS_KEY_ID=your_wasabi_access_key_here
    WASABI_SECRET_ACCESS_KEY=your_wasabi_secret_key_here
-   WASABI_REGION=us-east-1
+   WASABI_REGION=
    WASABI_BUCKET_NAME=your_bucket_name_here
-   WASABI_ENDPOINT=https://s3.wasabisys.com
+   WASABI_ENDPOINT=
    APP_PORT=3000
    NGINX_PORT=80
    NGINX_HTTPS_PORT=443
@@ -154,27 +157,29 @@ npm run docker:prod
 
 #### Production Commands
 
-| Command | Description |
-|---------|-------------|
-| `npm run docker:prod` | Start production environment |
-| `npm run docker:prod:down` | Stop production environment |
-| `npm run docker:prod:logs` | View logs |
-| `npm run docker:prod:shell` | Access container shell |
-| `npm run docker:prod:rebuild` | Rebuild and restart |
-| `npm run docker:prod:health` | Check service health |
-| `npm run docker:prod:backup` | Backup data |
+| Command                       | Description                  |
+| ----------------------------- | ---------------------------- |
+| `npm run docker:prod`         | Start production environment |
+| `npm run docker:prod:down`    | Stop production environment  |
+| `npm run docker:prod:logs`    | View logs                    |
+| `npm run docker:prod:shell`   | Access container shell       |
+| `npm run docker:prod:rebuild` | Rebuild and restart          |
+| `npm run docker:prod:health`  | Check service health         |
+| `npm run docker:prod:backup`  | Backup data                  |
 
 #### Production Architecture
 
 The production Docker setup includes:
 
 1. **SAVD App Container**:
+
    - Optimized Node.js application
    - Multi-stage build for minimal size
    - Non-root user for security
    - Health checks and monitoring
 
 2. **Nginx Container**:
+
    - Reverse proxy and load balancer
    - Static file serving
    - SSL termination
@@ -194,17 +199,20 @@ For environments where Docker is not available, you can deploy using traditional
 ### Local Development
 
 1. **Install dependencies**:
+
    ```bash
    npm install
    ```
 
 2. **Set up environment variables**:
+
    ```bash
    cp .env.local.example .env.local
    # Edit .env.local with your credentials
    ```
 
 3. **Start development server**:
+
    ```bash
    npm run dev
    ```
@@ -215,11 +223,13 @@ For environments where Docker is not available, you can deploy using traditional
 ### Production Build
 
 1. **Install dependencies**:
+
    ```bash
    npm install
    ```
 
 2. **Build the application**:
+
    ```bash
    npm run build
    ```
@@ -234,11 +244,13 @@ For environments where Docker is not available, you can deploy using traditional
 As a Next.js application, SAVD App can be easily deployed to Vercel:
 
 1. **Install Vercel CLI**:
+
    ```bash
    npm install -g vercel
    ```
 
 2. **Deploy to Vercel**:
+
    ```bash
    vercel
    ```
@@ -316,11 +328,13 @@ To customize the Nginx configuration:
 ### Using Let's Encrypt (Recommended)
 
 1. **Obtain certificates**:
+
    ```bash
    certbot certonly --webroot -w /var/www/html -d your-domain.com
    ```
 
 2. **Copy certificates to the SSL directory**:
+
    ```bash
    mkdir -p ./ssl_certs
    cp /etc/letsencrypt/live/your-domain.com/fullchain.pem ./ssl_certs/cert.pem
@@ -328,6 +342,7 @@ To customize the Nginx configuration:
    ```
 
 3. **Update Nginx configuration**:
+
    - Uncomment SSL sections in `nginx/conf.d/default.conf`
    - Update SSL certificate paths if necessary
 
@@ -339,6 +354,7 @@ To customize the Nginx configuration:
 ### Using Self-Signed Certificates (Development Only)
 
 1. **Generate self-signed certificate**:
+
    ```bash
    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout ./ssl_certs/private.key -out ./ssl_certs/cert.pem
    ```
@@ -383,6 +399,7 @@ docker stats
 To update the application:
 
 1. Pull the latest code:
+
    ```bash
    git pull
    ```
@@ -403,6 +420,7 @@ npm run docker:prod:backup
 ```
 
 This creates backups of:
+
 - Redis data (if used)
 - Any other persistent volumes
 
@@ -411,6 +429,7 @@ This creates backups of:
 To restore from a backup:
 
 1. Stop the containers:
+
    ```bash
    npm run docker:prod:down
    ```
