@@ -51,7 +51,7 @@ describe('Validation Utilities', () => {
       ];
 
       nonStringInputs.forEach(input => {
-        expect(isValidUUID(input as any)).toBe(false);
+        expect(isValidUUID(input as unknown as string)).toBe(false);
       });
     });
 
@@ -98,9 +98,9 @@ describe('Validation Utilities', () => {
     });
 
     it('should return false for non-string inputs', () => {
-      expect(isValidEmail(null as any)).toBe(false);
-      expect(isValidEmail(undefined as any)).toBe(false);
-      expect(isValidEmail(123 as any)).toBe(false);
+      expect(isValidEmail(null as unknown as string)).toBe(false);
+      expect(isValidEmail(undefined as unknown as string)).toBe(false);
+      expect(isValidEmail(123 as unknown as string)).toBe(false);
     });
   });
 
@@ -134,9 +134,9 @@ describe('Validation Utilities', () => {
     });
 
     it('should return false for non-string inputs', () => {
-      expect(isValidURL(null as any)).toBe(false);
-      expect(isValidURL(undefined as any)).toBe(false);
-      expect(isValidURL(123 as any)).toBe(false);
+      expect(isValidURL(null as unknown as string)).toBe(false);
+      expect(isValidURL(undefined as unknown as string)).toBe(false);
+      expect(isValidURL(123 as unknown as string)).toBe(false);
     });
   });
 
@@ -159,9 +159,9 @@ describe('Validation Utilities', () => {
     });
 
     it('should handle non-string inputs', () => {
-      expect(sanitizeString(null as any)).toBe('');
-      expect(sanitizeString(undefined as any)).toBe('');
-      expect(sanitizeString(123 as any)).toBe('');
+      expect(sanitizeString(null as unknown as string)).toBe('');
+      expect(sanitizeString(undefined as unknown as string)).toBe('');
+      expect(sanitizeString(123 as unknown as string)).toBe('');
     });
 
     it('should handle empty strings', () => {

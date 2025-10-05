@@ -22,8 +22,15 @@ jest.mock('@/components/ui/loading-spinner', () => ({
   ),
 }));
 
+interface MockProfile {
+  id: string;
+  display_name: string | null;
+  bio: string | null;
+  photo: string | null;
+}
+
 jest.mock('@/components/profile/PublicProfileCard', () => ({
-  PublicProfileCard: ({ profile }: { profile: any }) => (
+  PublicProfileCard: ({ profile }: { profile: MockProfile }) => (
     <div data-testid="profile-card">
       <h1>{profile.display_name || 'Anonymous User'}</h1>
       <p>{profile.bio || 'No bio'}</p>

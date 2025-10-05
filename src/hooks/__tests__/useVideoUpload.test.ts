@@ -31,7 +31,7 @@ const xhrMock = {
   addEventListener: jest.fn(),
 };
 
-// @ts-ignore
+// @ts-expect-error - Mocking XMLHttpRequest for testing
 window.XMLHttpRequest = jest.fn(() => xhrMock);
 
 // Mock URL methods
@@ -184,9 +184,8 @@ describe('useVideoUpload Hook', () => {
     const { result } = renderHook(() => useVideoUpload());
     
     // Start an upload
-    let uploadPromise;
     await act(async () => {
-      uploadPromise = result.current.uploadVideo(mockFile);
+      result.current.uploadVideo(mockFile);
     });
     
     // Get the upload ID

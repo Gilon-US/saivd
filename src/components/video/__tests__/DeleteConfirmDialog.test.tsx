@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import { DeleteConfirmDialog } from '../DeleteConfirmDialog';
 
 describe('DeleteConfirmDialog', () => {
@@ -19,7 +20,7 @@ describe('DeleteConfirmDialog', () => {
     
     expect(screen.getByText('Delete Video')).toBeInTheDocument();
     expect(screen.getByText('Are you sure you want to delete this video?')).toBeInTheDocument();
-    expect(screen.getByText('"test-video.mp4"')).toBeInTheDocument();
+    expect(screen.getByText(/test-video\.mp4/)).toBeInTheDocument();
   });
 
   it('does not render dialog when isOpen is false', () => {

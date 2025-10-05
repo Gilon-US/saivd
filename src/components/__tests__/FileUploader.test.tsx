@@ -9,9 +9,10 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { FileUploader } from '../FileUploader';
-import { useDropzone } from 'react-dropzone';
+import { render, screen, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import FileUploader from '../FileUploader';
+import { useDropzone, FileRejection } from 'react-dropzone';
 
 // Mock react-dropzone
 jest.mock('react-dropzone', () => ({
@@ -74,7 +75,7 @@ describe('FileUploader Component', () => {
   
   it('calls onFilesSelected when files are dropped', () => {
     // Mock onDrop callback
-    let onDropCallback: (acceptedFiles: File[], fileRejections: any[]) => void;
+    let onDropCallback: (acceptedFiles: File[], fileRejections: FileRejection[]) => void;
     
     (useDropzone as jest.Mock).mockImplementation(({ onDrop }) => {
       onDropCallback = onDrop;
@@ -99,7 +100,7 @@ describe('FileUploader Component', () => {
   
   it('shows error for invalid file type', () => {
     // Mock onDrop callback
-    let onDropCallback: (acceptedFiles: File[], fileRejections: any[]) => void;
+    let onDropCallback: (acceptedFiles: File[], fileRejections: FileRejection[]) => void;
     
     (useDropzone as jest.Mock).mockImplementation(({ onDrop }) => {
       onDropCallback = onDrop;
@@ -130,7 +131,7 @@ describe('FileUploader Component', () => {
   
   it('shows error for file too large', () => {
     // Mock onDrop callback
-    let onDropCallback: (acceptedFiles: File[], fileRejections: any[]) => void;
+    let onDropCallback: (acceptedFiles: File[], fileRejections: FileRejection[]) => void;
     
     (useDropzone as jest.Mock).mockImplementation(({ onDrop }) => {
       onDropCallback = onDrop;

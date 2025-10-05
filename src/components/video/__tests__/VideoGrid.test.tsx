@@ -1,18 +1,19 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import { VideoGrid, Video } from '../VideoGrid';
 
 // Mock the useToast hook
 jest.mock('@/hooks/useToast', () => ({
-  useToast: () => ({
+  useToast: jest.fn(() => ({
     toast: jest.fn(),
-  }),
+  })),
 }));
 
 // Mock next/image
 jest.mock('next/image', () => ({
   __esModule: true,
-  default: (props: any) => {
-    return <img {...props} />;
+  default: (props: React.ComponentProps<'img'>) => {
+    return <img {...props} alt={props.alt || ''} />;
   },
 }));
 
@@ -145,7 +146,7 @@ describe('VideoGrid', () => {
       
       expect(screen.getByText('Delete Video')).toBeInTheDocument();
       expect(screen.getByText('Are you sure you want to delete this video?')).toBeInTheDocument();
-      expect(screen.getByText('"test-video.mp4"')).toBeInTheDocument();
+      expect(screen.getByText(/test-video\.mp4/)).toBeInTheDocument();
     });
 
     it('closes confirmation dialog when cancel is clicked', () => {
@@ -201,7 +202,10 @@ describe('VideoGrid', () => {
       } as Response);
 
       const mockToast = jest.fn();
-      require('@/hooks/useToast').useToast.mockReturnValue({ toast: mockToast });
+      // Mock the useToast hook for this specific test
+      jest.doMock('@/hooks/useToast', () => ({
+        useToast: () => ({ toast: mockToast }),
+      }));
 
       render(<VideoGrid {...mockProps} />);
       

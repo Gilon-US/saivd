@@ -1,9 +1,9 @@
-import { Metadata } from 'next';
-import { RegisterForm } from '@/components/auth/RegisterForm';
+import {Metadata} from "next";
+import {RegisterForm} from "@/components/auth/RegisterForm";
 
 export const metadata: Metadata = {
-  title: 'Register | SAVD',
-  description: 'Create a new SAVD account',
+  title: "Register | SAIVD",
+  description: "Create a new SAIVD account",
 };
 
 export default function RegisterPage() {

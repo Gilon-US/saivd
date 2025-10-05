@@ -31,7 +31,7 @@ const mockCreateClient = createClient as jest.MockedFunction<typeof createClient
 const mockIsValidUUID = isValidUUID as jest.MockedFunction<typeof isValidUUID>;
 
 describe('GET /api/profile/[userId]', () => {
-  let mockSupabase: any;
+  let mockSupabase: ReturnType<typeof createClient>;
   
   beforeEach(() => {
     // Reset mocks

@@ -12,12 +12,7 @@ import axios from 'axios';
 import { backOff } from 'exponential-backoff';
 import { 
   requestWatermarking,
-  checkWatermarkingStatus,
-  generateCallbackUrl,
-  parseWatermarkingError,
-  WatermarkOptions,
-  WatermarkResponse,
-  WatermarkStatusResponse
+  checkWatermarkingStatus
 } from '../watermark';
 
 // Mock axios and exponential-backoff
@@ -54,7 +49,7 @@ describe('Watermarking Service Client', () => {
   
   beforeEach(() => {
     // Setup axios mock
-    mockAxiosCreate.mockReturnValue(mockAxiosInstance as any);
+    mockAxiosCreate.mockReturnValue(mockAxiosInstance as unknown as ReturnType<typeof axios.create>);
     
     // Setup backOff mock to call the function directly
     mockBackOff.mockImplementation((fn) => fn());

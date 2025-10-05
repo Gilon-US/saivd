@@ -133,7 +133,7 @@ describe('Upload API Endpoint', () => {
     } as unknown as NextRequest;
     
     // Call the API
-    const response = await POST(mockRequest);
+    await POST(mockRequest);
     
     // Verify response
     expect(NextResponse.json).toHaveBeenCalledWith(
@@ -152,7 +152,7 @@ describe('Upload API Endpoint', () => {
     } as unknown as NextRequest;
     
     // Call the API
-    const response = await POST(mockRequest);
+    await POST(mockRequest);
     
     // Verify response
     expect(NextResponse.json).toHaveBeenCalledWith(
@@ -172,7 +172,7 @@ describe('Upload API Endpoint', () => {
     } as unknown as NextRequest;
     
     // Call the API
-    const response = await POST(mockRequest);
+    await POST(mockRequest);
     
     // Verify response
     expect(NextResponse.json).toHaveBeenCalledWith(
@@ -198,7 +198,7 @@ describe('Upload API Endpoint', () => {
     } as unknown as NextRequest;
     
     // Call the API
-    const response = await POST(mockRequest);
+    await POST(mockRequest);
     
     // Verify response
     expect(NextResponse.json).toHaveBeenCalledWith(
@@ -230,7 +230,7 @@ describe('Upload API Endpoint', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
     
     // Call the API
-    const response = await POST(mockRequest);
+    await POST(mockRequest);
     
     // Verify response
     expect(NextResponse.json).toHaveBeenCalledWith(

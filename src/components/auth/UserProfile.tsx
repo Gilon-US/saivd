@@ -38,7 +38,7 @@ export function UserProfile() {
     
     try {
       await updateProfile({ display_name: displayName.trim() });
-    } catch (err) {
+    } catch (_err) {
       setFormError('Failed to update profile');
     } finally {
       setIsSubmitting(false);

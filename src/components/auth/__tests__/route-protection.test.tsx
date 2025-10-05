@@ -8,9 +8,9 @@
  * npm install --save-dev jest @testing-library/react @testing-library/jest-dom jest-environment-jsdom
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import { NextRequest } from 'next/server';
 import { AuthGuard } from '../AuthGuard';
-import { AuthProvider } from '@/contexts/AuthContext';
 import { middleware } from '@/middleware';
 
 // Mock the next/navigation module
@@ -35,7 +35,7 @@ jest.mock('@/lib/supabase', () => ({
 // Mock the contexts/AuthContext
 jest.mock('@/contexts/AuthContext', () => ({
   useAuth: jest.fn(),
-  AuthProvider: ({ children }) => <div>{children}</div>,
+  AuthProvider: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 // Mock Next.js middleware components
@@ -85,7 +85,7 @@ describe('Route Protection', () => {
       expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
     });
 
-    it('redirects unauthenticated users', () => {
+    it('redirects unauthenticated users', async () => {
       // Mock the useAuth hook to return unauthenticated state
       const mockPush = jest.fn();
       (useAuth as jest.Mock).mockReturnValue({
@@ -94,7 +94,8 @@ describe('Route Protection', () => {
       });
 
       // Mock router
-      require('next/navigation').useRouter.mockReturnValue({
+      const { useRouter } = await import('next/navigation');
+      (useRouter as jest.Mock).mockReturnValue({
         push: mockPush,
       });
 
@@ -150,7 +151,7 @@ describe('Route Protection', () => {
         url: 'http://localhost:3000/dashboard',
       };
 
-      await middleware(req as any);
+      await middleware(req as NextRequest);
 
       // Should call getSession
       expect(mockGetSession).toHaveBeenCalled();
@@ -180,7 +181,7 @@ describe('Route Protection', () => {
         url: 'http://localhost:3000/dashboard',
       };
 
-      await middleware(req as any);
+      await middleware(req as NextRequest);
 
       // Should call getSession
       expect(mockGetSession).toHaveBeenCalled();
@@ -209,7 +210,7 @@ describe('Route Protection', () => {
         url: 'http://localhost:3000/api/user',
       };
 
-      await middleware(req as any);
+      await middleware(req as NextRequest);
 
       // Should call getSession
       expect(mockGetSession).toHaveBeenCalled();

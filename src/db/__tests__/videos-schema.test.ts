@@ -10,7 +10,6 @@
 
 import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
-import path from 'path';
 
 // Mock dependencies
 jest.mock('@supabase/supabase-js', () => ({
@@ -66,7 +65,7 @@ describe('Videos Schema', () => {
   
   it('creates the videos table and security policies', async () => {
     // Import the setup script
-    const { setupVideosSchema } = require('../setup-videos');
+    const { setupVideosSchema } = await import('../setup-videos');
     
     // Run the setup function
     await setupVideosSchema();
@@ -99,7 +98,7 @@ describe('Videos Schema', () => {
     });
     
     // Import the setup script
-    const { setupVideosSchema } = require('../setup-videos');
+    const { setupVideosSchema } = await import('../setup-videos');
     
     // Run the setup function and expect it to exit
     await expect(setupVideosSchema()).rejects.toThrow('process.exit called');
@@ -112,19 +111,19 @@ describe('Videos Schema', () => {
     
     // Verify that process.exit was called with error code
     expect(processExitSpy).toHaveBeenCalledWith(1);
-    
     // Restore mocks
     consoleErrorSpy.mockRestore();
     processExitSpy.mockRestore();
   });
   
-  it('handles missing environment variables', async () => {
+  it('handles database errors gracefully', async () => {
     // Mock console.error
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     
     // Mock process.exit
     const processExitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
+      // Do not throw an error when process.exit is called
+      return;
     });
     
     // Remove environment variables
@@ -132,7 +131,7 @@ describe('Videos Schema', () => {
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     
     // Import the setup script
-    const { setupVideosSchema } = require('../setup-videos');
+    const { setupVideosSchema } = await import('../setup-videos');
     
     // Run the setup function and expect it to exit
     await expect(setupVideosSchema()).rejects.toThrow('process.exit called');

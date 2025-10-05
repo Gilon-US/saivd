@@ -3,7 +3,7 @@ import { UploadModal } from '../UploadModal';
 
 // Mock the VideoUploader component
 jest.mock('../VideoUploader', () => ({
-  VideoUploader: ({ onUploadComplete }: any) => (
+  VideoUploader: ({ onUploadComplete }: { onUploadComplete: (data: { key: string; filename: string; originalUrl: string; thumbnailUrl: string }) => void }) => (
     <button onClick={() => onUploadComplete({ key: 'test', filename: 'test.mp4', originalUrl: 'test-url', thumbnailUrl: 'test-thumbnail' })}>
       Mock VideoUploader
     </button>

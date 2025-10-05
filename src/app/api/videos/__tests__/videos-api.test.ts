@@ -135,7 +135,7 @@ describe('Videos API', () => {
       } as unknown as NextRequest;
       
       // Call the API
-      const response = await getVideos(mockRequest);
+      await getVideos(mockRequest);
       
       // Verify response
       expect(NextResponse.json).toHaveBeenCalledWith(
@@ -196,7 +196,7 @@ describe('Videos API', () => {
       const mockParams = { id: 'non-existent-video' };
       
       // Call the API
-      const response = await getVideo(mockRequest, { params: mockParams });
+      await getVideo(mockRequest, { params: mockParams });
       
       // Verify response
       expect(NextResponse.json).toHaveBeenCalledWith(
@@ -267,7 +267,7 @@ describe('Videos API', () => {
       const mockParams = { id: 'non-existent-video' };
       
       // Call the API
-      const response = await deleteVideo(mockRequest, { params: mockParams });
+      await deleteVideo(mockRequest, { params: mockParams });
       
       // Verify response
       expect(NextResponse.json).toHaveBeenCalledWith(
@@ -347,7 +347,7 @@ describe('Videos API', () => {
       } as unknown as NextRequest;
       
       // Call the API
-      const response = await confirmUpload(mockRequest);
+      await confirmUpload(mockRequest);
       
       // Verify response
       expect(NextResponse.json).toHaveBeenCalledWith(
@@ -366,7 +366,7 @@ describe('Videos API', () => {
       } as unknown as NextRequest;
       
       // Call the API
-      const response = await confirmUpload(mockRequest);
+      await confirmUpload(mockRequest);
       
       // Verify response
       expect(NextResponse.json).toHaveBeenCalledWith(

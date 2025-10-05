@@ -1,28 +1,37 @@
 # SAVD App
 
-A Next.js application for uploading files to Wasabi Cloud Storage using pre-signed URLs.
+A comprehensive video management platform built with Next.js for uploading, processing, and managing videos with Wasabi Cloud Storage integration and watermarking capabilities.
 
 ## Features
 
-- 🚀 **Next.js 15** with TypeScript
-- 🎨 **Tailwind CSS** for styling  
-- 🧩 **Shadcn UI** component library
-- ☁️ **Wasabi Cloud Storage** integration
-- 📁 **Drag & drop file uploads**
-- 📊 **Upload progress tracking**
-- 🎉 **Toast notifications**
+- 🚀 **Next.js 15** with TypeScript and App Router
+- 🎨 **Tailwind CSS** with **Shadcn UI** component library
+- 🎥 **Video Management** - Upload, view, and organize videos in a grid layout
+- ☁️ **Wasabi Cloud Storage** - Secure file storage with S3-compatible API
+- 🔐 **Authentication** - Complete user auth system with Supabase
+- 📁 **Drag & drop uploads** with progress tracking
+- 🖼️ **Video Thumbnails** - Automatic thumbnail generation and preview
+- 💧 **Watermarking** - Add watermarks to videos (processing workflow)
+- 🗑️ **Video Deletion** - Safe video deletion with confirmation dialogs
+- 📊 **Upload progress tracking** with real-time feedback
+- 🎉 **Toast notifications** for user feedback
+- 📱 **Responsive Design** - Works on desktop and mobile devices
 
 ## Tech Stack
 
 - **Framework**: Next.js 15 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS
-- **UI Components**: Shadcn UI
+- **UI Components**: Shadcn UI + Lucide React Icons
 - **File Upload**: React Dropzone
 - **Cloud Storage**: Wasabi (S3-compatible)
 - **AWS SDK**: v3 (for S3 operations)
 - **Authentication**: Supabase Auth
 - **Database**: Supabase PostgreSQL
+- **State Management**: React Hooks + Context
+- **Notifications**: Sonner (Toast system)
+- **Testing**: Jest + React Testing Library
+- **Deployment**: Docker + Docker Compose
 
 ## Getting Started
 
@@ -31,7 +40,8 @@ A Next.js application for uploading files to Wasabi Cloud Storage using pre-sign
 - Node.js 18+ 
 - npm or yarn
 - A Wasabi account and bucket
-- Docker and Docker Compose (for local Supabase development)
+- A Supabase account (or Docker for local development)
+- Docker and Docker Compose (optional, for local development)
 
 ### Installation
 
@@ -50,13 +60,21 @@ A Next.js application for uploading files to Wasabi Cloud Storage using pre-sign
    cp .env.local.example .env.local
    ```
 
-4. Edit `.env.local` with your Wasabi credentials:
+4. Edit `.env.local` with your credentials:
    ```env
+   # Wasabi Configuration
    WASABI_ACCESS_KEY_ID=your_wasabi_access_key_here
    WASABI_SECRET_ACCESS_KEY=your_wasabi_secret_key_here
    WASABI_REGION=us-east-1
    WASABI_BUCKET_NAME=your_bucket_name_here
    WASABI_ENDPOINT=https://s3.wasabisys.com
+   
+   # Supabase Configuration
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url_here
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
+   
+   # App Configuration
    NEXT_PUBLIC_APP_URL=http://localhost:3000
    ```
 
@@ -108,79 +126,313 @@ You can modify these settings in `src/components/FileUploader.tsx` and `src/app/
 src/
 ├── app/
 │   ├── api/
+│   │   ├── videos/
+│   │   │   ├── [id]/
+│   │   │   │   └── route.ts      # Video CRUD operations (GET, DELETE)
+│   │   │   ├── confirm/
+│   │   │   │   └── route.ts      # Video upload confirmation
+│   │   │   ├── upload/
+│   │   │   │   └── route.ts      # Pre-signed URL generation
+│   │   │   └── route.ts          # Video listing API
+│   │   ├── callbacks/
+│   │   │   └── watermark/
+│   │   │       └── route.ts      # Watermarking callback handler
 │   │   └── upload/
-│   │       └── route.ts          # Pre-signed URL API endpoint
-│   ├── layout.tsx                # Root layout with Toaster
-│   ├── page.tsx                  # Main page with FileUploader
+│   │       └── route.ts          # Legacy upload endpoint
+│   ├── dashboard/
+│   │   ├── videos/
+│   │   │   ├── page.tsx          # Main video grid dashboard
+│   │   │   └── layout.tsx        # Dashboard layout
+│   │   ├── upload/
+│   │   │   └── page.tsx          # Dedicated upload page
+│   │   └── page.tsx              # Dashboard overview
+│   ├── auth/
+│   │   ├── login/
+│   │   │   └── page.tsx          # Login page
+│   │   └── register/
+│   │       └── page.tsx          # Registration page
+│   ├── layout.tsx                # Root layout with providers
+│   ├── page.tsx                  # Landing page
 │   └── globals.css               # Global styles
 ├── components/
 │   ├── ui/                       # Shadcn UI components
-│   └── FileUploader.tsx          # Main file upload component
-└── lib/
-    ├── utils.ts                  # Utility functions
-    └── wasabi.ts                 # Wasabi client configuration
+│   │   ├── button.tsx
+│   │   ├── card.tsx
+│   │   ├── input.tsx
+│   │   ├── loading-spinner.tsx
+│   │   └── ...
+│   ├── video/
+│   │   ├── VideoGrid.tsx         # Video grid display component
+│   │   ├── VideoUploader.tsx     # Video upload component
+│   │   ├── UploadModal.tsx       # Upload modal dialog
+│   │   └── DeleteConfirmDialog.tsx # Delete confirmation dialog
+│   ├── auth/
+│   │   ├── AuthGuard.tsx         # Authentication wrapper
+│   │   ├── LoginForm.tsx         # Login form component
+│   │   ├── RegisterForm.tsx      # Registration form
+│   │   └── LogoutButton.tsx      # Logout functionality
+│   ├── profile/
+│   │   └── PublicProfileCard.tsx # User profile display
+│   └── FileUploader.tsx          # Generic file upload component
+├── contexts/
+│   └── AuthContext.tsx           # Authentication context provider
+├── hooks/
+│   ├── useVideos.ts              # Video data management hook
+│   ├── useVideoUpload.ts         # Video upload logic hook
+│   └── useToast.ts               # Toast notification hook
+├── lib/
+│   ├── utils.ts                  # Utility functions
+│   ├── wasabi.ts                 # Wasabi S3 client configuration
+│   └── watermark.ts              # Watermarking utilities
+├── utils/
+│   ├── supabase/
+│   │   ├── client.ts             # Supabase client (browser)
+│   │   ├── server.ts             # Supabase client (server)
+│   │   └── middleware.ts         # Auth middleware
+│   └── videoThumbnail.ts         # Video thumbnail generation
+└── db/
+    ├── schema/
+    │   └── videos.sql            # Database schema definitions
+    └── setup-videos.ts           # Database setup utilities
 ```
 
 ## API Endpoints
 
-### POST /api/upload
+### Video Management
 
-Generates a pre-signed URL for file upload.
+#### GET /api/videos
+Lists all videos for the authenticated user with pagination.
+
+**Query Parameters:**
+- `page` (optional): Page number (default: 1)
+- `limit` (optional): Items per page (default: 20)
+- `sortBy` (optional): Sort field (default: upload_date)
+- `sortOrder` (optional): Sort direction (default: desc)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "videos": [
+      {
+        "id": "uuid",
+        "filename": "video.mp4",
+        "original_url": "https://bucket.s3.wasabisys.com/...",
+        "original_thumbnail_url": "https://bucket.s3.wasabisys.com/...",
+        "processed_url": null,
+        "processed_thumbnail_url": null,
+        "status": "uploaded",
+        "upload_date": "2024-01-01T12:00:00Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 50,
+      "totalPages": 3
+    }
+  }
+}
+```
+
+#### POST /api/videos/upload
+Generates pre-signed URL for video upload.
 
 **Request body:**
 ```json
 {
-  "filename": "example.jpg",
-  "contentType": "image/jpeg"
+  "filename": "video.mp4",
+  "contentType": "video/mp4"
 }
 ```
 
 **Response:**
 ```json
 {
-  "uploadUrl": "https://s3.wasabisys.com/bucket-name",
-  "fields": {
-    "key": "uploads/1234567890-example.jpg",
-    "Content-Type": "image/jpeg",
-    // ... other form fields
-  },
-  "key": "uploads/1234567890-example.jpg"
+  "success": true,
+  "data": {
+    "uploadUrl": "https://bucket.s3.wasabisys.com/...",
+    "fields": {
+      "key": "videos/user-id/timestamp-video.mp4",
+      "Content-Type": "video/mp4"
+    },
+    "videoId": "uuid"
+  }
+}
+```
+
+#### POST /api/videos/confirm
+Confirms video upload completion and saves metadata.
+
+**Request body:**
+```json
+{
+  "videoId": "uuid",
+  "filename": "video.mp4",
+  "originalUrl": "https://bucket.s3.wasabisys.com/...",
+  "thumbnailUrl": "https://bucket.s3.wasabisys.com/..."
+}
+```
+
+#### GET /api/videos/[id]
+Retrieves specific video details for the authenticated user.
+
+#### DELETE /api/videos/[id]
+Deletes a video and its associated files from storage.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Video deleted successfully",
+    "id": "uuid"
+  }
 }
 ```
 
 ## Usage
 
-1. Open the application in your browser
-2. Drag and drop files onto the upload area, or click to select files
-3. Files will be uploaded directly to your Wasabi bucket
-4. Upload progress and completion status will be displayed
-5. Toast notifications will confirm successful uploads
+### Getting Started
+1. **Register/Login**: Create an account or sign in to access the dashboard
+2. **Navigate to Videos**: Go to `/dashboard/videos` to see your video collection
+3. **Upload Videos**: Click "Upload Video" to add new videos to your collection
+4. **Manage Videos**: View, organize, and delete your uploaded videos
+
+### Video Management Workflow
+1. **Upload**: Drag and drop video files or click to select (MP4, MOV, AVI, WEBM supported)
+2. **Processing**: Videos are uploaded to Wasabi storage with automatic thumbnail generation
+3. **Organization**: View all videos in a responsive grid layout with thumbnails
+4. **Watermarking**: Create watermarked versions of your videos (processing workflow)
+5. **Deletion**: Safely delete videos with confirmation dialogs
+6. **Sharing**: Generate public access links for video sharing (future feature)
+
+### Supported Features
+- **Video Formats**: MP4, MOV, AVI, WEBM (up to 500MB per file)
+- **Thumbnail Generation**: Automatic preview thumbnails for uploaded videos
+- **Progress Tracking**: Real-time upload progress with visual feedback
+- **Error Handling**: Comprehensive error messages and retry mechanisms
+- **Responsive Design**: Works seamlessly on desktop and mobile devices
 
 ## Customization
 
-### File Types
+### Video Upload Settings
 
-Modify the `acceptedFileTypes` prop in `FileUploader.tsx`:
-
-```typescript
-acceptedFileTypes={['image/*', 'application/pdf']}
-```
-
-### File Size Limits
-
-Adjust the `maxFileSize` prop and API route conditions:
+#### File Types
+Modify accepted video formats in `VideoUploader.tsx`:
 
 ```typescript
-maxFileSize={50 * 1024 * 1024} // 50MB
+const acceptedTypes = {
+  'video/mp4': ['.mp4'],
+  'video/quicktime': ['.mov'],
+  'video/x-msvideo': ['.avi'],
+  'video/webm': ['.webm']
+};
 ```
 
-### Upload Destination
-
-Change the key prefix in `src/app/api/upload/route.ts`:
+#### File Size Limits
+Adjust maximum video file size in the upload components:
 
 ```typescript
-const key = `custom-folder/${Date.now()}-${filename}`;
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 ```
+
+#### Upload Destination
+Customize the S3 key structure in `src/app/api/videos/upload/route.ts`:
+
+```typescript
+const key = `videos/${user.id}/${Date.now()}-${filename}`;
+```
+
+### Video Grid Configuration
+
+#### Pagination Settings
+Modify default pagination in `useVideos.ts`:
+
+```typescript
+const DEFAULT_PAGE_SIZE = 20;
+const DEFAULT_SORT_BY = 'upload_date';
+const DEFAULT_SORT_ORDER = 'desc';
+```
+
+#### Thumbnail Settings
+Adjust thumbnail generation in `videoThumbnail.ts`:
+
+```typescript
+const THUMBNAIL_WIDTH = 240;
+const THUMBNAIL_HEIGHT = 135;
+const THUMBNAIL_QUALITY = 0.8;
+```
+
+### UI Customization
+
+#### Grid Layout
+Modify video card dimensions in `VideoGrid.tsx`:
+
+```typescript
+className="w-60 max-w-[240px] aspect-video"
+```
+
+#### Color Scheme
+Update delete button styling:
+
+```typescript
+className="hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+```
+
+## Testing
+
+The SAVD app includes comprehensive test coverage for all major components and functionality.
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage
+npm run test:coverage
+```
+
+### Test Structure
+
+```
+src/
+├── components/
+│   └── video/
+│       └── __tests__/
+│           ├── VideoGrid.test.tsx
+│           ├── VideoUploader.test.tsx
+│           ├── UploadModal.test.tsx
+│           └── DeleteConfirmDialog.test.tsx
+├── hooks/
+│   └── __tests__/
+│       └── useVideoUpload.test.tsx
+└── app/
+    └── api/
+        └── videos/
+            └── __tests__/
+                └── videos-api.test.ts
+```
+
+### Key Test Coverage
+
+- **Video Grid Component**: Delete functionality, confirmation dialogs, API integration
+- **Upload Components**: File validation, progress tracking, error handling
+- **API Endpoints**: CRUD operations, authentication, error responses
+- **Hooks**: State management, data fetching, upload logic
+- **Authentication**: Login/logout flows, protected routes
+
+### Testing Features
+
+- **Mocked APIs**: All external API calls are mocked for reliable testing
+- **User Interactions**: Button clicks, form submissions, drag & drop
+- **Error Scenarios**: Network failures, validation errors, edge cases
+- **Loading States**: Progress indicators, disabled states during operations
 
 ## Deployment
 
@@ -412,10 +664,25 @@ The local Supabase instance is initialized with the following tables:
 
 ### Common Issues
 
+#### Video Upload Issues
 1. **CORS Errors**: Ensure your Wasabi bucket has the correct CORS policy
 2. **Access Denied**: Verify your Wasabi credentials and bucket permissions
-3. **Upload Failures**: Check file size limits and content type restrictions
-4. **Authentication Issues**: Check Supabase URL and keys in environment variables
+3. **Upload Failures**: Check file size limits (500MB max) and video format support
+4. **Thumbnail Generation Failed**: Ensure browser supports HTML5 video and canvas
+
+#### Authentication Issues
+5. **Login/Registration Failures**: Check Supabase URL and keys in environment variables
+6. **Session Expiry**: Verify Supabase JWT settings and refresh token configuration
+7. **Protected Route Access**: Ensure AuthGuard is properly configured
+
+#### Video Management Issues
+8. **Videos Not Loading**: Check database connection and video table schema
+9. **Delete Operations Failing**: Verify user permissions and Wasabi delete permissions
+10. **Pagination Issues**: Check API response format and useVideos hook configuration
+
+#### Performance Issues
+11. **Slow Video Loading**: Optimize thumbnail sizes and implement lazy loading
+12. **Memory Issues**: Large video files may cause browser memory issues during upload
 
 ### CORS Configuration
 
@@ -432,14 +699,51 @@ Add this CORS policy to your Wasabi bucket:
 ]
 ```
 
+## Recent Updates
+
+### Version 1.2.0 - Video Deletion Feature
+- ✅ **Safe Video Deletion**: Added delete buttons to video cards with confirmation dialogs
+- ✅ **Comprehensive Testing**: Full test coverage for delete functionality
+- ✅ **Error Handling**: Robust error handling with user-friendly feedback
+- ✅ **API Integration**: Seamless integration with existing DELETE endpoint
+- ✅ **UI/UX Improvements**: Intuitive trash icon with hover effects
+
+### Version 1.1.0 - Video Management Platform
+- ✅ **Video Grid Dashboard**: Responsive grid layout for video organization
+- ✅ **Authentication System**: Complete user registration and login system
+- ✅ **Video Upload**: Drag & drop video uploads with progress tracking
+- ✅ **Thumbnail Generation**: Automatic video thumbnail creation
+- ✅ **Watermarking Workflow**: Infrastructure for video watermarking
+
+### Version 1.0.0 - Initial Release
+- ✅ **File Upload System**: Basic file upload to Wasabi storage
+- ✅ **Next.js 15 Setup**: Modern React framework with TypeScript
+- ✅ **Shadcn UI Integration**: Beautiful, accessible UI components
+- ✅ **Docker Support**: Development and production containerization
+
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+We welcome contributions to the SAVD app! Here's how to get started:
+
+1. **Fork the repository** and clone your fork locally
+2. **Create a feature branch** from main: `git checkout -b feature/your-feature-name`
+3. **Make your changes** following the existing code style and patterns
+4. **Write tests** for any new functionality
+5. **Run the test suite** to ensure nothing is broken: `npm test`
+6. **Update documentation** if you've added new features
+7. **Submit a pull request** with a clear description of your changes
+
+### Development Guidelines
+- Follow TypeScript best practices and maintain type safety
+- Use existing UI patterns and components from Shadcn UI
+- Write comprehensive tests for new features
+- Follow the existing API response format for consistency
+- Update the README if you add new configuration options
 
 ## License
 
 This project is open source and available under the [MIT License](LICENSE).
+
+---
+
+**SAVD App** - Secure, scalable video management platform built with modern web technologies.

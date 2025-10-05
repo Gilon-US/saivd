@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     });
     
     // Get Supabase client
-    const supabase = await createClient();
+    const _supabase = await createClient();
     
     // In a real implementation, you would:
     // 1. Look up the watermarking job in the database using the token and jobId

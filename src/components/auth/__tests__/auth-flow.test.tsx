@@ -6,10 +6,10 @@
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { LoginForm } from '../LoginForm';
 import { RegisterForm } from '../RegisterForm';
+import { LoginForm } from '../LoginForm';
 import { LogoutButton } from '../LogoutButton';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { AuthProvider } from '@/contexts/AuthContext';
 
 // Mock the next/navigation module
 jest.mock('next/navigation', () => ({

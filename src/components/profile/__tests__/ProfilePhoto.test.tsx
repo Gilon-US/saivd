@@ -9,7 +9,7 @@ import { ProfilePhoto } from '../ProfilePhoto';
 // Mock Next.js Image component
 jest.mock('next/image', () => ({
   __esModule: true,
-  default: function MockImage({ src, alt, onLoad, onError, fill, ...props }: any) {
+  default: function MockImage({ src, alt, onLoad, onError, fill, ...props }: React.ComponentProps<'img'> & { fill?: boolean }) {
     return (
       <img
         src={src}

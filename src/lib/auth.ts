@@ -34,7 +34,7 @@ export function createServerSupabaseClient() {
  * @returns A new handler function that checks authentication before calling the original handler
  */
 export function withAuth<T>(
-  handler: (req: NextRequest, user: any) => Promise<NextResponse<T>>
+  handler: (req: NextRequest, user: { id: string; email?: string }) => Promise<NextResponse<T>>
 ) {
   return async (req: NextRequest) => {
     const supabase = createServerSupabaseClient();

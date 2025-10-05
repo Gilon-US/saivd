@@ -1,9 +1,9 @@
-import { Metadata } from 'next';
-import { LoginForm } from '@/components/auth/LoginForm';
+import {Metadata} from "next";
+import {LoginForm} from "@/components/auth/LoginForm";
 
 export const metadata: Metadata = {
-  title: 'Login | SAVD',
-  description: 'Login to your SAVD account',
+  title: "Login | SAIVD",
+  description: "Login to your SAIVD account",
 };
 
 export default function LoginPage() {

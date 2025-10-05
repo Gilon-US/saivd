@@ -118,7 +118,7 @@ describe('Upload Confirmation API', () => {
     } as unknown as NextRequest;
     
     // Call the API
-    const response = await POST(mockRequest);
+    await POST(mockRequest);
     
     // Verify response
     expect(NextResponse.json).toHaveBeenCalledWith(
@@ -137,7 +137,7 @@ describe('Upload Confirmation API', () => {
     } as unknown as NextRequest;
     
     // Call the API
-    const response = await POST(mockRequest);
+    await POST(mockRequest);
     
     // Verify response
     expect(NextResponse.json).toHaveBeenCalledWith(
@@ -161,7 +161,7 @@ describe('Upload Confirmation API', () => {
     } as unknown as NextRequest;
     
     // Call the API
-    const response = await POST(mockRequest);
+    await POST(mockRequest);
     
     // Verify response
     expect(NextResponse.json).toHaveBeenCalledWith(
@@ -180,7 +180,7 @@ describe('Upload Confirmation API', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
     
     // Call the API
-    const response = await POST(mockRequest);
+    await POST(mockRequest);
     
     // Verify response
     expect(NextResponse.json).toHaveBeenCalledWith(
