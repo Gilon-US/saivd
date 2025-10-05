@@ -76,8 +76,6 @@ POSTGRES_PORT=5432
 
 # JWT
 JWT_SECRET=your-super-secret-jwt-key-at-least-32-characters-long
-ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
-SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
 
 # Dashboard
 DASHBOARD_USERNAME=admin
@@ -114,7 +112,7 @@ docker compose up -d
 Create a new `docker-compose.supabase.yml` file in your SAVD project root:
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   # Import existing SAVD app service
@@ -155,14 +153,14 @@ services:
       start_period: 40s
     networks:
       - savd-network
-      - supabase-network  # Connect to Supabase network
+      - supabase-network # Connect to Supabase network
 
 networks:
   savd-network:
     driver: bridge
   supabase-network:
     external: true
-    name: supabase-local_default  # Use the network created by Supabase Docker Compose
+    name: supabase-local_default # Use the network created by Supabase Docker Compose
 
 volumes:
   node_modules:
@@ -177,8 +175,8 @@ APP_PORT=3000
 
 # Supabase Configuration - these should match your Supabase local setup
 NEXT_PUBLIC_SUPABASE_URL=http://kong:8000
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 ```
 
 #### 3. Create a Script to Start Both Services
@@ -239,19 +237,19 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Create policies
 -- Allow users to view their own profile
-CREATE POLICY "Users can view their own profile" 
-  ON public.profiles 
-  FOR SELECT 
+CREATE POLICY "Users can view their own profile"
+  ON public.profiles
+  FOR SELECT
   USING (auth.uid() = id);
 
 -- Allow users to update their own profile
-CREATE POLICY "Users can update their own profile" 
-  ON public.profiles 
-  FOR UPDATE 
+CREATE POLICY "Users can update their own profile"
+  ON public.profiles
+  FOR UPDATE
   USING (auth.uid() = id);
 
 -- Create a trigger to create a profile when a user is created
-CREATE OR REPLACE FUNCTION public.handle_new_user() 
+CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.profiles (id, email)
@@ -353,13 +351,14 @@ The application uses Supabase Auth for authentication, providing a secure and sc
 2. API forwards authentication request to Supabase Auth
 3. Supabase validates credentials and issues JWT token
 4. Token is returned to client for subsequent requests
+
 ### Authentication Implementation
 
 #### Supabase Client Setup
 
 ```typescript
 // src/lib/supabase.ts
-import { createClient } from '@supabase/supabase-js';
+import {createClient} from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -371,11 +370,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 ```typescript
 // src/lib/supabase-server.ts
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import {createServerComponentClient} from "@supabase/auth-helpers-nextjs";
+import {cookies} from "next/headers";
 
 export function createServerSupabase() {
-  return createServerComponentClient({ cookies });
+  return createServerComponentClient({cookies});
 }
 ```
 
@@ -383,11 +382,11 @@ export function createServerSupabase() {
 
 ```typescript
 // src/lib/supabase-route-handler.ts
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import {createRouteHandlerClient} from "@supabase/auth-helpers-nextjs";
+import {cookies} from "next/headers";
 
 export function createRouteHandlerSupabase() {
-  return createRouteHandlerClient({ cookies });
+  return createRouteHandlerClient({cookies});
 }
 ```
 
@@ -395,41 +394,40 @@ export function createRouteHandlerSupabase() {
 
 ```typescript
 // src/middleware.ts
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
+import {NextResponse} from "next/server";
+import type {NextRequest} from "next/server";
+import {createMiddlewareClient} from "@supabase/auth-helpers-nextjs";
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
-  const supabase = createMiddlewareClient({ req, res });
-  
+  const supabase = createMiddlewareClient({req, res});
+
   // Check if user is authenticated
   const {
-    data: { session },
+    data: {session},
   } = await supabase.auth.getSession();
 
   // Protected routes pattern
-  const isProtectedRoute = req.nextUrl.pathname.startsWith('/dashboard');
-  const isAuthRoute = req.nextUrl.pathname.startsWith('/login') || 
-                      req.nextUrl.pathname.startsWith('/register');
+  const isProtectedRoute = req.nextUrl.pathname.startsWith("/dashboard");
+  const isAuthRoute = req.nextUrl.pathname.startsWith("/login") || req.nextUrl.pathname.startsWith("/register");
 
   // Redirect if accessing protected route without authentication
   if (isProtectedRoute && !session) {
-    const redirectUrl = new URL('/login', req.url);
-    redirectUrl.searchParams.set('redirectTo', req.nextUrl.pathname);
+    const redirectUrl = new URL("/login", req.url);
+    redirectUrl.searchParams.set("redirectTo", req.nextUrl.pathname);
     return NextResponse.redirect(redirectUrl);
   }
 
   // Redirect if accessing auth routes while authenticated
   if (isAuthRoute && session) {
-    return NextResponse.redirect(new URL('/dashboard', req.url));
+    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
   return res;
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/login', '/register'],
+  matcher: ["/dashboard/:path*", "/login", "/register"],
 };
 ```
 
@@ -468,47 +466,39 @@ API routes implement authorization checks to ensure users can only access their 
 
 ```typescript
 // Example API route with authorization check
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, {params}: {params: {id: string}}) {
   try {
     const videoId = params.id;
-    
+
     // Get authenticated user
-    const supabase = createRouteHandlerClient({ cookies });
-    const { data: { session } } = await supabase.auth.getSession();
-    
+    const supabase = createRouteHandlerClient({cookies});
+    const {
+      data: {session},
+    } = await supabase.auth.getSession();
+
     if (!session) {
       return NextResponse.json(
-        { success: false, error: { code: 'unauthorized', message: 'Authentication required' } },
-        { status: 401 }
+        {success: false, error: {code: "unauthorized", message: "Authentication required"}},
+        {status: 401}
       );
     }
-    
+
     // Get video with authorization check (RLS will enforce user_id = auth.uid())
-    const { data: video, error } = await supabase
-      .from('videos')
-      .select('*')
-      .eq('id', videoId)
-      .single();
-      
+    const {data: video, error} = await supabase.from("videos").select("*").eq("id", videoId).single();
+
     if (error) {
-      return NextResponse.json(
-        { success: false, error: { code: 'not_found', message: 'Video not found' } },
-        { status: 404 }
-      );
+      return NextResponse.json({success: false, error: {code: "not_found", message: "Video not found"}}, {status: 404});
     }
-    
+
     return NextResponse.json({
       success: true,
-      data: video
+      data: video,
     });
   } catch (error: any) {
-    console.error('Error fetching video:', error);
+    console.error("Error fetching video:", error);
     return NextResponse.json(
-      { success: false, error: { code: 'server_error', message: 'Internal server error' } },
-      { status: 500 }
+      {success: false, error: {code: "server_error", message: "Internal server error"}},
+      {status: 500}
     );
   }
 }
@@ -519,6 +509,7 @@ export async function GET(
 ### Secure Storage
 
 1. **Video Storage Security**:
+
    - Videos are stored in Wasabi S3-compatible storage
    - Access is controlled through pre-signed URLs with expiration
    - Original videos are never publicly accessible
@@ -532,6 +523,7 @@ export async function GET(
 ### Data in Transit
 
 1. **HTTPS Everywhere**:
+
    - All communication uses HTTPS
    - Strict Transport Security (HSTS) is enabled
    - Secure cookies with HttpOnly and SameSite flags
@@ -546,11 +538,13 @@ export async function GET(
 The application implements a secure token system for public video sharing:
 
 1. **Token Generation**:
+
    - Secure random tokens using nanoid
    - Tokens stored in database with expiration date
    - Association with specific watermarked videos only
 
 2. **Token Validation**:
+
    - Tokens are validated on each request
    - Expired tokens are rejected
    - Revoked tokens are rejected
@@ -562,57 +556,53 @@ The application implements a secure token system for public video sharing:
 
 ```typescript
 // Public URL validation example
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { token: string } }
-) {
+export async function GET(request: NextRequest, {params}: {params: {token: string}}) {
   try {
     const token = params.token;
-    
+
     // Create direct Supabase client (no auth required)
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-    
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
     // Validate token
-    const { data: accessToken, error } = await supabase
-      .from('public_access_tokens')
-      .select('*, watermarked_videos(*)')
-      .eq('token', token)
-      .eq('is_active', true)
-      .gt('expires_at', new Date().toISOString())
+    const {data: accessToken, error} = await supabase
+      .from("public_access_tokens")
+      .select("*, watermarked_videos(*)")
+      .eq("token", token)
+      .eq("is_active", true)
+      .gt("expires_at", new Date().toISOString())
       .single();
-      
+
     if (error || !accessToken) {
       return NextResponse.json(
-        { success: false, error: { code: 'invalid_token', message: 'Invalid or expired token' } },
-        { status: 404 }
+        {success: false, error: {code: "invalid_token", message: "Invalid or expired token"}},
+        {status: 404}
       );
     }
-    
+
     // Return watermarked video details
     return NextResponse.json({
       success: true,
       data: {
         watermarkedUrl: accessToken.watermarked_videos.watermarked_url,
         watermarkedThumbnailUrl: accessToken.watermarked_videos.watermarked_thumbnail_url,
-      }
+      },
     });
   } catch (error: any) {
-    console.error('Error validating token:', error);
+    console.error("Error validating token:", error);
     return NextResponse.json(
-      { success: false, error: { code: 'server_error', message: 'Internal server error' } },
-      { status: 500 }
+      {success: false, error: {code: "server_error", message: "Internal server error"}},
+      {status: 500}
     );
   }
 }
 ```
+
 ## External Service Security
 
 ### Watermarking Service Integration
 
 1. **API Authentication**:
+
    - API key authentication for requests to watermarking service
    - Keys stored as environment variables
    - Keys rotated periodically
@@ -628,41 +618,38 @@ export async function POST(request: NextRequest) {
   try {
     // Get callback token from URL
     const url = new URL(request.url);
-    const token = url.searchParams.get('token');
-    
+    const token = url.searchParams.get("token");
+
     if (!token) {
       return NextResponse.json(
-        { success: false, error: { code: 'unauthorized', message: 'Missing callback token' } },
-        { status: 401 }
+        {success: false, error: {code: "unauthorized", message: "Missing callback token"}},
+        {status: 401}
       );
     }
-    
+
     // Create direct Supabase client with service role key
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-    
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+
     // Verify token and get job
-    const { data: job, error } = await supabase
-      .from('watermarking_jobs')
-      .select('*')
-      .eq('callback_token', token)
+    const {data: job, error} = await supabase
+      .from("watermarking_jobs")
+      .select("*")
+      .eq("callback_token", token)
       .single();
-      
+
     if (error || !job) {
       return NextResponse.json(
-        { success: false, error: { code: 'not_found', message: 'Invalid callback token' } },
-        { status: 404 }
+        {success: false, error: {code: "not_found", message: "Invalid callback token"}},
+        {status: 404}
       );
     }
-    
+
     // Process callback...
   } catch (error: any) {
-    console.error('Error processing callback:', error);
+    console.error("Error processing callback:", error);
     return NextResponse.json(
-      { success: false, error: { code: 'server_error', message: 'Internal server error' } },
-      { status: 500 }
+      {success: false, error: {code: "server_error", message: "Internal server error"}},
+      {status: 500}
     );
   }
 }
@@ -671,6 +658,7 @@ export async function POST(request: NextRequest) {
 ### Wasabi Storage Integration
 
 1. **Access Control**:
+
    - IAM policies for Wasabi access
    - Least privilege principle for access keys
    - Pre-signed URLs for direct uploads and downloads
@@ -688,42 +676,42 @@ All API endpoints implement thorough input validation:
 
 ```typescript
 // Example input validation
-const { filename, contentType, filesize } = await request.json();
+const {filename, contentType, filesize} = await request.json();
 
 // Validate required fields
 if (!filename || !contentType || !filesize) {
   return NextResponse.json(
-    { 
-      success: false, 
-      error: { 
-        code: 'validation_error', 
-        message: 'Missing required fields',
+    {
+      success: false,
+      error: {
+        code: "validation_error",
+        message: "Missing required fields",
         details: {
-          filename: !filename ? 'Filename is required' : undefined,
-          contentType: !contentType ? 'Content type is required' : undefined,
-          filesize: !filesize ? 'File size is required' : undefined,
-        }
-      } 
+          filename: !filename ? "Filename is required" : undefined,
+          contentType: !contentType ? "Content type is required" : undefined,
+          filesize: !filesize ? "File size is required" : undefined,
+        },
+      },
     },
-    { status: 400 }
+    {status: 400}
   );
 }
 
 // Validate file type
-const allowedTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'];
+const allowedTypes = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"];
 if (!allowedTypes.includes(contentType)) {
   return NextResponse.json(
-    { 
-      success: false, 
-      error: { 
-        code: 'validation_error', 
-        message: 'Invalid file type',
+    {
+      success: false,
+      error: {
+        code: "validation_error",
+        message: "Invalid file type",
         details: {
-          contentType: `File type ${contentType} is not supported. Supported types: ${allowedTypes.join(', ')}`
-        }
-      } 
+          contentType: `File type ${contentType} is not supported. Supported types: ${allowedTypes.join(", ")}`,
+        },
+      },
     },
-    { status: 400 }
+    {status: 400}
   );
 }
 
@@ -731,17 +719,17 @@ if (!allowedTypes.includes(contentType)) {
 const maxSize = 500 * 1024 * 1024; // 500MB
 if (filesize > maxSize) {
   return NextResponse.json(
-    { 
-      success: false, 
-      error: { 
-        code: 'validation_error', 
-        message: 'File too large',
+    {
+      success: false,
+      error: {
+        code: "validation_error",
+        message: "File too large",
         details: {
-          filesize: `File size exceeds the maximum allowed size of 500MB`
-        }
-      } 
+          filesize: `File size exceeds the maximum allowed size of 500MB`,
+        },
+      },
     },
-    { status: 400 }
+    {status: 400}
   );
 }
 ```
@@ -754,19 +742,19 @@ Client-side validation is implemented to provide immediate feedback:
 // Example form validation
 const validateForm = () => {
   const errors: Record<string, string> = {};
-  
+
   if (!email) {
-    errors.email = 'Email is required';
+    errors.email = "Email is required";
   } else if (!/\S+@\S+\.\S+/.test(email)) {
-    errors.email = 'Email is invalid';
+    errors.email = "Email is invalid";
   }
-  
+
   if (!password) {
-    errors.password = 'Password is required';
+    errors.password = "Password is required";
   } else if (password.length < 8) {
-    errors.password = 'Password must be at least 8 characters';
+    errors.password = "Password must be at least 8 characters";
   }
-  
+
   return errors;
 };
 ```
@@ -796,19 +784,19 @@ Errors are handled securely to prevent information leakage:
 try {
   // Operation that might fail
 } catch (error: any) {
-  console.error('Operation failed:', error);
-  
+  console.error("Operation failed:", error);
+
   // Return sanitized error to client
   return NextResponse.json(
-    { 
-      success: false, 
-      error: { 
-        code: 'server_error', 
-        message: 'An unexpected error occurred',
-        reference: uuidv4() // For server-side logging reference
-      } 
+    {
+      success: false,
+      error: {
+        code: "server_error",
+        message: "An unexpected error occurred",
+        reference: uuidv4(), // For server-side logging reference
+      },
     },
-    { status: 500 }
+    {status: 500}
   );
 }
 ```
@@ -816,11 +804,13 @@ try {
 ### Logging Strategy
 
 1. **Structured Logging**:
+
    - JSON-formatted logs for machine readability
    - Consistent log levels (debug, info, warn, error)
    - Context-rich log entries
 
 2. **Security Event Logging**:
+
    - Authentication attempts (success/failure)
    - Authorization violations
    - Resource access
@@ -839,53 +829,54 @@ The application implements security headers to protect against common web vulner
 // src/middleware.ts (security headers)
 const securityHeaders = [
   {
-    key: 'X-DNS-Prefetch-Control',
-    value: 'on',
+    key: "X-DNS-Prefetch-Control",
+    value: "on",
   },
   {
-    key: 'Strict-Transport-Security',
-    value: 'max-age=63072000; includeSubDomains; preload',
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload",
   },
   {
-    key: 'X-XSS-Protection',
-    value: '1; mode=block',
+    key: "X-XSS-Protection",
+    value: "1; mode=block",
   },
   {
-    key: 'X-Frame-Options',
-    value: 'SAMEORIGIN',
+    key: "X-Frame-Options",
+    value: "SAMEORIGIN",
   },
   {
-    key: 'X-Content-Type-Options',
-    value: 'nosniff',
+    key: "X-Content-Type-Options",
+    value: "nosniff",
   },
   {
-    key: 'Referrer-Policy',
-    value: 'origin-when-cross-origin',
+    key: "Referrer-Policy",
+    value: "origin-when-cross-origin",
   },
   {
-    key: 'Content-Security-Policy',
-    value: ContentSecurityPolicy.replace(/\s{2,}/g, ' ').trim(),
+    key: "Content-Security-Policy",
+    value: ContentSecurityPolicy.replace(/\s{2,}/g, " ").trim(),
   },
 ];
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
-  
+
   // Apply security headers
   securityHeaders.forEach((header) => {
     res.headers.set(header.key, header.value);
   });
-  
+
   // Rest of middleware...
 }
 ```
+
 ## Rate Limiting
 
 The application implements rate limiting to prevent abuse:
 
 ```typescript
 // src/middleware.ts (rate limiting)
-import { RateLimiter } from '@/lib/rate-limiter';
+import {RateLimiter} from "@/lib/rate-limiter";
 
 const apiLimiter = new RateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -899,22 +890,22 @@ const authLimiter = new RateLimiter({
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
-  
+
   // Apply rate limiting
-  const isAuthRoute = req.nextUrl.pathname.startsWith('/api/auth');
-  
+  const isAuthRoute = req.nextUrl.pathname.startsWith("/api/auth");
+
   if (isAuthRoute) {
     const rateLimited = await authLimiter.check(req, res);
     if (rateLimited) {
       return rateLimited;
     }
-  } else if (req.nextUrl.pathname.startsWith('/api/')) {
+  } else if (req.nextUrl.pathname.startsWith("/api/")) {
     const rateLimited = await apiLimiter.check(req, res);
     if (rateLimited) {
       return rateLimited;
     }
   }
-  
+
   // Rest of middleware...
 }
 ```
@@ -924,11 +915,13 @@ export async function middleware(req: NextRequest) {
 The application undergoes regular security testing:
 
 1. **Automated Testing**:
+
    - Static Application Security Testing (SAST)
    - Dynamic Application Security Testing (DAST)
    - Dependency vulnerability scanning
 
 2. **Manual Testing**:
+
    - Authentication bypass attempts
    - Authorization control testing
    - Input validation testing
@@ -944,11 +937,13 @@ The application undergoes regular security testing:
 The application is designed to comply with relevant security standards:
 
 1. **OWASP Top 10**:
+
    - Protection against common web vulnerabilities
    - Regular security assessments
    - Developer security training
 
 2. **GDPR Compliance**:
+
    - Data minimization
    - User consent management
    - Right to access and erasure
@@ -961,16 +956,19 @@ The application is designed to comply with relevant security standards:
 ## Implementation Guidelines
 
 1. **Authentication Implementation**:
+
    - Use Supabase Auth for user management
    - Implement proper session handling
    - Apply authentication middleware
 
 2. **Authorization Implementation**:
+
    - Use Row-Level Security in database
    - Implement authorization checks in API routes
    - Apply principle of least privilege
 
 3. **Security Headers Implementation**:
+
    - Configure security headers in middleware
    - Implement Content Security Policy
    - Enable HTTPS with HSTS

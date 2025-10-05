@@ -37,7 +37,7 @@ A comprehensive video management platform built with Next.js for uploading, proc
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - npm or yarn
 - A Wasabi account and bucket
 - A Supabase account (or Docker for local development)
@@ -46,21 +46,25 @@ A comprehensive video management platform built with Next.js for uploading, proc
 ### Installation
 
 1. Clone or navigate to the project directory:
+
    ```bash
    cd savd-app
    ```
 
 2. Install dependencies:
+
    ```bash
    npm install
    ```
 
 3. Set up environment variables:
+
    ```bash
    cp .env.local.example .env.local
    ```
 
 4. Edit `.env.local` with your credentials:
+
    ```env
    # Wasabi Configuration
    WASABI_ACCESS_KEY_ID=your_wasabi_access_key_here
@@ -68,17 +72,18 @@ A comprehensive video management platform built with Next.js for uploading, proc
    WASABI_REGION=us-east-1
    WASABI_BUCKET_NAME=your_bucket_name_here
    WASABI_ENDPOINT=https://s3.wasabisys.com
-   
+
    # Supabase Configuration
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url_here
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
    SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
-   
+
    # App Configuration
    NEXT_PUBLIC_APP_URL=http://localhost:3000
    ```
 
 5. Run the development server:
+
    ```bash
    npm run dev
    ```
@@ -98,21 +103,22 @@ A comprehensive video management platform built with Next.js for uploading, proc
 
 ### Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `WASABI_ACCESS_KEY_ID` | Your Wasabi access key ID | Yes |
-| `WASABI_SECRET_ACCESS_KEY` | Your Wasabi secret access key | Yes |
-| `WASABI_REGION` | Wasabi region (default: us-east-1) | Yes |
-| `WASABI_BUCKET_NAME` | Your Wasabi bucket name | Yes |
-| `WASABI_ENDPOINT` | Wasabi endpoint URL | Yes |
-| `NEXT_PUBLIC_APP_URL` | Your app URL (for CORS) | No |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase URL | Yes for auth |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key | Yes for auth |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | No |
+| Variable                        | Description                        | Required     |
+| ------------------------------- | ---------------------------------- | ------------ |
+| `WASABI_ACCESS_KEY_ID`          | Your Wasabi access key ID          | Yes          |
+| `WASABI_SECRET_ACCESS_KEY`      | Your Wasabi secret access key      | Yes          |
+| `WASABI_REGION`                 | Wasabi region (default: us-east-1) | Yes          |
+| `WASABI_BUCKET_NAME`            | Your Wasabi bucket name            | Yes          |
+| `WASABI_ENDPOINT`               | Wasabi endpoint URL                | Yes          |
+| `NEXT_PUBLIC_APP_URL`           | Your app URL (for CORS)            | No           |
+| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase URL                       | Yes for auth |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key             | Yes for auth |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service role key          | No           |
 
 ### File Upload Settings
 
 The default configuration allows:
+
 - **Max file size**: 100MB per file
 - **File types**: Images, videos, audio, PDFs, and documents
 - **Upload method**: Pre-signed POST URLs
@@ -201,15 +207,18 @@ src/
 ### Video Management
 
 #### GET /api/videos
+
 Lists all videos for the authenticated user with pagination.
 
 **Query Parameters:**
+
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Items per page (default: 20)
 - `sortBy` (optional): Sort field (default: upload_date)
 - `sortOrder` (optional): Sort direction (default: desc)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -237,9 +246,11 @@ Lists all videos for the authenticated user with pagination.
 ```
 
 #### POST /api/videos/upload
+
 Generates pre-signed URL for video upload.
 
 **Request body:**
+
 ```json
 {
   "filename": "video.mp4",
@@ -248,6 +259,7 @@ Generates pre-signed URL for video upload.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -263,9 +275,11 @@ Generates pre-signed URL for video upload.
 ```
 
 #### POST /api/videos/confirm
+
 Confirms video upload completion and saves metadata.
 
 **Request body:**
+
 ```json
 {
   "videoId": "uuid",
@@ -276,12 +290,15 @@ Confirms video upload completion and saves metadata.
 ```
 
 #### GET /api/videos/[id]
+
 Retrieves specific video details for the authenticated user.
 
 #### DELETE /api/videos/[id]
+
 Deletes a video and its associated files from storage.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -295,12 +312,14 @@ Deletes a video and its associated files from storage.
 ## Usage
 
 ### Getting Started
+
 1. **Register/Login**: Create an account or sign in to access the dashboard
 2. **Navigate to Videos**: Go to `/dashboard/videos` to see your video collection
 3. **Upload Videos**: Click "Upload Video" to add new videos to your collection
 4. **Manage Videos**: View, organize, and delete your uploaded videos
 
 ### Video Management Workflow
+
 1. **Upload**: Drag and drop video files or click to select (MP4, MOV, AVI, WEBM supported)
 2. **Processing**: Videos are uploaded to Wasabi storage with automatic thumbnail generation
 3. **Organization**: View all videos in a responsive grid layout with thumbnails
@@ -309,6 +328,7 @@ Deletes a video and its associated files from storage.
 6. **Sharing**: Generate public access links for video sharing (future feature)
 
 ### Supported Features
+
 - **Video Formats**: MP4, MOV, AVI, WEBM (up to 500MB per file)
 - **Thumbnail Generation**: Automatic preview thumbnails for uploaded videos
 - **Progress Tracking**: Real-time upload progress with visual feedback
@@ -320,18 +340,20 @@ Deletes a video and its associated files from storage.
 ### Video Upload Settings
 
 #### File Types
+
 Modify accepted video formats in `VideoUploader.tsx`:
 
 ```typescript
 const acceptedTypes = {
-  'video/mp4': ['.mp4'],
-  'video/quicktime': ['.mov'],
-  'video/x-msvideo': ['.avi'],
-  'video/webm': ['.webm']
+  "video/mp4": [".mp4"],
+  "video/quicktime": [".mov"],
+  "video/x-msvideo": [".avi"],
+  "video/webm": [".webm"],
 };
 ```
 
 #### File Size Limits
+
 Adjust maximum video file size in the upload components:
 
 ```typescript
@@ -339,6 +361,7 @@ const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 ```
 
 #### Upload Destination
+
 Customize the S3 key structure in `src/app/api/videos/upload/route.ts`:
 
 ```typescript
@@ -348,15 +371,17 @@ const key = `videos/${user.id}/${Date.now()}-${filename}`;
 ### Video Grid Configuration
 
 #### Pagination Settings
+
 Modify default pagination in `useVideos.ts`:
 
 ```typescript
 const DEFAULT_PAGE_SIZE = 20;
-const DEFAULT_SORT_BY = 'upload_date';
-const DEFAULT_SORT_ORDER = 'desc';
+const DEFAULT_SORT_BY = "upload_date";
+const DEFAULT_SORT_ORDER = "desc";
 ```
 
 #### Thumbnail Settings
+
 Adjust thumbnail generation in `videoThumbnail.ts`:
 
 ```typescript
@@ -368,17 +393,19 @@ const THUMBNAIL_QUALITY = 0.8;
 ### UI Customization
 
 #### Grid Layout
+
 Modify video card dimensions in `VideoGrid.tsx`:
 
 ```typescript
-className="w-60 max-w-[240px] aspect-video"
+className = "w-60 max-w-[240px] aspect-video";
 ```
 
 #### Color Scheme
+
 Update delete button styling:
 
 ```typescript
-className="hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+className = "hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20";
 ```
 
 ## Testing
@@ -448,12 +475,14 @@ The SAVD app includes comprehensive Docker support for both development and prod
 #### Development with Docker
 
 1. **Setup environment variables**:
+
    ```bash
    cp .env.docker.example .env.docker
    # Edit .env.docker with your actual Wasabi credentials
    ```
 
 2. **Start development environment**:
+
    ```bash
    npm run docker:dev
    # or
@@ -461,6 +490,7 @@ The SAVD app includes comprehensive Docker support for both development and prod
    ```
 
 3. **Access the application**:
+
    - App: http://localhost:3000
    - Health check: http://localhost:3000/api/health
 
@@ -476,12 +506,14 @@ The SAVD app includes comprehensive Docker support for both development and prod
 #### Production with Docker
 
 1. **Setup production environment**:
+
    ```bash
    cp .env.docker.prod.example .env.docker.prod
    # Edit .env.docker.prod with your production configuration
    ```
 
 2. **Deploy to production**:
+
    ```bash
    npm run docker:prod
    # or
@@ -489,6 +521,7 @@ The SAVD app includes comprehensive Docker support for both development and prod
    ```
 
 3. **Production services**:
+
    - **SAVD App**: Main Next.js application
    - **Nginx**: Reverse proxy with SSL support and caching
    - **Redis**: Session storage and caching
@@ -505,6 +538,7 @@ The SAVD app includes comprehensive Docker support for both development and prod
 #### Docker Architecture
 
 **Development Stack:**
+
 ```
 ┌─────────────────┐
 │   SAVD App      │  Hot reloading, volume mounts
@@ -513,6 +547,7 @@ The SAVD app includes comprehensive Docker support for both development and prod
 ```
 
 **Local Supabase Development Stack:**
+
 ```
 ┌─────────────────┐    ┌─────────────────────────────────────────────┐
 │   SAVD App      │    │              Supabase Local                 │
@@ -525,6 +560,7 @@ The SAVD app includes comprehensive Docker support for both development and prod
 ```
 
 **Production Stack:**
+
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │     Nginx       │───▶│   SAVD App      │    │     Redis       │
@@ -548,12 +584,14 @@ The SAVD app includes comprehensive Docker support for both development and prod
 To enable HTTPS in production:
 
 1. **Add SSL certificates** to `ssl_certs` volume or mount them:
+
    ```yaml
    volumes:
      - ./certs:/etc/nginx/certs:ro
    ```
 
 2. **Update nginx configuration** to enable SSL:
+
    ```bash
    # Uncomment SSL lines in nginx/conf.d/default.conf
    ```
@@ -575,6 +613,7 @@ To enable HTTPS in production:
 ### Traditional Deployment
 
 1. **Vercel** (alternative):
+
    ```bash
    npm run build
    vercel deploy
@@ -595,20 +634,25 @@ The SAVD app includes support for local Supabase development using Docker Compos
 ### Setting Up Local Supabase
 
 1. **Prerequisites**:
+
    - Docker and Docker Compose installed
    - Basic understanding of Supabase and PostgreSQL
 
 2. **Start Local Development Environment**:
+
    ```bash
    ./scripts/start-dev-with-supabase.sh
    ```
+
    This script will:
+
    - Start the local Supabase services
    - Initialize the database schema
    - Start the SAVD app with Supabase integration
    - Wait for all services to be ready
 
 3. **Access Local Services**:
+
    - SAVD App: http://localhost:3000
    - Supabase Studio: http://localhost:8000
    - Supabase API: http://localhost:8000/rest/v1/
@@ -616,7 +660,6 @@ The SAVD app includes support for local Supabase development using Docker Compos
 4. **Default Credentials**:
    - Supabase Dashboard Username: admin
    - Supabase Dashboard Password: secure-dashboard-password
-   - Anon Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
 
 ### Directory Structure
 
@@ -645,12 +688,14 @@ The local Supabase instance is initialized with the following tables:
 ### Troubleshooting Local Supabase
 
 1. **Services Not Starting**: Check Docker logs for errors
+
    ```bash
    docker logs supabase-local_db_1
    docker logs supabase-local_kong_1
    ```
 
 2. **Database Connection Issues**: Verify PostgreSQL is running
+
    ```bash
    docker exec -it supabase-local_db_1 psql -U postgres
    ```
@@ -665,22 +710,26 @@ The local Supabase instance is initialized with the following tables:
 ### Common Issues
 
 #### Video Upload Issues
+
 1. **CORS Errors**: Ensure your Wasabi bucket has the correct CORS policy
 2. **Access Denied**: Verify your Wasabi credentials and bucket permissions
 3. **Upload Failures**: Check file size limits (500MB max) and video format support
 4. **Thumbnail Generation Failed**: Ensure browser supports HTML5 video and canvas
 
 #### Authentication Issues
+
 5. **Login/Registration Failures**: Check Supabase URL and keys in environment variables
 6. **Session Expiry**: Verify Supabase JWT settings and refresh token configuration
 7. **Protected Route Access**: Ensure AuthGuard is properly configured
 
 #### Video Management Issues
+
 8. **Videos Not Loading**: Check database connection and video table schema
 9. **Delete Operations Failing**: Verify user permissions and Wasabi delete permissions
 10. **Pagination Issues**: Check API response format and useVideos hook configuration
 
 #### Performance Issues
+
 11. **Slow Video Loading**: Optimize thumbnail sizes and implement lazy loading
 12. **Memory Issues**: Large video files may cause browser memory issues during upload
 
@@ -702,6 +751,7 @@ Add this CORS policy to your Wasabi bucket:
 ## Recent Updates
 
 ### Version 1.2.0 - Video Deletion Feature
+
 - ✅ **Safe Video Deletion**: Added delete buttons to video cards with confirmation dialogs
 - ✅ **Comprehensive Testing**: Full test coverage for delete functionality
 - ✅ **Error Handling**: Robust error handling with user-friendly feedback
@@ -709,6 +759,7 @@ Add this CORS policy to your Wasabi bucket:
 - ✅ **UI/UX Improvements**: Intuitive trash icon with hover effects
 
 ### Version 1.1.0 - Video Management Platform
+
 - ✅ **Video Grid Dashboard**: Responsive grid layout for video organization
 - ✅ **Authentication System**: Complete user registration and login system
 - ✅ **Video Upload**: Drag & drop video uploads with progress tracking
@@ -716,6 +767,7 @@ Add this CORS policy to your Wasabi bucket:
 - ✅ **Watermarking Workflow**: Infrastructure for video watermarking
 
 ### Version 1.0.0 - Initial Release
+
 - ✅ **File Upload System**: Basic file upload to Wasabi storage
 - ✅ **Next.js 15 Setup**: Modern React framework with TypeScript
 - ✅ **Shadcn UI Integration**: Beautiful, accessible UI components
@@ -734,6 +786,7 @@ We welcome contributions to the SAVD app! Here's how to get started:
 7. **Submit a pull request** with a clear description of your changes
 
 ### Development Guidelines
+
 - Follow TypeScript best practices and maintain type safety
 - Use existing UI patterns and components from Shadcn UI
 - Write comprehensive tests for new features
