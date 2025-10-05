@@ -163,7 +163,7 @@ describe('Videos API', () => {
       
       // Mock request
       const mockRequest = {} as unknown as NextRequest;
-      const mockParams = { id: 'video-1' };
+      const mockParams = Promise.resolve({ id: 'video-1' });
       
       // Call the API
       const response = await getVideo(mockRequest, { params: mockParams });
@@ -193,7 +193,7 @@ describe('Videos API', () => {
       
       // Mock request
       const mockRequest = {} as unknown as NextRequest;
-      const mockParams = { id: 'non-existent-video' };
+      const mockParams = Promise.resolve({ id: 'non-existent-video' });
       
       // Call the API
       await getVideo(mockRequest, { params: mockParams });
@@ -232,7 +232,7 @@ describe('Videos API', () => {
       
       // Mock request
       const mockRequest = {} as unknown as NextRequest;
-      const mockParams = { id: 'video-1' };
+      const mockParams = Promise.resolve({ id: 'video-1' });
       
       // Call the API
       const response = await deleteVideo(mockRequest, { params: mockParams });
@@ -264,7 +264,7 @@ describe('Videos API', () => {
       
       // Mock request
       const mockRequest = {} as unknown as NextRequest;
-      const mockParams = { id: 'non-existent-video' };
+      const mockParams = Promise.resolve({ id: 'non-existent-video' });
       
       // Call the API
       await deleteVideo(mockRequest, { params: mockParams });

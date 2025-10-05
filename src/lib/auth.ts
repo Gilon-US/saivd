@@ -2,12 +2,13 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { type CookieOptions } from '@supabase/ssr';
+import { type User } from '@supabase/supabase-js';
 
 /**
  * Creates a Supabase server client with the provided cookies
  */
-export function createServerSupabaseClient() {
-  const cookieStore = cookies();
+export async function createServerSupabaseClient() {
+  const cookieStore = await cookies();
   
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,10 +35,10 @@ export function createServerSupabaseClient() {
  * @returns A new handler function that checks authentication before calling the original handler
  */
 export function withAuth<T>(
-  handler: (req: NextRequest, user: { id: string; email?: string }) => Promise<NextResponse<T>>
+  handler: (req: NextRequest, user: User) => Promise<NextResponse<T>>
 ) {
   return async (req: NextRequest) => {
-    const supabase = createServerSupabaseClient();
+    const supabase = await createServerSupabaseClient();
     const { data: { session } } = await supabase.auth.getSession();
     
     if (!session) {

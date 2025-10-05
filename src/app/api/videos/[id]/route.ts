@@ -15,10 +15,10 @@ import { wasabiClient, WASABI_BUCKET } from '@/lib/wasabi';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const videoId = params.id;
+    const { id: videoId } = await context.params;
     
     // Get authenticated user
     const supabase = await createClient();
@@ -72,10 +72,10 @@ export async function GET(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const videoId = params.id;
+    const { id: videoId } = await context.params;
     
     // Get authenticated user
     const supabase = await createClient();

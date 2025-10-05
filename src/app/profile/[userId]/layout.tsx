@@ -10,14 +10,14 @@ import { ReactNode } from 'react';
 
 interface ProfileLayoutProps {
   children: ReactNode;
-  params: { userId: string };
+  params: Promise<{ userId: string }>;
 }
 
 /**
  * Generate dynamic metadata for profile pages
  */
-export async function generateMetadata({ params }: { params: { userId: string } }): Promise<Metadata> {
-  const { userId } = params;
+export async function generateMetadata(context: { params: Promise<{ userId: string }> }): Promise<Metadata> {
+  const { userId } = await context.params;
   
   try {
     // Fetch profile data for metadata

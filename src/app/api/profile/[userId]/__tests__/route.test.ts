@@ -58,7 +58,7 @@ describe('GET /api/profile/[userId]', () => {
       const request = new NextRequest('http://localhost:3000/api/profile/invalid-uuid');
       const params = { userId: 'invalid-uuid' };
       
-      const response = await GET(request, { params });
+      const response = await GET(request, { params: Promise.resolve(params) });
       const data = await response.json();
       
       expect(response.status).toBe(400);
@@ -83,7 +83,7 @@ describe('GET /api/profile/[userId]', () => {
       const request = new NextRequest('http://localhost:3000/api/profile/550e8400-e29b-41d4-a716-446655440000');
       const params = { userId: '550e8400-e29b-41d4-a716-446655440000' };
       
-      const response = await GET(request, { params });
+      const response = await GET(request, { params: Promise.resolve(params) });
       const data = await response.json();
       
       expect(response.status).toBe(200);
@@ -113,7 +113,7 @@ describe('GET /api/profile/[userId]', () => {
       const request = new NextRequest('http://localhost:3000/api/profile/550e8400-e29b-41d4-a716-446655440000');
       const params = { userId: '550e8400-e29b-41d4-a716-446655440000' };
       
-      const response = await GET(request, { params });
+      const response = await GET(request, { params: Promise.resolve(params) });
       const data = await response.json();
       
       expect(response.status).toBe(200);
@@ -130,7 +130,7 @@ describe('GET /api/profile/[userId]', () => {
       const request = new NextRequest('http://localhost:3000/api/profile/550e8400-e29b-41d4-a716-446655440000');
       const params = { userId: '550e8400-e29b-41d4-a716-446655440000' };
       
-      const response = await GET(request, { params });
+      const response = await GET(request, { params: Promise.resolve(params) });
       const data = await response.json();
       
       expect(response.status).toBe(404);
@@ -147,7 +147,7 @@ describe('GET /api/profile/[userId]', () => {
       const request = new NextRequest('http://localhost:3000/api/profile/550e8400-e29b-41d4-a716-446655440000');
       const params = { userId: '550e8400-e29b-41d4-a716-446655440000' };
       
-      const response = await GET(request, { params });
+      const response = await GET(request, { params: Promise.resolve(params) });
       const data = await response.json();
       
       expect(response.status).toBe(404);
@@ -177,7 +177,7 @@ describe('GET /api/profile/[userId]', () => {
       const request = new NextRequest('http://localhost:3000/api/profile/550e8400-e29b-41d4-a716-446655440000');
       const params = { userId: '550e8400-e29b-41d4-a716-446655440000' };
       
-      const response = await GET(request, { params });
+      const response = await GET(request, { params: Promise.resolve(params) });
       const data = await response.json();
       
       expect(data).toHaveProperty('success');
@@ -192,7 +192,7 @@ describe('GET /api/profile/[userId]', () => {
       const request = new NextRequest('http://localhost:3000/api/profile/invalid');
       const params = { userId: 'invalid' };
       
-      const response = await GET(request, { params });
+      const response = await GET(request, { params: Promise.resolve(params) });
       const data = await response.json();
       
       expect(data).toHaveProperty('success');
@@ -215,7 +215,7 @@ describe('GET /api/profile/[userId]', () => {
       const request = new NextRequest('http://localhost:3000/api/profile/550e8400-e29b-41d4-a716-446655440000');
       const params = { userId: '550e8400-e29b-41d4-a716-446655440000' };
       
-      const response = await GET(request, { params });
+      const response = await GET(request, { params: Promise.resolve(params) });
       const data = await response.json();
       
       expect(response.status).toBe(500);
@@ -243,7 +243,7 @@ describe('GET /api/profile/[userId]', () => {
       const request = new NextRequest('http://localhost:3000/api/profile/550e8400-e29b-41d4-a716-446655440000');
       const params = { userId: '550e8400-e29b-41d4-a716-446655440000' };
       
-      await GET(request, { params });
+      await GET(request, { params: Promise.resolve(params) });
       
       // Verify only safe fields are selected
       expect(mockSupabase.from).toHaveBeenCalledWith('profiles');
