@@ -45,15 +45,15 @@ This guide provides detailed instructions for deploying the SAVD App in both dev
 
 ### Required Environment Variables
 
-| Variable                   | Description                          | Required | Default                  |
-| -------------------------- | ------------------------------------ | -------- | ------------------------ |
-| `WASABI_ACCESS_KEY_ID`     | Wasabi access key ID                 | Yes      | -                        |
-| `WASABI_SECRET_ACCESS_KEY` | Wasabi secret access key             | Yes      | -                        |
-| `WASABI_REGION`            | Wasabi region                        | Yes      | us-east-1                |
-| `WASABI_BUCKET_NAME`       | Wasabi bucket name                   | Yes      | -                        |
-| `WASABI_ENDPOINT`          | Wasabi endpoint URL                  | Yes      | https://s3.wasabisys.com |
-| `NEXT_PUBLIC_APP_URL`      | App URL for CORS                     | No       | http://localhost:3000    |
-| `NODE_ENV`                 | Environment (development/production) | No       | development              |
+| Variable                   | Description                          | Required | Default               |
+| -------------------------- | ------------------------------------ | -------- | --------------------- |
+| `WASABI_ACCESS_KEY_ID`     | Wasabi access key ID                 | Yes      | -                     |
+| `WASABI_SECRET_ACCESS_KEY` | Wasabi secret access key             | Yes      | -                     |
+| `WASABI_REGION`            | Wasabi region                        | Yes      |                       |
+| `WASABI_BUCKET_NAME`       | Wasabi bucket name                   | Yes      | -                     |
+| `WASABI_ENDPOINT`          | Wasabi endpoint URL                  | Yes      |                       |
+| `NEXT_PUBLIC_APP_URL`      | App URL for CORS                     | No       | http://localhost:3000 |
+| `NODE_ENV`                 | Environment (development/production) | No       | development           |
 
 ### Environment Files
 
