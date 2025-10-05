@@ -5,8 +5,8 @@ import { S3Client } from '@aws-sdk/client-s3';
  * 
  * This client is used to generate pre-signed URLs for direct uploads to Wasabi storage.
  * Environment variables must be set in .env.local:
- * - WASABI_REGION: The Wasabi region (e.g., 'us-east-1')
- * - WASABI_ENDPOINT: The Wasabi endpoint URL (e.g., 'https://s3.us-east-1.wasabisys.com')
+ * - WASABI_REGION: The Wasabi region for your bucket
+ * - WASABI_ENDPOINT: The Wasabi endpoint URL for your region
  * - WASABI_ACCESS_KEY_ID: Your Wasabi access key
  * - WASABI_SECRET_ACCESS_KEY: Your Wasabi secret key
  * - WASABI_BUCKET_NAME: Your Wasabi bucket name
