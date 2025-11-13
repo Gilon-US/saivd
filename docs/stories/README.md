@@ -28,6 +28,7 @@ This directory contains user stories for the SAVD App project, organized by epic
 | 3.2 | Create Watermarking Request Flow | Not Started |
 | 3.3 | Implement Callback Handling | Not Started |
 | 3.4 | Display Watermarked Videos | Not Started |
+| 3.5 | [Implement Video Player with Frame Analysis](./3.5.implement-video-player-with-frame-analysis.md) | Ready for Development |
 
 ## Epic 4: Video Management & Sharing
 

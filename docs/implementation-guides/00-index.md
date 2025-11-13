@@ -61,6 +61,19 @@ This guide covers UI refinements and mobile optimizations, including:
 - Creating mobile-optimized components
 - Adding accessibility features
 
+### 6. [Video Player Guide](./06-video-player-guide.md)
+
+This guide covers the implementation of a video player with real-time frame analysis capability, including:
+
+- Creating frame analysis hook with canvas-based frame capture
+- Building video player component with custom controls
+- Implementing conditional overlay based on analysis results
+- Integrating player with video grid
+- Adding performance optimizations
+- Creating extensible analysis function interface
+- Implementing accessibility features
+- Adding mobile-friendly touch controls
+
 ## Getting Started
 
 To implement the SAVD App, it's recommended to follow the guides in order, as each guide builds upon the functionality implemented in previous guides. Start with the Authentication Guide to set up the foundation of the application, then proceed with the Video Upload Guide, and so on.

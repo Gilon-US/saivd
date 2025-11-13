@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { useToast } from '@/hooks/useToast';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
+import { VideoPlayer } from './VideoPlayer';
 import { useState } from 'react';
 
 export type Video = {
@@ -46,11 +47,25 @@ export function VideoGrid({
     isDeleting: false,
   });
 
-  const handleVideoClick = (video: Video) => {
-    // In a future story, this could navigate to a video detail page
-    toast({
-      title: 'Video selected',
-      description: `You selected "${video.filename}"`,
+  const [videoPlayer, setVideoPlayer] = useState<{
+    isOpen: boolean;
+    videoUrl: string | null;
+  }>({
+    isOpen: false,
+    videoUrl: null,
+  });
+
+  const handleVideoClick = (videoUrl: string) => {
+    setVideoPlayer({
+      isOpen: true,
+      videoUrl,
+    });
+  };
+
+  const handleClosePlayer = () => {
+    setVideoPlayer({
+      isOpen: false,
+      videoUrl: null,
     });
   };
 
@@ -206,7 +221,7 @@ export function VideoGrid({
                   </h4>
                   <div 
                     className="w-60 max-w-[240px] aspect-video relative bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => handleVideoClick(video)}
+                    onClick={() => handleVideoClick(video.original_url)}
                   >
                     {video.preview_thumbnail_data ? (
                       // Using <img> for base64 data URLs is appropriate since Next.js Image component
@@ -242,7 +257,7 @@ export function VideoGrid({
                     {video.status === 'processed' && video.processed_thumbnail_url ? (
                       <div 
                         className="w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => handleVideoClick(video)}
+                        onClick={() => handleVideoClick(video.processed_url || video.original_url)}
                       >
                         <Image 
                           src={video.processed_thumbnail_url} 
@@ -302,6 +317,15 @@ export function VideoGrid({
         videoFilename={deleteDialog.video?.filename || ''}
         isDeleting={deleteDialog.isDeleting}
       />
+      
+      {/* Video player */}
+      {videoPlayer.videoUrl && (
+        <VideoPlayer
+          videoUrl={videoPlayer.videoUrl}
+          onClose={handleClosePlayer}
+          isOpen={videoPlayer.isOpen}
+        />
+      )}
     </div>
   );
 }
