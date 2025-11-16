@@ -66,11 +66,11 @@ The project uses different environment files depending on the deployment method:
 Example `.env.local`:
 
 ```
-WASABI_ACCESS_KEY_ID=your_wasabi_access_key_here
-WASABI_SECRET_ACCESS_KEY=your_wasabi_secret_key_here
-WASABI_REGION=
-WASABI_BUCKET_NAME=your_bucket_name_here
-WASABI_ENDPOINT=
+WASABI_ACCESS_KEY_ID=YOUR_WASABI_ACCESS_KEY_ID_HERE
+WASABI_SECRET_ACCESS_KEY=YOUR_WASABI_SECRET_ACCESS_KEY_HERE
+WASABI_REGION=YOUR_WASABI_REGION_HERE
+WASABI_BUCKET_NAME=YOUR_WASABI_BUCKET_NAME_HERE
+WASABI_ENDPOINT=https://s3.YOUR_REGION.wasabisys.com
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
@@ -90,11 +90,11 @@ Docker is the recommended deployment method as it provides consistency across en
 
 2. **Edit `.env.docker` with your Wasabi credentials**:
    ```
-   WASABI_ACCESS_KEY_ID=your_wasabi_access_key_here
-   WASABI_SECRET_ACCESS_KEY=your_wasabi_secret_key_here
-   WASABI_REGION=
-   WASABI_BUCKET_NAME=your_bucket_name_here
-   WASABI_ENDPOINT=
+   WASABI_ACCESS_KEY_ID=YOUR_WASABI_ACCESS_KEY_ID_HERE
+   WASABI_SECRET_ACCESS_KEY=YOUR_WASABI_SECRET_ACCESS_KEY_HERE
+   WASABI_REGION=YOUR_WASABI_REGION_HERE
+   WASABI_BUCKET_NAME=YOUR_WASABI_BUCKET_NAME_HERE
+   WASABI_ENDPOINT=https://s3.YOUR_REGION.wasabisys.com
    APP_PORT=3000
    ```
 
@@ -136,11 +136,11 @@ npm run docker:dev
 
 2. **Edit `.env.docker.prod` with your production configuration**:
    ```
-   WASABI_ACCESS_KEY_ID=your_wasabi_access_key_here
-   WASABI_SECRET_ACCESS_KEY=your_wasabi_secret_key_here
-   WASABI_REGION=
-   WASABI_BUCKET_NAME=your_bucket_name_here
-   WASABI_ENDPOINT=
+   WASABI_ACCESS_KEY_ID=YOUR_WASABI_ACCESS_KEY_ID_HERE
+   WASABI_SECRET_ACCESS_KEY=YOUR_WASABI_SECRET_ACCESS_KEY_HERE
+   WASABI_REGION=YOUR_WASABI_REGION_HERE
+   WASABI_BUCKET_NAME=YOUR_WASABI_BUCKET_NAME_HERE
+   WASABI_ENDPOINT=https://s3.YOUR_REGION.wasabisys.com
    APP_PORT=3000
    NGINX_PORT=80
    NGINX_HTTPS_PORT=443
