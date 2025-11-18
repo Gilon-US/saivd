@@ -1,13 +1,13 @@
-'use client';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { UploadIcon, RefreshCwIcon, TrashIcon } from 'lucide-react';
-import Image from 'next/image';
-import { useToast } from '@/hooks/useToast';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { DeleteConfirmDialog } from './DeleteConfirmDialog';
-import { VideoPlayer } from './VideoPlayer';
-import { useState } from 'react';
+"use client";
+import {Card, CardContent} from "@/components/ui/card";
+import {Button} from "@/components/ui/button";
+import {UploadIcon, RefreshCwIcon, TrashIcon} from "lucide-react";
+import Image from "next/image";
+import {useToast} from "@/hooks/useToast";
+import {LoadingSpinner} from "@/components/ui/loading-spinner";
+import {DeleteConfirmDialog} from "./DeleteConfirmDialog";
+import {VideoPlayer} from "./VideoPlayer";
+import {useState} from "react";
 
 export type Video = {
   id: string;
@@ -17,7 +17,7 @@ export type Video = {
   preview_thumbnail_data: string | null;
   processed_url: string | null;
   processed_thumbnail_url: string | null;
-  status: 'uploaded' | 'processing' | 'processed' | 'failed';
+  status: "uploaded" | "processing" | "processed" | "failed";
   upload_date: string;
 };
 
@@ -29,14 +29,8 @@ type VideoGridProps = {
   onOpenUploadModal: () => void;
 };
 
-export function VideoGrid({
-  videos,
-  isLoading,
-  error,
-  onRefresh,
-  onOpenUploadModal,
-}: VideoGridProps) {
-  const { toast } = useToast();
+export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModal}: VideoGridProps) {
+  const {toast} = useToast();
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
     video: Video | null;
@@ -55,11 +49,31 @@ export function VideoGrid({
     videoUrl: null,
   });
 
-  const handleVideoClick = (videoUrl: string) => {
-    setVideoPlayer({
-      isOpen: true,
-      videoUrl,
-    });
+  const [isOpeningVideo, setIsOpeningVideo] = useState<string | null>(null);
+
+  const handleVideoClick = async (video: Video) => {
+    try {
+      setIsOpeningVideo(video.id);
+      const response = await fetch(`/api/videos/${video.id}/play`);
+      const data = await response.json();
+      if (!response.ok || !data.success || !data.data?.playbackUrl) {
+        throw new Error(data.error?.message || "Failed to generate playback URL");
+      }
+      setVideoPlayer({
+        isOpen: true,
+        videoUrl: data.data.playbackUrl,
+      });
+    } catch (error) {
+      console.error("Error opening video:", error);
+      toast({
+        title: "Unable to play video",
+        description:
+          error instanceof Error ? error.message : "There was a problem generating a playback URL. Please try again.",
+        variant: "error",
+      });
+    } finally {
+      setIsOpeningVideo(null);
+    }
   };
 
   const handleClosePlayer = () => {
@@ -72,7 +86,7 @@ export function VideoGrid({
   const handleCreateWatermark = (video: Video) => {
     // TODO: Implement watermark creation API call
     toast({
-      title: 'Creating watermarked version',
+      title: "Creating watermarked version",
       description: `Starting watermark process for "${video.filename}"`,
     });
   };
@@ -96,41 +110,41 @@ export function VideoGrid({
   const handleDeleteConfirm = async () => {
     if (!deleteDialog.video) return;
 
-    setDeleteDialog(prev => ({ ...prev, isDeleting: true }));
+    setDeleteDialog((prev) => ({...prev, isDeleting: true}));
 
     try {
       const response = await fetch(`/api/videos/${deleteDialog.video.id}`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
 
       const data = await response.json();
 
       if (data.success) {
         toast({
-          title: 'Video deleted',
+          title: "Video deleted",
           description: `"${deleteDialog.video.filename}" has been deleted successfully.`,
         });
-        
+
         // Close dialog and refresh the grid
         setDeleteDialog({
           isOpen: false,
           video: null,
           isDeleting: false,
         });
-        
+
         onRefresh();
       } else {
-        throw new Error(data.error?.message || 'Failed to delete video');
+        throw new Error(data.error?.message || "Failed to delete video");
       }
     } catch (error) {
-      console.error('Error deleting video:', error);
+      console.error("Error deleting video:", error);
       toast({
-        title: 'Delete failed',
-        description: error instanceof Error ? error.message : 'Failed to delete video. Please try again.',
-        variant: 'error',
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Failed to delete video. Please try again.",
+        variant: "error",
       });
-      
-      setDeleteDialog(prev => ({ ...prev, isDeleting: false }));
+
+      setDeleteDialog((prev) => ({...prev, isDeleting: false}));
     }
   };
 
@@ -178,12 +192,15 @@ export function VideoGrid({
   }
 
   // Debug: Log video data to see what thumbnails are available
-  console.log('VideoGrid videos:', videos.map(v => ({
-    filename: v.filename,
-    hasPreviewThumbnail: !!v.preview_thumbnail_data,
-    originalThumbnailUrl: v.original_thumbnail_url,
-    status: v.status
-  })));
+  console.log(
+    "VideoGrid videos:",
+    videos.map((v) => ({
+      filename: v.filename,
+      hasPreviewThumbnail: !!v.preview_thumbnail_data,
+      originalThumbnailUrl: v.original_thumbnail_url,
+      status: v.status,
+    }))
+  );
 
   // Video pairs grid - responsive flex layout
   return (
@@ -206,35 +223,37 @@ export function VideoGrid({
                   size="icon"
                   className="h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
                   onClick={() => handleDeleteClick(video)}
-                  title={`Delete "${video.filename}"`}
-                >
+                  title={`Delete "${video.filename}"`}>
                   <TrashIcon className="h-4 w-4" />
                 </Button>
               </div>
-              
+
               {/* Video pair container */}
               <div className="flex gap-4 justify-start items-start">
                 {/* Original video */}
                 <div className="space-y-2 flex-shrink-0">
-                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Original
-                  </h4>
-                  <div 
+                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Original</h4>
+                  <div
                     className="w-60 max-w-[240px] aspect-video relative bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => handleVideoClick(video.original_url)}
-                  >
+                    onClick={() => handleVideoClick(video)}>
+                    {isOpeningVideo === video.id && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
+                        <LoadingSpinner size="sm" />
+                      </div>
+                    )}
                     {video.preview_thumbnail_data ? (
                       // Using <img> for base64 data URLs is appropriate since Next.js Image component
                       // is designed for external URLs and file paths, not data URLs
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img 
-                        src={video.preview_thumbnail_data} 
+                      <img
+                        src={video.preview_thumbnail_data}
                         alt={`${video.filename} - Browser Generated Preview`}
                         className="object-cover w-full h-full"
                       />
-                    ) : video.original_thumbnail_url && !video.original_thumbnail_url.includes('placeholder-video-thumbnail') ? (
-                      <Image 
-                        src={video.original_thumbnail_url} 
+                    ) : video.original_thumbnail_url &&
+                      !video.original_thumbnail_url.includes("placeholder-video-thumbnail") ? (
+                      <Image
+                        src={video.original_thumbnail_url}
                         alt={`${video.filename} - Server Thumbnail`}
                         className="object-cover"
                         fill
@@ -250,53 +269,44 @@ export function VideoGrid({
 
                 {/* Watermarked version */}
                 <div className="space-y-2 flex-shrink-0">
-                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Watermarked
-                  </h4>
+                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Watermarked</h4>
                   <div className="w-60 max-w-[240px] aspect-video relative bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden">
-                    {video.status === 'processed' && video.processed_thumbnail_url ? (
-                      <div 
+                    {video.status === "processed" && video.processed_thumbnail_url ? (
+                      <div
                         className="w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => handleVideoClick(video.processed_url || video.original_url)}
-                      >
-                        <Image 
-                          src={video.processed_thumbnail_url} 
+                        onClick={() => handleVideoClick(video)}>
+                        <Image
+                          src={video.processed_thumbnail_url}
                           alt={`${video.filename} - Watermarked`}
                           className="object-cover"
                           fill
                           sizes="240px"
                         />
                       </div>
-                    ) : video.status === 'processing' ? (
+                    ) : video.status === "processing" ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700">
                         <LoadingSpinner size="sm" />
                         <span className="text-gray-400 text-xs mt-2">Processing...</span>
                       </div>
-                    ) : video.status === 'failed' ? (
+                    ) : video.status === "failed" ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 dark:bg-red-900/20">
-                        <span className="text-red-500 text-xs text-center">
-                          Processing failed
-                        </span>
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
+                        <span className="text-red-500 text-xs text-center">Processing failed</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
                           className="mt-2 text-xs h-6"
-                          onClick={() => handleCreateWatermark(video)}
-                        >
+                          onClick={() => handleCreateWatermark(video)}>
                           Retry
                         </Button>
                       </div>
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700">
-                        <span className="text-gray-400 text-xs text-center mb-2">
-                          No watermarked version
-                        </span>
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
+                        <span className="text-gray-400 text-xs text-center mb-2">No watermarked version</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
                           className="text-xs h-6"
-                          onClick={() => handleCreateWatermark(video)}
-                        >
+                          onClick={() => handleCreateWatermark(video)}>
                           Create watermarked version
                         </Button>
                       </div>
@@ -308,23 +318,19 @@ export function VideoGrid({
           </Card>
         ))}
       </div>
-      
+
       {/* Delete confirmation dialog */}
       <DeleteConfirmDialog
         isOpen={deleteDialog.isOpen}
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
-        videoFilename={deleteDialog.video?.filename || ''}
+        videoFilename={deleteDialog.video?.filename || ""}
         isDeleting={deleteDialog.isDeleting}
       />
-      
+
       {/* Video player */}
       {videoPlayer.videoUrl && (
-        <VideoPlayer
-          videoUrl={videoPlayer.videoUrl}
-          onClose={handleClosePlayer}
-          isOpen={videoPlayer.isOpen}
-        />
+        <VideoPlayer videoUrl={videoPlayer.videoUrl} onClose={handleClosePlayer} isOpen={videoPlayer.isOpen} />
       )}
     </div>
   );
