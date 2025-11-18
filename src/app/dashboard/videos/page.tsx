@@ -1,19 +1,18 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { VideoGrid } from '@/components/video/VideoGrid';
-import { UploadModal } from '@/components/video/UploadModal';
-import { useVideos } from '@/hooks/useVideos';
-import { useToast } from '@/hooks/useToast';
-import { UploadIcon, RefreshCwIcon } from 'lucide-react';
-import { UploadResult } from '@/hooks/useVideoUpload';
-import { AuthDebug } from '@/components/auth/AuthDebug';
+import {useState} from "react";
+import {Button} from "@/components/ui/button";
+import {VideoGrid} from "@/components/video/VideoGrid";
+import {UploadModal} from "@/components/video/UploadModal";
+import {useVideos} from "@/hooks/useVideos";
+import {useToast} from "@/hooks/useToast";
+import {UploadIcon, RefreshCwIcon} from "lucide-react";
+import {UploadResult} from "@/hooks/useVideoUpload";
 
 export default function VideosPage() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const { videos, isLoading, error, refresh } = useVideos();
-  const { toast } = useToast();
+  const {videos, isLoading, error, refresh} = useVideos();
+  const {toast} = useToast();
 
   const handleOpenUploadModal = () => {
     setIsUploadModalOpen(true);
@@ -25,11 +24,11 @@ export default function VideosPage() {
 
   const handleUploadComplete = (result: UploadResult) => {
     toast({
-      title: 'Upload complete',
+      title: "Upload complete",
       description: `${result.filename} has been uploaded successfully.`,
-      variant: 'success',
+      variant: "success",
     });
-    
+
     // Refresh the video list after a short delay to ensure the new video is included
     setTimeout(() => {
       refresh();
@@ -41,17 +40,10 @@ export default function VideosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">My Videos</h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            View and manage your uploaded videos
-          </p>
+          <p className="text-gray-500 dark:text-gray-400">View and manage your uploaded videos</p>
         </div>
         <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={refresh}
-            disabled={isLoading}
-          >
+          <Button variant="outline" size="sm" onClick={refresh} disabled={isLoading}>
             <RefreshCwIcon className="h-4 w-4 mr-2" />
             Refresh
           </Button>
@@ -75,11 +67,6 @@ export default function VideosPage() {
         onClose={handleCloseUploadModal}
         onUploadComplete={handleUploadComplete}
       />
-      
-      {/* Debug component to help diagnose authentication issues */}
-      <div className="mt-8">
-        <AuthDebug />
-      </div>
     </div>
   );
 }
