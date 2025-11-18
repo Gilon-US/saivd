@@ -1,14 +1,15 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import Image from 'next/image';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import {useState} from "react";
+import Image from "next/image";
+import {LoadingSpinner} from "@/components/ui/loading-spinner";
 
 interface PublicProfile {
   id: string;
   display_name: string | null;
   bio: string | null;
   photo: string | null;
+  created_at?: string;
 }
 
 interface PublicProfileCardProps {
@@ -17,27 +18,70 @@ interface PublicProfileCardProps {
 
 /**
  * Public Profile Card Component
- * 
+ *
  * Displays a user's public profile information in a card layout.
  * Story 2.3: Public Profile Page Component
  */
-export function PublicProfileCard({ profile }: PublicProfileCardProps) {
+export function PublicProfileCard({profile}: PublicProfileCardProps) {
+  const membershipSince = profile.created_at
+    ? new Date(profile.created_at).toLocaleString("default", {month: "long", year: "numeric"})
+    : null;
+
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6 sm:p-8">
-      <div className="text-center">
-        {/* Profile Photo */}
-        <div className="mb-6">
-          <ProfilePhoto 
-            photo={profile.photo} 
-            displayName={profile.display_name} 
+    <div className="bg-gray-50 dark:bg-gray-900 rounded-3xl shadow-md border border-gray-200 dark:border-gray-700 max-w-md mx-auto overflow-hidden">
+      <div className="flex flex-col items-center px-6 pt-6 pb-8">
+        <div className="mb-4">
+          <Image
+            src="/images/saivd-logo.png"
+            alt="Saivd logo"
+            className="h-10 w-auto"
+            width={200}
+            height={40}
+            priority
           />
         </div>
 
-        {/* Display Name */}
-        <DisplayName displayName={profile.display_name} />
+        <div className="w-full mb-6">
+          <div className="bg-lime-400 text-black text-center py-3 rounded-md font-bold text-sm tracking-wide">
+            VERIFIED
+            <div className="text-xs font-normal mt-1">Saivd Member</div>
+          </div>
+        </div>
 
-        {/* Bio */}
-        <Bio bio={profile.bio} />
+        <div className="flex flex-col items-center space-y-4">
+          <ProfilePhoto photo={profile.photo} displayName={profile.display_name} />
+
+          <div className="text-center space-y-2">
+            <DisplayName displayName={profile.display_name} />
+            <div className="h-px bg-gray-300" />
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              {membershipSince ? `Saivd Member Since ${membershipSince}` : "Saivd Member"}
+            </p>
+          </div>
+        </div>
+
+        <div className="w-full mt-6 space-y-4 text-left">
+          <Bio bio={profile.bio} />
+
+          <div className="pt-4 space-y-4">
+            <button
+              type="button"
+              className="w-full py-3 rounded-full border border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-gray-800">
+              + Follow
+            </button>
+
+            <div className="flex items-center justify-center gap-3 text-gray-700 dark:text-gray-200">
+              {["X", "IG", "FB", "YT", "SC", "P"].map((label) => (
+                <div
+                  key={label}
+                  className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center text-xs font-semibold"
+                  aria-hidden="true">
+                  {label}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -47,30 +91,26 @@ export function PublicProfileCard({ profile }: PublicProfileCardProps) {
  * Profile Photo Component
  * Displays user's profile photo with fallback to initials
  */
-function ProfilePhoto({ 
-  photo, 
-  displayName 
-}: { 
-  photo: string | null; 
-  displayName: string | null; 
-}) {
+function ProfilePhoto({photo, displayName}: {photo: string | null; displayName: string | null}) {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
 
-  const initials = displayName 
-    ? displayName.split(' ').map(name => name.charAt(0)).join('').toUpperCase().slice(0, 2)
-    : '?';
+  const initials = displayName
+    ? displayName
+        .split(" ")
+        .map((name) => name.charAt(0))
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "?";
 
   if (!photo || imageError) {
     return (
-      <div 
+      <div
         className="w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full mx-auto flex items-center justify-center shadow-lg"
         role="img"
-        aria-label={`Profile photo placeholder for ${displayName || 'user'}`}
-      >
-        <span className="text-white text-2xl sm:text-3xl font-bold">
-          {initials}
-        </span>
+        aria-label={`Profile photo placeholder for ${displayName || "user"}`}>
+        <span className="text-white text-2xl sm:text-3xl font-bold">{initials}</span>
       </div>
     );
   }
@@ -84,7 +124,7 @@ function ProfilePhoto({
       )}
       <Image
         src={photo}
-        alt={`Profile photo of ${displayName || 'user'}`}
+        alt={`Profile photo of ${displayName || "user"}`}
         width={128}
         height={128}
         className="rounded-full object-cover w-full h-full shadow-lg ring-4 ring-white"
@@ -103,31 +143,20 @@ function ProfilePhoto({
  * Display Name Component
  * Shows user's display name with fallback
  */
-function DisplayName({ displayName }: { displayName: string | null }) {
-  return (
-    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">
-      {displayName || 'Anonymous User'}
-    </h1>
-  );
+function DisplayName({displayName}: {displayName: string | null}) {
+  return <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">{displayName || "Anonymous User"}</h1>;
 }
 
 /**
  * Bio Component
  * Shows user's bio if available
  */
-function Bio({ bio }: { bio: string | null }) {
-  if (!bio) {
-    return (
-      <p className="text-gray-500 italic text-sm sm:text-base">
-        No bio available
-      </p>
-    );
-  }
-
+function Bio({bio}: {bio: string | null}) {
   return (
-    <div className="mt-4">
-      <p className="text-gray-600 text-base sm:text-lg leading-relaxed max-w-lg mx-auto whitespace-pre-wrap">
-        {bio}
+    <div className="space-y-2">
+      <h3 className="text-xs font-semibold tracking-wide text-gray-700 dark:text-gray-300">BIO</h3>
+      <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed max-w-lg mx-auto whitespace-pre-wrap">
+        {bio && bio.trim().length > 0 ? bio : "No bio available"}
       </p>
     </div>
   );
