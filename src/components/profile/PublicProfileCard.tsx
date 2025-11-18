@@ -3,6 +3,7 @@
 import {useState} from "react";
 import Image from "next/image";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
+import {Twitter, Instagram, Facebook, Youtube, Link as LinkIcon, Globe} from "lucide-react";
 
 interface PublicProfile {
   id: string;
@@ -71,14 +72,37 @@ export function PublicProfileCard({profile}: PublicProfileCardProps) {
             </button>
 
             <div className="flex items-center justify-center gap-3 text-gray-700 dark:text-gray-200">
-              {["X", "IG", "FB", "YT", "SC", "P"].map((label) => (
-                <div
-                  key={label}
-                  className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center text-xs font-semibold"
-                  aria-hidden="true">
-                  {label}
-                </div>
-              ))}
+              <span className="sr-only">Social links</span>
+              <div
+                className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center"
+                aria-hidden="true">
+                <Twitter className="h-4 w-4" />
+              </div>
+              <div
+                className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center"
+                aria-hidden="true">
+                <Instagram className="h-4 w-4" />
+              </div>
+              <div
+                className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center"
+                aria-hidden="true">
+                <Facebook className="h-4 w-4" />
+              </div>
+              <div
+                className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center"
+                aria-hidden="true">
+                <Youtube className="h-4 w-4" />
+              </div>
+              <div
+                className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center"
+                aria-hidden="true">
+                <LinkIcon className="h-4 w-4" />
+              </div>
+              <div
+                className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center"
+                aria-hidden="true">
+                <Globe className="h-4 w-4" />
+              </div>
             </div>
           </div>
         </div>
