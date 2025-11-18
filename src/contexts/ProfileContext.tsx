@@ -12,6 +12,12 @@ export interface Profile {
   avatar_url: string | null;
   photo: string | null;
   bio: string | null;
+  twitter_url: string | null;
+  instagram_url: string | null;
+  facebook_url: string | null;
+  youtube_url: string | null;
+  tiktok_url: string | null;
+  website_url: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -4,6 +4,13 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   email TEXT NOT NULL,
   display_name TEXT,
   avatar_url TEXT,
+  -- URL fields for user social profiles (all optional)
+  twitter_url TEXT,
+  instagram_url TEXT,
+  facebook_url TEXT,
+  youtube_url TEXT,
+  tiktok_url TEXT,
+  website_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
