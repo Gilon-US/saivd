@@ -2,11 +2,17 @@ import {NextRequest, NextResponse} from "next/server";
 import {createClient} from "@/utils/supabase/server";
 import {generateKeyPairSync} from "crypto";
 
+type WatermarkServiceResponse = {
+  status: string;
+  message?: string;
+  path?: string;
+};
+
 // POST /api/videos/[id]/watermark
 // Creates a watermarked version of the video by calling the external watermark service.
-export async function POST(_request: NextRequest, context: {params: {id: string}}) {
+export async function POST(_request: NextRequest, context: {params: Promise<{id: string}>}) {
   try {
-    const videoId = context.params.id;
+    const {id: videoId} = await context.params;
 
     if (!videoId) {
       return NextResponse.json(
@@ -136,7 +142,7 @@ export async function POST(_request: NextRequest, context: {params: {id: string}
       body: JSON.stringify(requestBody),
     });
 
-    let payload: any = null;
+    let payload: WatermarkServiceResponse | null = null;
     try {
       payload = await response.json();
     } catch (e) {

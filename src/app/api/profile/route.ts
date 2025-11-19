@@ -104,7 +104,9 @@ export async function GET() {
           return NextResponse.json({success: false, error: "Failed to create profile"}, {status: 500});
         }
 
-        const {rsa_public: _rp1, rsa_private: _rp2, ...safeCreatedProfile} = createdProfileWithKeys;
+        const {rsa_public, rsa_private, ...safeCreatedProfile} = createdProfileWithKeys;
+        void rsa_public;
+        void rsa_private;
         return NextResponse.json({success: true, data: safeCreatedProfile});
       }
 
@@ -138,7 +140,9 @@ export async function GET() {
     }
 
     // Strip RSA fields before returning to client
-    const {rsa_public: _rsaPublic, rsa_private: _rsaPrivate, ...safeProfile} = profileWithKeys || {};
+    const {rsa_public, rsa_private, ...safeProfile} = profileWithKeys || {};
+    void rsa_public;
+    void rsa_private;
 
     return NextResponse.json({success: true, data: safeProfile});
   } catch (error) {
