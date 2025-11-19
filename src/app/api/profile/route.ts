@@ -15,8 +15,8 @@ export async function GET() {
       return NextResponse.json({success: false, error: "Authentication required"}, {status: 401});
     }
 
-    // Try to get existing profile (only safe, UI-facing fields)
-    const {data: profile, error} = await supabase
+    // Try to get existing profile (includes RSA so we can lazily backfill if missing)
+    const {data: profileWithKeys, error} = await supabase
       .from("profiles")
       .select(
         `
@@ -33,6 +33,8 @@ export async function GET() {
         youtube_url,
         tiktok_url,
         website_url,
+        rsa_public,
+        rsa_private,
         created_at,
         updated_at
       `
@@ -71,7 +73,7 @@ export async function GET() {
         }
 
         // Re-fetch the profile with the same safe selection as above (no RSA fields)
-        const {data: createdProfile, error: fetchCreatedError} = await supabase
+        const {data: createdProfileWithKeys, error: fetchCreatedError} = await supabase
           .from("profiles")
           .select(
             `
@@ -88,6 +90,8 @@ export async function GET() {
             youtube_url,
             tiktok_url,
             website_url,
+            rsa_public,
+            rsa_private,
             created_at,
             updated_at
           `
@@ -95,19 +99,48 @@ export async function GET() {
           .eq("id", user.id)
           .single();
 
-        if (fetchCreatedError || !createdProfile) {
+        if (fetchCreatedError || !createdProfileWithKeys) {
           console.error("Error fetching newly created profile:", fetchCreatedError);
           return NextResponse.json({success: false, error: "Failed to create profile"}, {status: 500});
         }
 
-        return NextResponse.json({success: true, data: createdProfile});
+        const {rsa_public: _rp1, rsa_private: _rp2, ...safeCreatedProfile} = createdProfileWithKeys;
+        return NextResponse.json({success: true, data: safeCreatedProfile});
       }
 
       console.error("Error fetching profile:", error);
       return NextResponse.json({success: false, error: "Failed to fetch profile"}, {status: 500});
     }
 
-    return NextResponse.json({success: true, data: profile});
+    // If profile exists but is missing RSA keys (e.g., created only by DB trigger), backfill them lazily
+    if (profileWithKeys && (!profileWithKeys.rsa_public || !profileWithKeys.rsa_private)) {
+      console.log("Profile missing RSA keys, generating new keypair for user:", user.id);
+
+      const {publicKey, privateKey} = generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+        publicKeyEncoding: {type: "spki", format: "pem"},
+        privateKeyEncoding: {type: "pkcs8", format: "pem"},
+      });
+
+      const {error: updateError} = await supabase
+        .from("profiles")
+        .update({
+          rsa_public: publicKey,
+          rsa_private: privateKey,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+
+      if (updateError) {
+        console.error("Error backfilling RSA keys for profile:", updateError);
+        return NextResponse.json({success: false, error: "Failed to update profile"}, {status: 500});
+      }
+    }
+
+    // Strip RSA fields before returning to client
+    const {rsa_public: _rsaPublic, rsa_private: _rsaPrivate, ...safeProfile} = profileWithKeys || {};
+
+    return NextResponse.json({success: true, data: safeProfile});
   } catch (error) {
     console.error("Unexpected error in GET /api/profile:", error);
     return NextResponse.json({success: false, error: "Server error"}, {status: 500});
