@@ -12,6 +12,7 @@ export interface Profile {
   avatar_url: string | null;
   photo: string | null;
   bio: string | null;
+  numeric_user_id: number | null;
   twitter_url: string | null;
   instagram_url: string | null;
   facebook_url: string | null;

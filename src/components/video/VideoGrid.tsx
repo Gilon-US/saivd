@@ -83,12 +83,39 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
     });
   };
 
-  const handleCreateWatermark = (video: Video) => {
-    // TODO: Implement watermark creation API call
+  const handleCreateWatermark = async (video: Video) => {
     toast({
       title: "Creating watermarked version",
       description: `Starting watermark process for "${video.filename}"`,
     });
+
+    try {
+      const response = await fetch(`/api/videos/${video.id}/watermark`, {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error?.message || "Failed to create watermarked video");
+      }
+
+      toast({
+        title: "Watermarked version created",
+        description: `A watermarked version of "${video.filename}" is now available.`,
+        variant: "success",
+      });
+
+      // Refresh the video list so the new watermarked thumbnail/status is shown
+      onRefresh();
+    } catch (error) {
+      console.error("Error creating watermarked version:", error);
+      toast({
+        title: "Watermark failed",
+        description: error instanceof Error ? error.message : "Failed to create watermarked video. Please try again.",
+        variant: "error",
+      });
+    }
   };
 
   const handleDeleteClick = (video: Video) => {

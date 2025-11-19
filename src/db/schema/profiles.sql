@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   email TEXT NOT NULL,
   display_name TEXT,
   avatar_url TEXT,
+  -- Stable numeric surrogate key for external services and public URLs
+  numeric_user_id BIGSERIAL UNIQUE,
   -- URL fields for user social profiles (all optional)
   twitter_url TEXT,
   instagram_url TEXT,
@@ -38,6 +40,9 @@ CREATE POLICY "Users can update their own profile"
 
 -- Create index for email lookups
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
+
+-- Create index for numeric_user_id lookups
+CREATE INDEX IF NOT EXISTS idx_profiles_numeric_user_id ON public.profiles(numeric_user_id);
 
 -- Create function to handle new user creation
 CREATE OR REPLACE FUNCTION public.handle_new_user()

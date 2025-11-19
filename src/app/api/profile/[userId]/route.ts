@@ -1,6 +1,5 @@
 import {NextRequest, NextResponse} from "next/server";
 import {createClient} from "@/utils/supabase/server";
-import {isValidUUID} from "@/utils/validation";
 
 /**
  * GET /api/profile/[userId]
@@ -16,11 +15,13 @@ export async function GET(request: NextRequest, context: {params: Promise<{userI
   try {
     const {userId} = await context.params;
 
-    // Validate UUID format
-    if (!isValidUUID(userId)) {
-      console.log(`Invalid UUID format provided: ${userId}`);
+    // Validate numeric user ID format (only digits)
+    if (!/^[0-9]+$/.test(userId)) {
+      console.log(`Invalid numeric user ID format provided: ${userId}`);
       return NextResponse.json({success: false, error: "Invalid user ID format"}, {status: 400});
     }
+
+    const numericUserId = parseInt(userId, 10);
 
     // Create Supabase client for public access (no auth required)
     const supabase = await createClient();
@@ -28,8 +29,8 @@ export async function GET(request: NextRequest, context: {params: Promise<{userI
     // Fetch public profile data - only safe fields
     const {data: profile, error} = await supabase
       .from("profiles")
-      .select("id, display_name, bio, photo, created_at")
-      .eq("id", userId)
+      .select("id, display_name, bio, photo, created_at, numeric_user_id")
+      .eq("numeric_user_id", numericUserId)
       .single();
 
     if (error) {
