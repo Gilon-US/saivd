@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   youtube_url TEXT,
   tiktok_url TEXT,
   website_url TEXT,
+  -- RSA keypair for this user (backend-only, never exposed via public APIs)
+  rsa_public TEXT,
+  rsa_private TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
