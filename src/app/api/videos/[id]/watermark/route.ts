@@ -133,10 +133,12 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       user_id: profile.numeric_user_id,
     };
 
-    // Call external watermark service
+    // Call external watermark service (log without exposing private keys)
     console.log("[Watermark] Sending request to external service", {
       url: watermarkServiceUrl,
-      requestBody,
+      input_location: requestBody.input_location,
+      output_location: requestBody.output_location,
+      user_id: requestBody.user_id,
     });
 
     const response = await fetch(watermarkServiceUrl, {

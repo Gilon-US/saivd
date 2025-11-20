@@ -93,30 +93,55 @@ export async function DELETE(request: NextRequest, context: {params: Promise<{id
       return NextResponse.json({success: false, error: {code: "not_found", message: "Video not found"}}, {status: 404});
     }
 
-    let key: string | null = null;
+    // Resolve storage keys for original and processed (watermarked) objects
+    let originalKey: string | null = null;
     if (video.original_url?.startsWith("http")) {
-      key = extractKeyFromUrl(video.original_url);
+      originalKey = extractKeyFromUrl(video.original_url);
     } else {
-      key = video.original_url;
+      originalKey = video.original_url;
     }
-    if (!key) {
+
+    let processedKey: string | null = null;
+    if (video.processed_url) {
+      if (video.processed_url.startsWith("http")) {
+        processedKey = extractKeyFromUrl(video.processed_url);
+      } else {
+        processedKey = video.processed_url;
+      }
+    }
+
+    if (!originalKey) {
       return NextResponse.json(
         {success: false, error: {code: "invalid_data", message: "Missing or invalid video storage key"}},
         {status: 500}
       );
     }
 
-    // Delete file from Wasabi
+    // Delete original file from Wasabi
     try {
       const deleteCommand = new DeleteObjectCommand({
         Bucket: WASABI_BUCKET,
-        Key: key,
+        Key: originalKey,
       });
       await wasabiClient.send(deleteCommand);
     } catch (error) {
       console.error("Error deleting file from Wasabi:", error);
       // Continue with database deletion even if file deletion fails
       // In a production environment, you might want to handle this differently
+    }
+
+    // Delete processed (watermarked) file from Wasabi, if it exists and is a different key
+    if (processedKey && processedKey !== originalKey) {
+      try {
+        const deleteProcessedCommand = new DeleteObjectCommand({
+          Bucket: WASABI_BUCKET,
+          Key: processedKey,
+        });
+        await wasabiClient.send(deleteProcessedCommand);
+      } catch (error) {
+        console.error("Error deleting processed file from Wasabi:", error);
+        // Continue with database deletion even if processed file deletion fails
+      }
     }
 
     // Delete video from database
