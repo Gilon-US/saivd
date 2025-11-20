@@ -134,6 +134,11 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     };
 
     // Call external watermark service
+    console.log("[Watermark] Sending request to external service", {
+      url: watermarkServiceUrl,
+      requestBody,
+    });
+
     const response = await fetch(watermarkServiceUrl, {
       method: "POST",
       headers: {
@@ -142,11 +147,18 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       body: JSON.stringify(requestBody),
     });
 
+    const rawText = await response.text();
+    console.log("[Watermark] Received response from external service", {
+      status: response.status,
+      statusText: response.statusText,
+      body: rawText,
+    });
+
     let payload: WatermarkServiceResponse | null = null;
     try {
-      payload = await response.json();
+      payload = rawText ? (JSON.parse(rawText) as WatermarkServiceResponse) : null;
     } catch (e) {
-      console.error("Watermark service returned non-JSON response", e);
+      console.error("[Watermark] Failed to parse JSON from external service", e);
       return NextResponse.json(
         {
           success: false,
