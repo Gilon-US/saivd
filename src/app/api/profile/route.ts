@@ -1,6 +1,7 @@
 import {NextResponse} from "next/server";
 import {createClient} from "@/utils/supabase/server";
 import {generateKeyPairSync} from "crypto";
+import {generateAndUploadUserQrCode} from "@/lib/qr-codes";
 
 // GET /api/profile
 export async function GET() {
@@ -136,6 +137,16 @@ export async function GET() {
       if (updateError) {
         console.error("Error backfilling RSA keys for profile:", updateError);
         return NextResponse.json({success: false, error: "Failed to update profile"}, {status: 500});
+      }
+    }
+
+    // Ensure QR code exists for this user if numeric_user_id is set
+    if (profileWithKeys?.numeric_user_id != null) {
+      try {
+        await generateAndUploadUserQrCode(profileWithKeys.numeric_user_id);
+      } catch (qrError) {
+        console.error("Error generating QR code for profile:", qrError);
+        // Do not fail the profile request if QR generation fails
       }
     }
 
