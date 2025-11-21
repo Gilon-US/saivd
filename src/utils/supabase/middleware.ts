@@ -1,5 +1,5 @@
-import { createServerClient } from '@supabase/ssr';
-import { NextResponse, type NextRequest } from 'next/server';
+import {createServerClient} from "@supabase/ssr";
+import {NextResponse, type NextRequest} from "next/server";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -12,16 +12,14 @@ export async function updateSession(request: NextRequest) {
     {
       cookies: {
         getAll() {
-          return request.cookies.getAll()
+          return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({name, value}) => request.cookies.set(name, value));
           supabaseResponse = NextResponse.next({
             request,
-          })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
+          });
+          cookiesToSet.forEach(({name, value, options}) => supabaseResponse.cookies.set(name, value, options));
         },
       },
     }
@@ -32,53 +30,64 @@ export async function updateSession(request: NextRequest) {
   // issues with users being randomly logged out.
 
   const {
-    data: { user },
+    data: {user},
   } = await supabase.auth.getUser();
 
   // Get the pathname from the URL
-  const { pathname } = request.nextUrl;
+  const {pathname} = request.nextUrl;
 
   // Check if this is the root route
-  const isRootRoute = pathname === '/';
+  const isRootRoute = pathname === "/";
+
+  // Public profile routes (numeric user IDs and optional /qr suffix)
+  const isPublicProfileRoute = /^\/profile\/[0-9]+(\/qr)?$/.test(pathname);
 
   // Protected routes that require authentication
-  const protectedRoutes = ['/dashboard', '/profile', '/videos'];
-  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
+  const protectedRoutes = ["/dashboard", "/profile", "/videos"];
+  let isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
+
+  // Do NOT protect numeric public profile routes (e.g. /profile/123, /profile/123/qr)
+  if (isPublicProfileRoute) {
+    isProtectedRoute = false;
+  }
 
   // Auth routes that should redirect to dashboard if already authenticated
-  const authRoutes = ['/login', '/register'];
-  const isAuthRoute = authRoutes.some(route => pathname === route);
+  const authRoutes = ["/login", "/register"];
+  const isAuthRoute = authRoutes.some((route) => pathname === route);
 
   // Protected API routes pattern
-  const isProtectedApiRoute = pathname.startsWith('/api/') && 
-    !pathname.startsWith('/api/health') &&
-    !pathname.startsWith('/api/auth') &&
-    !pathname.startsWith('/api/auth-test') &&
-    !pathname.startsWith('/api/videos/upload') && // Allow upload endpoint (handles its own auth)
-    !pathname.startsWith('/api/callbacks');
+  const isProtectedApiRoute =
+    pathname.startsWith("/api/") &&
+    !pathname.startsWith("/api/health") &&
+    !pathname.startsWith("/api/auth") &&
+    !pathname.startsWith("/api/auth-test") &&
+    !pathname.startsWith("/api/videos/upload") && // Allow upload endpoint (handles its own auth)
+    !pathname.startsWith("/api/callbacks") &&
+    !pathname.startsWith("/api/profile") && // Public profile API
+    !pathname.startsWith("/api/users/"); // Public user QR API
 
   // Redirect if accessing protected route without authentication
   if (isProtectedRoute && !user) {
-    const redirectUrl = new URL('/login', request.url);
-    redirectUrl.searchParams.set('redirectTo', pathname);
+    const redirectUrl = new URL("/login", request.url);
+    redirectUrl.searchParams.set("redirectTo", pathname);
     return NextResponse.redirect(redirectUrl);
   }
 
   // Redirect to video grid dashboard if accessing auth routes or root route while already authenticated
   if ((isAuthRoute || isRootRoute) && user) {
-    return NextResponse.redirect(new URL('/dashboard/videos', request.url));
+    return NextResponse.redirect(new URL("/dashboard/videos", request.url));
   }
-  
+
   // Redirect to login if accessing root route without authentication
   if (isRootRoute && !user) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   // Handle protected API routes
   if (isProtectedApiRoute && !user) {
     return NextResponse.json(
-      { success: false, error: { code: 'unauthorized', message: 'Authentication required' } },
-      { status: 401 }
+      {success: false, error: {code: "unauthorized", message: "Authentication required"}},
+      {status: 401}
     );
   }
 
