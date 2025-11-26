@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   youtube_url TEXT,
   tiktok_url TEXT,
   website_url TEXT,
+  -- Application-level role: admin or user
+  role TEXT NOT NULL DEFAULT 'user',
   -- RSA keypair for this user (backend-only, never exposed via public APIs)
   rsa_public TEXT,
   rsa_private TEXT,
@@ -23,26 +25,45 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 -- Enable Row Level Security
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- Drop existing policies if they exist to avoid conflicts when re-running
+-- Drop existing self-only policies if they exist to avoid conflicts when re-running
 DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
 
--- Create policies
-CREATE POLICY "Users can view their own profile"
+-- Create admin-aware policies
+CREATE POLICY "Users can view profiles (self or admin)"
   ON public.profiles
   FOR SELECT
-  USING (auth.uid() = id);
+  USING (
+    auth.uid() = id
+    OR EXISTS (
+      SELECT 1
+      FROM public.profiles p_admin
+      WHERE p_admin.id = auth.uid()
+        AND p_admin.role = 'admin'
+    )
+  );
 
-CREATE POLICY "Users can update their own profile"
+CREATE POLICY "Users can update profiles (self or admin)"
   ON public.profiles
   FOR UPDATE
-  USING (auth.uid() = id);
+  USING (
+    auth.uid() = id
+    OR EXISTS (
+      SELECT 1
+      FROM public.profiles p_admin
+      WHERE p_admin.id = auth.uid()
+        AND p_admin.role = 'admin'
+    )
+  );
 
 -- Create index for email lookups
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
 
 -- Create index for numeric_user_id lookups
 CREATE INDEX IF NOT EXISTS idx_profiles_numeric_user_id ON public.profiles(numeric_user_id);
+
+-- Create index for role lookups (admin vs user)
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
 
 -- Create function to handle new user creation
 CREATE OR REPLACE FUNCTION public.handle_new_user()
