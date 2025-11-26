@@ -136,7 +136,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       output_location: outputLocation,
       local_key: rsaPrivate,
       client_key: rsaPrivate,
-      user_id: profile.numeric_user_id,
+      user_id: String(profile.numeric_user_id),
     };
 
     // Call external watermark service (log without exposing private keys)
