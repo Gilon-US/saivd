@@ -147,8 +147,12 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       user_id: requestBody.user_id,
     });
 
+    const timeoutMsEnv = process.env.WATERMARK_TIMEOUT_MS;
+    const timeoutMs =
+      Number.isFinite(Number(timeoutMsEnv)) && Number(timeoutMsEnv) > 0 ? Number(timeoutMsEnv) : 5 * 60 * 1000;
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2 * 60 * 1000); // 2 minutes
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // 2 minutes
 
     let response: Response;
     try {
@@ -162,7 +166,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       });
     } catch (error: unknown) {
       if (error instanceof Error && error.name === "AbortError") {
-        console.error("[Watermark] External service request timed out after 2 minutes");
+        console.error("[Watermark] External service request timed out", {timeoutMs});
         return NextResponse.json(
           {
             success: false,
