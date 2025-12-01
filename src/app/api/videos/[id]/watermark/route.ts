@@ -139,12 +139,18 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       user_id: String(profile.numeric_user_id),
     };
 
-    // Call external watermark service (log without exposing private keys)
+    // Call external watermark service (log payload with redacted keys)
+    const safeLogBody = {
+      ...requestBody,
+      local_key: requestBody.local_key ? `[REDACTED_LOCAL_KEY:${(requestBody.local_key as string).length}chars]` : null,
+      client_key: requestBody.client_key
+        ? `[REDACTED_CLIENT_KEY:${(requestBody.client_key as string).length}chars]`
+        : null,
+    };
+
     console.log("[Watermark] Sending request to external service", {
       url: watermarkServiceUrl,
-      input_location: requestBody.input_location,
-      output_location: requestBody.output_location,
-      user_id: requestBody.user_id,
+      body: safeLogBody,
     });
 
     const timeoutMsEnv = process.env.WATERMARK_TIMEOUT_MS;
