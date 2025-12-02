@@ -3,12 +3,16 @@
 import {ReactNode} from "react";
 import Link from "next/link";
 import {LogoutButton} from "@/components/auth/LogoutButton";
+import {ProfileProvider, useProfile} from "@/contexts/ProfileContext";
 
 interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-export default function DashboardLayout({children}: DashboardLayoutProps) {
+function DashboardShell({children}: DashboardLayoutProps) {
+  const {profile} = useProfile();
+  const isAdmin = profile?.role === "admin";
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="flex flex-col">
@@ -27,6 +31,13 @@ export default function DashboardLayout({children}: DashboardLayoutProps) {
                   className="px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
                   Profile
                 </Link>
+                {isAdmin && (
+                  <Link
+                    href="/dashboard/admin/users"
+                    className="px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                    Admin
+                  </Link>
+                )}
               </nav>
             </div>
             <div>
@@ -42,5 +53,13 @@ export default function DashboardLayout({children}: DashboardLayoutProps) {
         </footer>
       </div>
     </div>
+  );
+}
+
+export default function DashboardLayout({children}: DashboardLayoutProps) {
+  return (
+    <ProfileProvider>
+      <DashboardShell>{children}</DashboardShell>
+    </ProfileProvider>
   );
 }
