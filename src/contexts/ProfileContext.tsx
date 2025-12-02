@@ -79,7 +79,7 @@ export function ProfileProvider({children}: {children: ReactNode}) {
       setLoading(false);
       setInitialized(true);
     }
-  }, [user, toast]);
+  }, [user]);
 
   // Function to update profile
   const updateProfile = useCallback(
