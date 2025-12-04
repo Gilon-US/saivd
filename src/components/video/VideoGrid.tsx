@@ -298,17 +298,38 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
                 <div className="space-y-2 flex-shrink-0">
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Watermarked</h4>
                   <div className="w-60 max-w-[240px] aspect-video relative bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden">
-                    {video.status === "processed" && video.processed_thumbnail_url ? (
+                    {video.status === "processed" &&
+                    (video.processed_thumbnail_url ||
+                      video.preview_thumbnail_data ||
+                      (video.original_thumbnail_url &&
+                        !video.original_thumbnail_url.includes("placeholder-video-thumbnail"))) ? (
                       <div
                         className="w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
                         onClick={() => handleVideoClick(video)}>
-                        <Image
-                          src={video.processed_thumbnail_url}
-                          alt={`${video.filename} - Watermarked`}
-                          className="object-cover"
-                          fill
-                          sizes="240px"
-                        />
+                        {video.processed_thumbnail_url ? (
+                          <Image
+                            src={video.processed_thumbnail_url}
+                            alt={`${video.filename} - Watermarked`}
+                            className="object-cover"
+                            fill
+                            sizes="240px"
+                          />
+                        ) : video.preview_thumbnail_data ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={video.preview_thumbnail_data}
+                            alt={`${video.filename} - Watermarked Preview`}
+                            className="object-cover w-full h-full"
+                          />
+                        ) : (
+                          <Image
+                            src={video.original_thumbnail_url as string}
+                            alt={`${video.filename} - Watermarked`}
+                            className="object-cover"
+                            fill
+                            sizes="240px"
+                          />
+                        )}
                       </div>
                     ) : video.status === "processing" ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700">
