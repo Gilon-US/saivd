@@ -359,7 +359,8 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
                   </div>
                 </div>
               </div>
-            </Card>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
