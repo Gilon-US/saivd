@@ -298,6 +298,17 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
                 <div className="space-y-2 flex-shrink-0">
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Watermarked</h4>
                   <div className="w-60 max-w-[240px] aspect-video relative bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden">
+                    {/* Always-visible icon button to (re)create watermarked version */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-1 right-1 h-7 w-7 rounded-full bg-white/80 hover:bg-white shadow-sm z-10"
+                      title="Create or refresh watermarked version"
+                      onClick={() => handleCreateWatermark(video)}>
+                      <UploadIcon className="h-3 w-3" />
+                    </Button>
+
                     {video.status === "processed" &&
                     (video.processed_thumbnail_url ||
                       video.preview_thumbnail_data ||
@@ -339,31 +350,16 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
                     ) : video.status === "failed" ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 dark:bg-red-900/20">
                         <span className="text-red-500 text-xs text-center">Processing failed</span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="mt-2 text-xs h-6"
-                          onClick={() => handleCreateWatermark(video)}>
-                          Retry
-                        </Button>
                       </div>
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700">
                         <span className="text-gray-400 text-xs text-center mb-2">No watermarked version</span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-xs h-6"
-                          onClick={() => handleCreateWatermark(video)}>
-                          Create watermarked version
-                        </Button>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </Card>
         ))}
       </div>
 
