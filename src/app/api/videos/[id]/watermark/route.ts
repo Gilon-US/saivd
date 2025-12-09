@@ -2,10 +2,9 @@ import {NextRequest, NextResponse} from "next/server";
 import {createClient} from "@/utils/supabase/server";
 import {generateKeyPairSync} from "crypto";
 
-type WatermarkServiceResponse = {
-  status: string;
+type WatermarkJobResponse = {
+  jobId: number;
   message?: string;
-  path?: string;
 };
 
 export function normalizeWatermarkPath(path: string): string {
@@ -137,7 +136,8 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       local_key: rsaPrivate,
       client_key: rsaPrivate,
       user_id: profile.numeric_user_id,
-      async_request: false,
+      async_request: true,
+      stream: true,
     };
 
     // Call external watermark service (log payload with redacted keys)
@@ -197,9 +197,9 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       body: rawText,
     });
 
-    let payload: WatermarkServiceResponse | null = null;
+    let payload: WatermarkJobResponse | null = null;
     try {
-      payload = rawText ? (JSON.parse(rawText) as WatermarkServiceResponse) : null;
+      payload = rawText ? (JSON.parse(rawText) as WatermarkJobResponse) : null;
     } catch (e) {
       console.error("[Watermark] Failed to parse JSON from external service", e);
       return NextResponse.json(
@@ -214,33 +214,24 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       );
     }
 
-    if (!response.ok || !payload || payload.status !== "success" || !payload.path) {
+    if (!response.ok || !payload || !payload.jobId) {
       console.error("Watermark service error", {status: response.status, payload});
       return NextResponse.json(
         {
           success: false,
           error: {
             code: "watermark_error",
-            message: payload?.message || "Failed to create watermarked video",
+            message: payload?.message || "Failed to enqueue watermarked video job",
           },
         },
         {status: 502}
       );
     }
 
-    const watermarkedKey = normalizeWatermarkPath(payload.path as string);
-
-    // For now, reuse the original thumbnail for the watermarked version so the dashboard
-    // can display a preview immediately. This can be replaced with a dedicated
-    // watermarked thumbnail generation flow later.
-    const processedThumbnailUrl = video.original_thumbnail_url ?? null;
-
     const {data: updatedVideo, error: updateError} = await supabase
       .from("videos")
       .update({
-        processed_url: watermarkedKey,
-        processed_thumbnail_url: processedThumbnailUrl,
-        status: "processed",
+        status: "processing",
         updated_at: new Date().toISOString(),
       })
       .eq("id", videoId)
@@ -249,20 +240,27 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       .single();
 
     if (updateError || !updatedVideo) {
-      console.error("Error updating video with watermarked data", updateError);
+      console.error("Error updating video status to processing", updateError);
       return NextResponse.json(
         {
           success: false,
           error: {
             code: "database_error",
-            message: "Failed to update video with watermarked version",
+            message: "Failed to update video status to processing",
           },
         },
         {status: 500}
       );
     }
 
-    return NextResponse.json({success: true, data: updatedVideo});
+    return NextResponse.json({
+      success: true,
+      data: {
+        video: updatedVideo,
+        jobId: payload.jobId,
+        message: payload.message ?? null,
+      },
+    });
   } catch (error) {
     console.error("Unexpected error in POST /api/videos/[id]/watermark:", error);
     return NextResponse.json({success: false, error: {code: "server_error", message: "Server error"}}, {status: 500});

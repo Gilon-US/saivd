@@ -7,7 +7,7 @@ import {useToast} from "@/hooks/useToast";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
 import {DeleteConfirmDialog} from "./DeleteConfirmDialog";
 import {VideoPlayer} from "./VideoPlayer";
-import {useState} from "react";
+import {useState, useEffect} from "react";
 
 export type Video = {
   id: string;
@@ -31,6 +31,15 @@ type VideoGridProps = {
 
 export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModal}: VideoGridProps) {
   const {toast} = useToast();
+  const [pendingJobs, setPendingJobs] = useState<
+    Record<
+      string,
+      {
+        jobId: number;
+        message: string | null;
+      }
+    >
+  >({});
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
     video: Video | null;
@@ -96,17 +105,28 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
 
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
+      if (!response.ok || !data.success || !data.data?.jobId) {
         throw new Error(data.error?.message || "Failed to create watermarked video");
       }
 
+      const jobId: number = data.data.jobId;
+      const initialMessage: string | null = data.data.message ?? null;
+
+      setPendingJobs((prev) => ({
+        ...prev,
+        [video.id]: {
+          jobId,
+          message: initialMessage,
+        },
+      }));
+
       toast({
-        title: "Watermarked version created",
-        description: `A watermarked version of "${video.filename}" is now available.`,
+        title: "Watermark job started",
+        description: `Watermarking has started for "${video.filename}".`,
         variant: "success",
       });
 
-      // Refresh the video list so the new watermarked thumbnail/status is shown
+      // Refresh the video list so the status is updated to processing
       onRefresh();
     } catch (error) {
       console.error("Error creating watermarked version:", error);
@@ -117,6 +137,73 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
       });
     }
   };
+
+  // Poll internal watermark status endpoint every 5 seconds while there are pending jobs
+  useEffect(() => {
+    if (Object.keys(pendingJobs).length === 0) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const poll = async () => {
+      try {
+        const response = await fetch("/api/videos/watermark/status");
+        if (!response.ok) return;
+
+        const json = await response.json();
+        if (!json.success || !json.data?.jobs) return;
+
+        const jobs: {jobId: number; status: string | null; message: string | null}[] = json.data.jobs;
+        const byJobId = new Map<number, {status: string | null; message: string | null}>();
+        for (const job of jobs) {
+          byJobId.set(job.jobId, {status: job.status, message: job.message});
+        }
+
+        let hasCompletion = false;
+
+        setPendingJobs((prev) => {
+          const next: typeof prev = {};
+          for (const [videoId, info] of Object.entries(prev)) {
+            const job = byJobId.get(info.jobId);
+            if (!job) {
+              next[videoId] = info;
+              continue;
+            }
+
+            if (job.status === "success") {
+              hasCompletion = true;
+              // Drop from pending map; video will be refreshed below
+              continue;
+            }
+
+            next[videoId] = {
+              ...info,
+              message: job.message ?? info.message,
+            };
+          }
+          return next;
+        });
+
+        if (!isCancelled && hasCompletion) {
+          onRefresh();
+        }
+      } catch (error) {
+        console.error("Error polling watermark status:", error);
+      }
+    };
+
+    // Initial poll immediately, then every 5 seconds
+    void poll();
+    const intervalId = setInterval(() => {
+      void poll();
+    }, 5000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [pendingJobs, onRefresh]);
 
   const handleDeleteClick = (video: Video) => {
     setDeleteDialog({
@@ -345,7 +432,9 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
                     ) : video.status === "processing" ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700">
                         <LoadingSpinner size="sm" />
-                        <span className="text-gray-400 text-xs mt-2">Processing...</span>
+                        <span className="text-gray-400 text-xs mt-2">
+                          {pendingJobs[video.id]?.message ?? "Processing..."}
+                        </span>
                       </div>
                     ) : video.status === "failed" ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 dark:bg-red-900/20">
