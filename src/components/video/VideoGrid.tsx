@@ -135,18 +135,10 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
     }
   };
 
-  // Poll internal watermark status endpoint every 5 seconds while there are
-  // either pending jobs in this session or any videos currently marked as
-  // "processing" from the backend. This ensures polling also runs after
-  // navigation/refresh when there are in-flight jobs.
+  // Poll internal watermark status endpoint every 5 seconds whenever the video
+  // list is visible. If the status route reports jobs, refresh the videos so
+  // any processing/completed states are reflected.
   useEffect(() => {
-    const hasPendingJobs = Object.keys(pendingJobs).length > 0;
-    const hasProcessingVideos = videos.some((v) => v.status === "processing");
-
-    if (!hasPendingJobs && !hasProcessingVideos) {
-      return;
-    }
-
     let isCancelled = false;
 
     const poll = async () => {
@@ -157,9 +149,6 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
         const json = await response.json();
         if (!json.success || !json.data?.jobs) return;
 
-        // Backend route updates videos to "processed" when jobs complete.
-        // We don't need per-job mapping here; just refresh while there are
-        // processing videos or local pending jobs.
         if (!isCancelled) {
           onRefresh();
         }
@@ -178,7 +167,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
       isCancelled = true;
       clearInterval(intervalId);
     };
-  }, [pendingJobs, videos, onRefresh]);
+  }, [onRefresh]);
 
   const handleDeleteClick = (video: Video) => {
     setDeleteDialog({
