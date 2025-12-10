@@ -138,9 +138,15 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
     }
   };
 
-  // Poll internal watermark status endpoint every 5 seconds while there are pending jobs
+  // Poll internal watermark status endpoint every 5 seconds while there are
+  // either pending jobs in this session or any videos currently marked as
+  // "processing" from the backend. This ensures polling also runs after
+  // navigation/refresh when there are in-flight jobs.
   useEffect(() => {
-    if (Object.keys(pendingJobs).length === 0) {
+    const hasPendingJobs = Object.keys(pendingJobs).length > 0;
+    const hasProcessingVideos = videos.some((v) => v.status === "processing");
+
+    if (!hasPendingJobs && !hasProcessingVideos) {
       return;
     }
 
@@ -162,30 +168,32 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
 
         let hasCompletion = false;
 
-        setPendingJobs((prev) => {
-          const next: typeof prev = {};
-          for (const [videoId, info] of Object.entries(prev)) {
-            const job = byJobId.get(info.jobId);
-            if (!job) {
-              next[videoId] = info;
-              continue;
+        if (hasPendingJobs) {
+          setPendingJobs((prev) => {
+            const next: typeof prev = {};
+            for (const [videoId, info] of Object.entries(prev)) {
+              const job = byJobId.get(info.jobId);
+              if (!job) {
+                next[videoId] = info;
+                continue;
+              }
+
+              if (job.status === "success") {
+                hasCompletion = true;
+                // Drop from pending map; video will be refreshed below
+                continue;
+              }
+
+              next[videoId] = {
+                ...info,
+                message: job.message ?? info.message,
+              };
             }
+            return next;
+          });
+        }
 
-            if (job.status === "success") {
-              hasCompletion = true;
-              // Drop from pending map; video will be refreshed below
-              continue;
-            }
-
-            next[videoId] = {
-              ...info,
-              message: job.message ?? info.message,
-            };
-          }
-          return next;
-        });
-
-        if (!isCancelled && hasCompletion) {
+        if (!isCancelled && (hasCompletion || hasProcessingVideos)) {
           onRefresh();
         }
       } catch (error) {
@@ -203,7 +211,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
       isCancelled = true;
       clearInterval(intervalId);
     };
-  }, [pendingJobs, onRefresh]);
+  }, [pendingJobs, videos, onRefresh]);
 
   const handleDeleteClick = (video: Video) => {
     setDeleteDialog({
