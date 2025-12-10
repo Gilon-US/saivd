@@ -53,9 +53,11 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
   const [videoPlayer, setVideoPlayer] = useState<{
     isOpen: boolean;
     videoUrl: string | null;
+    enableFrameAnalysis: boolean;
   }>({
     isOpen: false,
     videoUrl: null,
+    enableFrameAnalysis: false,
   });
 
   const [isOpeningVideo, setIsOpeningVideo] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       setVideoPlayer({
         isOpen: true,
         videoUrl: data.data.playbackUrl,
+        enableFrameAnalysis: variant === "watermarked",
       });
     } catch (error) {
       console.error("Error opening video:", error);
@@ -89,6 +92,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     setVideoPlayer({
       isOpen: false,
       videoUrl: null,
+      enableFrameAnalysis: false,
     });
   };
 
@@ -429,7 +433,12 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
 
       {/* Video player */}
       {videoPlayer.videoUrl && (
-        <VideoPlayer videoUrl={videoPlayer.videoUrl} onClose={handleClosePlayer} isOpen={videoPlayer.isOpen} />
+        <VideoPlayer
+          videoUrl={videoPlayer.videoUrl}
+          onClose={handleClosePlayer}
+          isOpen={videoPlayer.isOpen}
+          enableFrameAnalysis={videoPlayer.enableFrameAnalysis}
+        />
       )}
     </div>
   );

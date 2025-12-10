@@ -8,32 +8,29 @@ interface VideoPlayerProps {
   videoUrl: string;
   onClose: () => void;
   isOpen: boolean;
+  enableFrameAnalysis: boolean;
 }
 
-export function VideoPlayer({videoUrl, onClose, isOpen}: VideoPlayerProps) {
+export function VideoPlayer({videoUrl, onClose, isOpen, enableFrameAnalysis}: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [numericUserId, setNumericUserId] = useState<number | null>(null);
 
-  // Frame analysis hook – for now, treat any "-watermarked" playback URL as
-  // eligible for QR/verification overlay, and conceptually "extract" a
-  // numeric_user_id from frames. Since we don't yet have real frame decoding
-  // implemented, use a hard-coded numeric_user_id = 1 when playing a
-  // watermarked video.
-  const isWatermarked = videoUrl.includes("-watermarked");
+  // Frame analysis hook – controlled explicitly by enableFrameAnalysis. When
+  // enabled, conceptually "extract" the creator's QR URL from frames. Since we
+  // don't yet have real frame decoding implemented, return a hard-coded QR
+  // route for numeric_user_id = 1. When disabled, always return null.
   const analysisFunction = useCallback<FrameAnalysisFunction>(() => {
-    if (isWatermarked) {
-      // Placeholder for future frame analysis that would decode the creator's
-      // numeric_user_id from the video frames. For now, hard-code user 1.
-      setNumericUserId(1);
-      return true;
+    if (!enableFrameAnalysis) {
+      return null;
     }
-    return false;
-  }, [isWatermarked]);
-  const {showOverlay} = useFrameAnalysis(videoRef, isPlaying, analysisFunction);
+    // Placeholder: in the future, derive this from frameData and
+    // numeric_user_id encoded in the video. For now, always show user 1's QR.
+    return "/profile/1/qr";
+  }, [enableFrameAnalysis]);
+  const {qrUrl} = useFrameAnalysis(videoRef, isPlaying, analysisFunction);
 
   useEffect(() => {
     if (!isOpen) {
@@ -117,18 +114,13 @@ export function VideoPlayer({videoUrl, onClose, isOpen}: VideoPlayerProps) {
             onEnded={() => setIsPlaying(false)}
           />
 
-          {/* QR / analysis overlay - only shown when frame analysis says so
-              and we have a numeric_user_id (currently hard-coded to 1 for
-              watermarked videos). */}
-          {showOverlay && numericUserId != null && (
-            <div className="absolute inset-0 bg-black/40 pointer-events-none flex items-center justify-center transition-opacity duration-200">
-              <div className="bg-white rounded-lg p-4 shadow-lg flex flex-col items-center gap-2">
-                {/* The QR image is served from the public profile QR route, which
-                    ultimately reads the QR PNG from Wasabi. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/profile/${numericUserId}/qr`} alt="Creator QR code" className="w-32 h-32 object-contain" />
-                <span className="text-xs text-gray-700">Scan to view creator profile</span>
-              </div>
+          {/* QR overlay – shown only when frame analysis returns a QR URL. The
+              image itself is served from the public profile QR route, which
+              ultimately reads the QR PNG from Wasabi. */}
+          {qrUrl && (
+            <div className="absolute top-2 left-2 pointer-events-none">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={qrUrl} alt="Creator QR code" className="w-16 h-16 object-contain rounded-md shadow-md" />
             </div>
           )}
 

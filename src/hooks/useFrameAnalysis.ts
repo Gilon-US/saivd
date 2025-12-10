@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useRef, RefObject } from 'react';
+import {useEffect, useState, useRef, RefObject} from "react";
 
 /**
  * Frame data passed to the analysis function
@@ -15,18 +15,19 @@ export interface FrameData {
 
 /**
  * Frame analysis function type
- * Returns a boolean indicating whether to show the overlay
+ * Returns a QR code URL string to display as an overlay, or null if no
+ * overlay should be shown.
  */
-export type FrameAnalysisFunction = (frameData: FrameData) => boolean;
+export type FrameAnalysisFunction = (frameData: FrameData) => string | null;
 
 /**
  * Default placeholder frame analysis function
  * This will be replaced with actual analysis logic in the future
- * 
+ *
  * @param frameData - The current frame data
- * @returns boolean - Whether to show the overlay
+ * @returns string | null - QR code URL or null if no overlay
  */
-const defaultAnalysisFunction: FrameAnalysisFunction = (frameData: FrameData): boolean => {
+const defaultAnalysisFunction: FrameAnalysisFunction = (_frameData: FrameData): string | null => {
   // Placeholder implementation
   // Future implementations could include:
   // - Face detection
@@ -34,25 +35,25 @@ const defaultAnalysisFunction: FrameAnalysisFunction = (frameData: FrameData): b
   // - Watermark verification
   // - Content moderation
   // - Quality analysis
-  
+
   // For now, return false (don't show overlay)
-  return false;
+  return null;
 };
 
 /**
  * Custom hook for analyzing video frames in real-time
- * 
+ *
  * @param videoRef - Reference to the video element
  * @param isPlaying - Whether the video is currently playing
  * @param analysisFunction - Optional custom analysis function
- * @returns Object containing showOverlay state
+ * @returns Object containing qrUrl and showOverlay state
  */
 export function useFrameAnalysis(
   videoRef: RefObject<HTMLVideoElement | null>,
   isPlaying: boolean,
   analysisFunction: FrameAnalysisFunction = defaultAnalysisFunction
 ) {
-  const [showOverlay, setShowOverlay] = useState(false);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -60,8 +61,8 @@ export function useFrameAnalysis(
   useEffect(() => {
     // Initialize canvas for frame capture
     if (!canvasRef.current) {
-      canvasRef.current = document.createElement('canvas');
-      contextRef.current = canvasRef.current.getContext('2d', {
+      canvasRef.current = document.createElement("canvas");
+      contextRef.current = canvasRef.current.getContext("2d", {
         willReadFrequently: true,
       });
     }
@@ -96,13 +97,13 @@ export function useFrameAnalysis(
         videoTime: video.currentTime,
       };
 
-      // Call analysis function and update overlay state
+      // Call analysis function and update overlay QR URL
       try {
-        const shouldShowOverlay = analysisFunction(frameData);
-        setShowOverlay(shouldShowOverlay);
+        const nextQrUrl = analysisFunction(frameData);
+        setQrUrl(nextQrUrl);
       } catch (error) {
-        console.error('Error in frame analysis:', error);
-        setShowOverlay(false);
+        console.error("Error in frame analysis:", error);
+        setQrUrl(null);
       }
 
       // Schedule next frame analysis
@@ -128,9 +129,9 @@ export function useFrameAnalysis(
   // Reset overlay when video stops
   useEffect(() => {
     if (!isPlaying) {
-      setShowOverlay(false);
+      setQrUrl(null);
     }
   }, [isPlaying]);
 
-  return { showOverlay };
+  return {qrUrl, showOverlay: qrUrl !== null};
 }
