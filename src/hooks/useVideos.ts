@@ -81,12 +81,15 @@ export function useVideos({
     }
   }, [fetchVideos, autoFetch]);
 
+  const refresh = useCallback(() => fetchVideos(), [fetchVideos]);
+  const refreshSilently = useCallback(() => fetchVideos({silent: true}), [fetchVideos]);
+
   return {
     videos,
     isLoading,
     error,
     pagination,
-    refresh: () => fetchVideos(),
-    refreshSilently: () => fetchVideos({silent: true}),
+    refresh,
+    refreshSilently,
   };
 }

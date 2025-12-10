@@ -158,11 +158,11 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       }
     };
 
-    // Initial poll immediately, then every 5 seconds
+    // Initial poll immediately, then every 10 seconds
     void poll();
     const intervalId = setInterval(() => {
       void poll();
-    }, 5000);
+    }, 10000);
 
     return () => {
       isCancelled = true;
