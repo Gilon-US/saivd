@@ -57,6 +57,7 @@ export function useFrameAnalysis(
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const skipPixelReadRef = useRef(false);
 
   useEffect(() => {
     // Initialize canvas for frame capture
@@ -76,17 +77,38 @@ export function useFrameAnalysis(
         return;
       }
 
-      // Set canvas size to match video
-      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+      let imageData: ImageData;
+
+      if (skipPixelReadRef.current) {
+        // When we've previously detected a tainted canvas, avoid touching
+        // getImageData again and just provide a minimal dummy image.
+        imageData = new ImageData(1, 1);
+      } else {
+        try {
+          // Set canvas size to match video
+          if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+          }
+
+          // Draw current video frame to canvas
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          // Get image data – this may throw a SecurityError if the video
+          // source is cross-origin without proper CORS headers.
+          imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "SecurityError") {
+            console.warn(
+              "Frame analysis: canvas is tainted by cross-origin video; skipping pixel reads and using dummy frame data instead."
+            );
+            skipPixelReadRef.current = true;
+            imageData = new ImageData(1, 1);
+          } else {
+            throw error;
+          }
+        }
       }
-
-      // Draw current video frame to canvas
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      // Get image data
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
 
       // Prepare frame data
       const frameData: FrameData = {

@@ -28,6 +28,9 @@ export function VideoPlayer({videoUrl, onClose, isOpen, enableFrameAnalysis}: Vi
     }
     // Placeholder: in the future, derive this from frameData and
     // numeric_user_id encoded in the video. For now, always show user 1's QR.
+    // Debug log to confirm analysis is running for watermarked playback.
+    // This can be removed once frame decoding is implemented.
+    console.debug("[FrameAnalysis] Returning QR URL for numeric_user_id=1");
     return "/profile/1/qr";
   }, [enableFrameAnalysis]);
   const {qrUrl} = useFrameAnalysis(videoRef, isPlaying, analysisFunction);
