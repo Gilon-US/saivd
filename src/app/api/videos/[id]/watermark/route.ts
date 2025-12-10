@@ -2,9 +2,10 @@ import {NextRequest, NextResponse} from "next/server";
 import {createClient} from "@/utils/supabase/server";
 import {generateKeyPairSync} from "crypto";
 
-type WatermarkJobResponse = {
-  jobId: number;
+type WatermarkAsyncResponse = {
+  status: string;
   message?: string;
+  path?: string;
 };
 
 export function normalizeWatermarkPath(path: string): string {
@@ -197,9 +198,9 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       body: rawText,
     });
 
-    let payload: WatermarkJobResponse | null = null;
+    let payload: WatermarkAsyncResponse | null = null;
     try {
-      payload = rawText ? (JSON.parse(rawText) as WatermarkJobResponse) : null;
+      payload = rawText ? (JSON.parse(rawText) as WatermarkAsyncResponse) : null;
     } catch (e) {
       console.error("[Watermark] Failed to parse JSON from external service", e);
       return NextResponse.json(
@@ -214,7 +215,10 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       );
     }
 
-    if (!response.ok || !payload || !payload.jobId) {
+    // In async mode the service responds with e.g.
+    // {"status":"processing","message":"Check output at s3://bucket/key once processing is complete.","path":"s3://bucket/key"}
+    // Treat HTTP 200 + status === "processing" + non-empty path as a successful enqueue.
+    if (!response.ok || !payload || payload.status !== "processing" || !payload.path) {
       console.error("Watermark service error", {status: response.status, payload});
       return NextResponse.json(
         {
@@ -257,7 +261,6 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       success: true,
       data: {
         video: updatedVideo,
-        jobId: payload.jobId,
         message: payload.message ?? null,
       },
     });

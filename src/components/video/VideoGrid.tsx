@@ -35,7 +35,6 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
     Record<
       string,
       {
-        jobId: number;
         message: string | null;
       }
     >
@@ -105,17 +104,15 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
 
       const data = await response.json();
 
-      if (!response.ok || !data.success || !data.data?.jobId) {
+      if (!response.ok || !data.success) {
         throw new Error(data.error?.message || "Failed to create watermarked video");
       }
 
-      const jobId: number = data.data.jobId;
-      const initialMessage: string | null = data.data.message ?? null;
+      const initialMessage: string | null = data.data?.message ?? null;
 
       setPendingJobs((prev) => ({
         ...prev,
         [video.id]: {
-          jobId,
           message: initialMessage,
         },
       }));
@@ -160,40 +157,10 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
         const json = await response.json();
         if (!json.success || !json.data?.jobs) return;
 
-        const jobs: {jobId: number; status: string | null; message: string | null}[] = json.data.jobs;
-        const byJobId = new Map<number, {status: string | null; message: string | null}>();
-        for (const job of jobs) {
-          byJobId.set(job.jobId, {status: job.status, message: job.message});
-        }
-
-        let hasCompletion = false;
-
-        if (hasPendingJobs) {
-          setPendingJobs((prev) => {
-            const next: typeof prev = {};
-            for (const [videoId, info] of Object.entries(prev)) {
-              const job = byJobId.get(info.jobId);
-              if (!job) {
-                next[videoId] = info;
-                continue;
-              }
-
-              if (job.status === "success") {
-                hasCompletion = true;
-                // Drop from pending map; video will be refreshed below
-                continue;
-              }
-
-              next[videoId] = {
-                ...info,
-                message: job.message ?? info.message,
-              };
-            }
-            return next;
-          });
-        }
-
-        if (!isCancelled && (hasCompletion || hasProcessingVideos)) {
+        // Backend route updates videos to "processed" when jobs complete.
+        // We don't need per-job mapping here; just refresh while there are
+        // processing videos or local pending jobs.
+        if (!isCancelled) {
           onRefresh();
         }
       } catch (error) {
