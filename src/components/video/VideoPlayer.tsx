@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { X, Play, Pause, Volume2, VolumeX, Maximize } from 'lucide-react';
-import { useFrameAnalysis } from '@/hooks/useFrameAnalysis';
+import {useEffect, useRef, useState, useCallback} from "react";
+import {X, Play, Pause, Volume2, VolumeX, Maximize} from "lucide-react";
+import {useFrameAnalysis, type FrameAnalysisFunction} from "@/hooks/useFrameAnalysis";
 
 interface VideoPlayerProps {
   videoUrl: string;
@@ -10,15 +10,30 @@ interface VideoPlayerProps {
   isOpen: boolean;
 }
 
-export function VideoPlayer({ videoUrl, onClose, isOpen }: VideoPlayerProps) {
+export function VideoPlayer({videoUrl, onClose, isOpen}: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  
-  // Frame analysis hook
-  const { showOverlay } = useFrameAnalysis(videoRef, isPlaying);
+  const [numericUserId, setNumericUserId] = useState<number | null>(null);
+
+  // Frame analysis hook – for now, treat any "-watermarked" playback URL as
+  // eligible for QR/verification overlay, and conceptually "extract" a
+  // numeric_user_id from frames. Since we don't yet have real frame decoding
+  // implemented, use a hard-coded numeric_user_id = 1 when playing a
+  // watermarked video.
+  const isWatermarked = videoUrl.includes("-watermarked");
+  const analysisFunction = useCallback<FrameAnalysisFunction>(() => {
+    if (isWatermarked) {
+      // Placeholder for future frame analysis that would decode the creator's
+      // numeric_user_id from the video frames. For now, hard-code user 1.
+      setNumericUserId(1);
+      return true;
+    }
+    return false;
+  }, [isWatermarked]);
+  const {showOverlay} = useFrameAnalysis(videoRef, isPlaying, analysisFunction);
 
   useEffect(() => {
     if (!isOpen) {
@@ -87,8 +102,7 @@ export function VideoPlayer({ videoUrl, onClose, isOpen }: VideoPlayerProps) {
         <button
           onClick={onClose}
           className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
-          aria-label="Close video player"
-        >
+          aria-label="Close video player">
           <X className="w-8 h-8" />
         </button>
 
@@ -103,11 +117,17 @@ export function VideoPlayer({ videoUrl, onClose, isOpen }: VideoPlayerProps) {
             onEnded={() => setIsPlaying(false)}
           />
 
-          {/* Conditional overlay */}
-          {showOverlay && (
-            <div className="absolute inset-0 bg-red-500/30 border-4 border-red-500 pointer-events-none transition-opacity duration-200">
-              <div className="absolute top-4 left-4 bg-red-500 text-white px-4 py-2 rounded-lg font-semibold">
-                Analysis Alert
+          {/* QR / analysis overlay - only shown when frame analysis says so
+              and we have a numeric_user_id (currently hard-coded to 1 for
+              watermarked videos). */}
+          {showOverlay && numericUserId != null && (
+            <div className="absolute inset-0 bg-black/40 pointer-events-none flex items-center justify-center transition-opacity duration-200">
+              <div className="bg-white rounded-lg p-4 shadow-lg flex flex-col items-center gap-2">
+                {/* The QR image is served from the public profile QR route, which
+                    ultimately reads the QR PNG from Wasabi. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/profile/${numericUserId}/qr`} alt="Creator QR code" className="w-32 h-32 object-contain" />
+                <span className="text-xs text-gray-700">Scan to view creator profile</span>
               </div>
             </div>
           )}
@@ -130,25 +150,15 @@ export function VideoPlayer({ videoUrl, onClose, isOpen }: VideoPlayerProps) {
                 <button
                   onClick={togglePlay}
                   className="text-white hover:text-gray-300 transition-colors"
-                  aria-label={isPlaying ? 'Pause' : 'Play'}
-                >
-                  {isPlaying ? (
-                    <Pause className="w-6 h-6" />
-                  ) : (
-                    <Play className="w-6 h-6" />
-                  )}
+                  aria-label={isPlaying ? "Pause" : "Play"}>
+                  {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
                 </button>
 
                 <button
                   onClick={toggleMute}
                   className="text-white hover:text-gray-300 transition-colors"
-                  aria-label={isMuted ? 'Unmute' : 'Mute'}
-                >
-                  {isMuted ? (
-                    <VolumeX className="w-6 h-6" />
-                  ) : (
-                    <Volume2 className="w-6 h-6" />
-                  )}
+                  aria-label={isMuted ? "Unmute" : "Mute"}>
+                  {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
                 </button>
 
                 <span className="text-white text-sm">
@@ -159,8 +169,7 @@ export function VideoPlayer({ videoUrl, onClose, isOpen }: VideoPlayerProps) {
               <button
                 onClick={toggleFullscreen}
                 className="text-white hover:text-gray-300 transition-colors"
-                aria-label="Fullscreen"
-              >
+                aria-label="Fullscreen">
                 <Maximize className="w-6 h-6" />
               </button>
             </div>
@@ -174,5 +183,5 @@ export function VideoPlayer({ videoUrl, onClose, isOpen }: VideoPlayerProps) {
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }

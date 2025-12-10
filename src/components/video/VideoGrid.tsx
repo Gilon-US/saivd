@@ -60,10 +60,10 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
 
   const [isOpeningVideo, setIsOpeningVideo] = useState<string | null>(null);
 
-  const handleVideoClick = async (video: Video) => {
+  const handleVideoClick = async (video: Video, variant: "original" | "watermarked" = "original") => {
     try {
       setIsOpeningVideo(video.id);
-      const response = await fetch(`/api/videos/${video.id}/play`);
+      const response = await fetch(`/api/videos/${video.id}/play?variant=${variant}`);
       const data = await response.json();
       if (!response.ok || !data.success || !data.data?.playbackUrl) {
         throw new Error(data.error?.message || "Failed to generate playback URL");
@@ -314,7 +314,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Original</h4>
                   <div
                     className="w-60 max-w-[240px] aspect-video relative bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => handleVideoClick(video)}>
+                    onClick={() => handleVideoClick(video, "original")}>
                     {isOpeningVideo === video.id && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
                         <LoadingSpinner size="sm" />
@@ -368,7 +368,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                         !video.original_thumbnail_url.includes("placeholder-video-thumbnail"))) ? (
                       <div
                         className="w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => handleVideoClick(video)}>
+                        onClick={() => handleVideoClick(video, "watermarked")}>
                         {video.processed_thumbnail_url ? (
                           <Image
                             src={video.processed_thumbnail_url}

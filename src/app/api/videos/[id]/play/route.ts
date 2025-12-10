@@ -2,7 +2,7 @@ import {NextRequest, NextResponse} from "next/server";
 import {createClient} from "@/utils/supabase/server";
 import {generatePresignedVideoUrl, extractKeyFromUrl} from "@/lib/wasabi-urls";
 
-export async function GET(_request: NextRequest, context: {params: Promise<{id: string}>}) {
+export async function GET(request: NextRequest, context: {params: Promise<{id: string}>}) {
   try {
     const {id: videoId} = await context.params;
 
@@ -27,9 +27,21 @@ export async function GET(_request: NextRequest, context: {params: Promise<{id: 
       return NextResponse.json({success: false, error: {code: "not_found", message: "Video not found"}}, {status: 404});
     }
 
+    // Choose which asset to play based on query param. If the client requests
+    // the watermarked variant and a processed_url exists, use that; otherwise
+    // fall back to the original_url.
+    const url = new URL(request.url);
+    const variant = url.searchParams.get("variant");
+
     let key: string | null = null;
 
-    if (video.original_url?.startsWith("http")) {
+    if (variant === "watermarked" && video.processed_url) {
+      if (video.processed_url.startsWith("http")) {
+        key = extractKeyFromUrl(video.processed_url);
+      } else {
+        key = video.processed_url;
+      }
+    } else if (video.original_url?.startsWith("http")) {
       key = extractKeyFromUrl(video.original_url);
     } else {
       key = video.original_url;
