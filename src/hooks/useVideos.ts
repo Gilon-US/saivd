@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Video } from '@/components/video/VideoGrid';
+import {useState, useEffect, useCallback} from "react";
+import {Video} from "@/components/video/VideoGrid";
 
 type UseVideosOptions = {
   page?: number;
   limit?: number;
   sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
+  sortOrder?: "asc" | "desc";
   autoFetch?: boolean;
 };
 
@@ -19,8 +19,8 @@ type PaginationInfo = {
 export function useVideos({
   page = 1,
   limit = 20,
-  sortBy = 'upload_date',
-  sortOrder = 'desc',
+  sortBy = "upload_date",
+  sortOrder = "desc",
   autoFetch = true,
 }: UseVideosOptions = {}) {
   const [videos, setVideos] = useState<Video[]>([]);
@@ -33,43 +33,51 @@ export function useVideos({
     totalPages: 0,
   });
 
-  const fetchVideos = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const queryParams = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
-        sortBy,
-        sortOrder,
-      });
-      
-      const response = await fetch(`/api/videos?${queryParams}`);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to fetch videos');
+  const fetchVideos = useCallback(
+    async (options?: {silent?: boolean}) => {
+      const silent = options?.silent ?? false;
+      if (!silent) {
+        setIsLoading(true);
       }
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setVideos(data.data.videos);
-        setPagination(data.data.pagination);
-      } else {
-        throw new Error(data.error?.message || 'Failed to fetch videos');
+      setError(null);
+
+      try {
+        const queryParams = new URLSearchParams({
+          page: page.toString(),
+          limit: limit.toString(),
+          sortBy,
+          sortOrder,
+        });
+
+        const response = await fetch(`/api/videos?${queryParams}`);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error?.message || "Failed to fetch videos");
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+          setVideos(data.data.videos);
+          setPagination(data.data.pagination);
+        } else {
+          throw new Error(data.error?.message || "Failed to fetch videos");
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "An error occurred while fetching videos");
+      } finally {
+        if (!silent) {
+          setIsLoading(false);
+        }
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred while fetching videos');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, limit, sortBy, sortOrder]);
+    },
+    [page, limit, sortBy, sortOrder]
+  );
 
   useEffect(() => {
     if (autoFetch) {
-      fetchVideos();
+      void fetchVideos();
     }
   }, [fetchVideos, autoFetch]);
 
@@ -78,6 +86,7 @@ export function useVideos({
     isLoading,
     error,
     pagination,
-    refresh: fetchVideos,
+    refresh: () => fetchVideos(),
+    refreshSilently: () => fetchVideos({silent: true}),
   };
 }

@@ -26,10 +26,11 @@ type VideoGridProps = {
   isLoading: boolean;
   error: string | null;
   onRefresh: () => void;
+  onSilentRefresh: () => void;
   onOpenUploadModal: () => void;
 };
 
-export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModal}: VideoGridProps) {
+export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh, onOpenUploadModal}: VideoGridProps) {
   const {toast} = useToast();
   const [pendingJobs, setPendingJobs] = useState<
     Record<
@@ -150,7 +151,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
         if (!json.success || !json.data?.jobs) return;
 
         if (!isCancelled) {
-          onRefresh();
+          onSilentRefresh();
         }
       } catch (error) {
         console.error("Error polling watermark status:", error);
@@ -167,7 +168,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onOpenUploadModa
       isCancelled = true;
       clearInterval(intervalId);
     };
-  }, [onRefresh]);
+  }, [onSilentRefresh]);
 
   const handleDeleteClick = (video: Video) => {
     setDeleteDialog({

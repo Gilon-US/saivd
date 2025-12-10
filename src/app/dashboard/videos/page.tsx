@@ -11,7 +11,7 @@ import {UploadResult} from "@/hooks/useVideoUpload";
 
 export default function VideosPage() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const {videos, isLoading, error, refresh} = useVideos();
+  const {videos, isLoading, error, refresh, refreshSilently} = useVideos();
   const {toast} = useToast();
 
   const handleOpenUploadModal = () => {
@@ -59,6 +59,7 @@ export default function VideosPage() {
         isLoading={isLoading}
         error={error}
         onRefresh={refresh}
+        onSilentRefresh={refreshSilently}
         onOpenUploadModal={handleOpenUploadModal}
       />
 
