@@ -65,6 +65,10 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
   const handleVideoClick = async (video: Video, variant: "original" | "watermarked" = "original") => {
     try {
       setIsOpeningVideo(video.id);
+      console.log("[VideoGrid] Opening video for playback", {
+        videoId: video.id,
+        variant,
+      });
       const response = await fetch(`/api/videos/${video.id}/play?variant=${variant}`);
       const data = await response.json();
       if (!response.ok || !data.success || !data.data?.playbackUrl) {
