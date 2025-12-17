@@ -4,16 +4,32 @@ import { useToast } from '@/hooks/useToast';
 import { generateVideoThumbnail } from '@/utils/videoThumbnail';
 
 /**
+ * Upload phase tracking
+ */
+export type UploadPhase = 
+  | 'preparing'      // Thumbnail generation
+  | 'requesting-url' // Getting pre-signed URL
+  | 'uploading'      // Actual file upload to Wasabi
+  | 'confirming'     // Confirming upload completion
+  | 'complete'       // Upload finished
+  | 'error';         // Upload failed
+
+/**
  * Upload state for a single video upload
  */
 export type UploadState = {
   id: string;
   progress: number;
   uploading: boolean;
+  phase: UploadPhase;
   error: Error | null;
   videoKey: string | null;
   file: File;
   abortController?: AbortController;
+  uploadSpeed?: number; // bytes per second
+  timeRemaining?: number; // seconds
+  bytesUploaded?: number;
+  totalBytes?: number;
 };
 
 /**
@@ -42,18 +58,22 @@ export function useVideoUpload() {
   const uploadVideo = async (file: File): Promise<UploadResult> => {
     const uploadId = uuidv4();
     const abortController = new AbortController();
+    const startTime = Date.now();
     
-    // Initialize upload state
+    // Initialize upload state - show activity immediately
     setUploads((prev) => ({
       ...prev,
       [uploadId]: {
         id: uploadId,
         progress: 0,
         uploading: true,
+        phase: 'preparing',
         error: null,
         videoKey: null,
         file,
         abortController,
+        totalBytes: file.size,
+        bytesUploaded: 0,
       },
     }));
     
@@ -61,6 +81,17 @@ export function useVideoUpload() {
       // Step 1: Generate thumbnail from video file
       let previewThumbnail: string | null = null;
       try {
+        setUploads((prev) => {
+          if (!prev[uploadId]) return prev;
+          return {
+            ...prev,
+            [uploadId]: {
+              ...prev[uploadId],
+              phase: 'preparing',
+            },
+          };
+        });
+        
         previewThumbnail = await generateVideoThumbnail(file);
         console.log('Generated thumbnail for', file.name);
       } catch (thumbnailError) {
@@ -69,6 +100,17 @@ export function useVideoUpload() {
       }
 
       // Step 2: Get pre-signed URL
+      setUploads((prev) => {
+        if (!prev[uploadId]) return prev;
+        return {
+          ...prev,
+          [uploadId]: {
+            ...prev[uploadId],
+            phase: 'requesting-url',
+          },
+        };
+      });
+      
       const getUrlResponse = await fetch('/api/videos/upload', {
         method: 'POST',
         headers: {
@@ -96,22 +138,67 @@ export function useVideoUpload() {
       
       const { data: { uploadUrl, fields, key } } = await getUrlResponse.json();
       
-      // Step 2: Upload file directly to Wasabi
-      await uploadToWasabi(uploadUrl, fields, file, (progress) => {
+      // Step 3: Upload file directly to Wasabi
+      setUploads((prev) => {
+        if (!prev[uploadId]) return prev;
+        return {
+          ...prev,
+          [uploadId]: {
+            ...prev[uploadId],
+            phase: 'uploading',
+            progress: 0,
+          },
+        };
+      });
+      
+      let lastProgressUpdate = Date.now();
+      let lastBytesUploaded = 0;
+      
+      await uploadToWasabi(uploadUrl, fields, file, (progress, bytesUploaded, totalBytes) => {
+        const now = Date.now();
+        const timeElapsed = (now - lastProgressUpdate) / 1000; // seconds
+        const bytesDelta = bytesUploaded - lastBytesUploaded;
+        
+        // Calculate upload speed (bytes per second)
+        const uploadSpeed = timeElapsed > 0 ? bytesDelta / timeElapsed : 0;
+        
+        // Calculate time remaining
+        const bytesRemaining = totalBytes - bytesUploaded;
+        const timeRemaining = uploadSpeed > 0 ? bytesRemaining / uploadSpeed : undefined;
+        
         setUploads((prev) => {
           if (!prev[uploadId]) return prev;
+          
+          lastProgressUpdate = now;
+          lastBytesUploaded = bytesUploaded;
           
           return {
             ...prev,
             [uploadId]: {
               ...prev[uploadId],
               progress,
+              bytesUploaded,
+              totalBytes,
+              uploadSpeed,
+              timeRemaining,
             },
           };
         });
       }, abortController);
       
-      // Step 3: Confirm upload
+      // Step 4: Confirm upload
+      setUploads((prev) => {
+        if (!prev[uploadId]) return prev;
+        return {
+          ...prev,
+          [uploadId]: {
+            ...prev[uploadId],
+            phase: 'confirming',
+            progress: 95, // Show we're almost done
+          },
+        };
+      });
+      
       const confirmResponse = await fetch('/api/videos/confirm', {
         method: 'POST',
         headers: {
@@ -150,8 +237,11 @@ export function useVideoUpload() {
           [uploadId]: {
             ...prev[uploadId],
             uploading: false,
+            phase: 'complete',
             progress: 100,
             videoKey: data.key,
+            bytesUploaded: file.size,
+            timeRemaining: 0,
           },
         };
       });
@@ -179,6 +269,7 @@ export function useVideoUpload() {
           [uploadId]: {
             ...prev[uploadId],
             uploading: false,
+            phase: 'error',
             error: error instanceof Error ? error : new Error(
             typeof error === 'object' && error !== null && 'message' in error
               ? String((error as { message: unknown }).message)
@@ -221,6 +312,7 @@ export function useVideoUpload() {
         [uploadId]: {
           ...prev[uploadId],
           uploading: false,
+          phase: 'error',
           error: new Error('Upload cancelled'),
         },
       }));
@@ -263,14 +355,14 @@ export function useVideoUpload() {
    * @param url The pre-signed URL
    * @param fields The fields to include in the form data
    * @param file The file to upload
-   * @param onProgress Callback for progress updates
+   * @param onProgress Callback for progress updates with bytes information
    * @param abortController AbortController for cancelling the upload
    */
   const uploadToWasabi = async (
     url: string,
     fields: Record<string, string>,
     file: File,
-    onProgress: (progress: number) => void,
+    onProgress: (progress: number, bytesUploaded: number, totalBytes: number) => void,
     abortController?: AbortController
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -280,7 +372,7 @@ export function useVideoUpload() {
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) {
           const progress = Math.round((event.loaded / event.total) * 100);
-          onProgress(progress);
+          onProgress(progress, event.loaded, event.total);
         }
       });
       

@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useVideoUpload, UploadResult } from '@/hooks/useVideoUpload';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { useVideoUpload, UploadResult, UploadPhase } from '@/hooks/useVideoUpload';
 import { v4 as uuidv4 } from 'uuid';
+import { UploadIcon, CheckCircleIcon, AlertCircleIcon } from 'lucide-react';
 
 type VideoUploaderProps = {
   onUploadComplete?: (result: UploadResult) => void;
@@ -86,6 +88,49 @@ export function VideoUploader({
   const currentUpload = uploadId ? uploads[uploadId] : null;
   const isUploading = currentUpload?.uploading;
   
+  // Helper function to format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  };
+  
+  // Helper function to format upload speed
+  const formatSpeed = (bytesPerSecond?: number): string => {
+    if (!bytesPerSecond) return '';
+    return formatFileSize(bytesPerSecond) + '/s';
+  };
+  
+  // Helper function to format time remaining
+  const formatTimeRemaining = (seconds?: number): string => {
+    if (!seconds || seconds === Infinity || isNaN(seconds)) return '';
+    if (seconds < 60) return `${Math.round(seconds)}s remaining`;
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `${minutes}m ${secs}s remaining`;
+  };
+  
+  // Get phase message
+  const getPhaseMessage = (phase: UploadPhase): string => {
+    switch (phase) {
+      case 'preparing':
+        return 'Preparing video...';
+      case 'requesting-url':
+        return 'Requesting upload URL...';
+      case 'uploading':
+        return 'Uploading video...';
+      case 'confirming':
+        return 'Finalizing upload...';
+      case 'complete':
+        return 'Upload complete!';
+      case 'error':
+        return 'Upload failed';
+      default:
+        return 'Processing...';
+    }
+  };
+  
   return (
     <div className={`space-y-6 ${className}`}>
       <FileUploader
@@ -96,7 +141,7 @@ export function VideoUploader({
         onFilesSelected={handleFilesSelected}
       />
       
-      {videoPreviewUrl && selectedVideo && (
+      {videoPreviewUrl && selectedVideo && !isUploading && (
         <Card>
           <CardContent className="p-4">
             <h3 className="font-medium mb-2">Video Preview</h3>
@@ -122,24 +167,87 @@ export function VideoUploader({
             Cancel
           </Button>
           <Button onClick={handleUpload}>
+            <UploadIcon className="mr-2 h-4 w-4" />
             Upload Video
           </Button>
         </div>
       )}
       
       {isUploading && currentUpload && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="font-medium">Uploading {currentUpload.file.name}</p>
-              <p className="text-sm font-medium">{currentUpload.progress}%</p>
+        <Card>
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              {/* Phase indicator with spinner */}
+              <div className="flex items-center space-x-3">
+                {currentUpload.phase === 'complete' ? (
+                  <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                ) : currentUpload.phase === 'error' ? (
+                  <AlertCircleIcon className="h-5 w-5 text-red-500" />
+                ) : (
+                  <LoadingSpinner size="sm" />
+                )}
+                <div className="flex-1">
+                  <p className="font-medium text-sm">
+                    {getPhaseMessage(currentUpload.phase)}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {currentUpload.file.name}
+                  </p>
+                </div>
+              </div>
+              
+              {/* Progress bar - show for uploading phase or when progress > 0 */}
+              {(currentUpload.phase === 'uploading' || currentUpload.progress > 0) && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {currentUpload.progress}%
+                    </span>
+                    {currentUpload.bytesUploaded && currentUpload.totalBytes && (
+                      <span className="text-gray-600 dark:text-gray-400">
+                        {formatFileSize(currentUpload.bytesUploaded)} / {formatFileSize(currentUpload.totalBytes)}
+                      </span>
+                    )}
+                  </div>
+                  <Progress value={currentUpload.progress} className="h-2" />
+                  
+                  {/* Upload speed and time remaining */}
+                  {(currentUpload.uploadSpeed || currentUpload.timeRemaining) && (
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      {currentUpload.uploadSpeed && (
+                        <span>Speed: {formatSpeed(currentUpload.uploadSpeed)}</span>
+                      )}
+                      {currentUpload.timeRemaining && (
+                        <span>{formatTimeRemaining(currentUpload.timeRemaining)}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Indeterminate progress for non-uploading phases */}
+              {currentUpload.phase !== 'uploading' && currentUpload.progress === 0 && currentUpload.phase !== 'complete' && currentUpload.phase !== 'error' && (
+                <div className="space-y-2">
+                  <Progress value={null} className="h-2" />
+                  <p className="text-xs text-gray-500">
+                    {currentUpload.phase === 'preparing' && 'Generating thumbnail...'}
+                    {currentUpload.phase === 'requesting-url' && 'Getting upload URL...'}
+                    {currentUpload.phase === 'confirming' && 'Confirming upload...'}
+                  </p>
+                </div>
+              )}
+              
+              {/* Cancel button - only show if not complete or error */}
+              {currentUpload.phase !== 'complete' && currentUpload.phase !== 'error' && (
+                <div className="flex justify-end pt-2">
+                  <Button variant="outline" size="sm" onClick={handleCancel}>
+                    Cancel Upload
+                  </Button>
+                </div>
+              )}
             </div>
-            <Progress value={currentUpload.progress} className="h-2" />
-          </div>
-          <Button variant="outline" onClick={handleCancel}>
-            Cancel Upload
-          </Button>
-        </div>
+          </CardContent>
+        </Card>
       )}
       
       {error && (
