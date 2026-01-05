@@ -6,7 +6,7 @@ import {useFrameAnalysis, type FrameAnalysisFunction} from "@/hooks/useFrameAnal
 
 interface VideoPlayerProps {
   videoUrl: string;
-  videoId?: string;
+  videoId?: string | null;
   onClose: () => void;
   isOpen: boolean;
   enableFrameAnalysis: boolean;
