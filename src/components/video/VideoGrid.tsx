@@ -53,10 +53,12 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
   const [videoPlayer, setVideoPlayer] = useState<{
     isOpen: boolean;
     videoUrl: string | null;
+    videoId: string | null;
     enableFrameAnalysis: boolean;
   }>({
     isOpen: false,
     videoUrl: null,
+    videoId: null,
     enableFrameAnalysis: false,
   });
 
@@ -77,6 +79,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       setVideoPlayer({
         isOpen: true,
         videoUrl: data.data.playbackUrl,
+        videoId: video.id,
         enableFrameAnalysis: variant === "watermarked",
       });
     } catch (error) {
@@ -96,6 +99,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     setVideoPlayer({
       isOpen: false,
       videoUrl: null,
+      videoId: null,
       enableFrameAnalysis: false,
     });
   };
@@ -439,6 +443,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       {videoPlayer.videoUrl && (
         <VideoPlayer
           videoUrl={videoPlayer.videoUrl}
+          videoId={videoPlayer.videoId}
           onClose={handleClosePlayer}
           isOpen={videoPlayer.isOpen}
           enableFrameAnalysis={videoPlayer.enableFrameAnalysis}

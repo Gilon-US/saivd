@@ -6,34 +6,32 @@ import {useFrameAnalysis, type FrameAnalysisFunction} from "@/hooks/useFrameAnal
 
 interface VideoPlayerProps {
   videoUrl: string;
+  videoId?: string;
   onClose: () => void;
   isOpen: boolean;
   enableFrameAnalysis: boolean;
 }
 
-export function VideoPlayer({videoUrl, onClose, isOpen, enableFrameAnalysis}: VideoPlayerProps) {
+export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnalysis}: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // Frame analysis hook – controlled explicitly by enableFrameAnalysis. When
-  // enabled, conceptually "extract" the creator's QR URL from frames. Since we
-  // don't yet have real frame decoding implemented, return a hard-coded QR
-  // route for numeric_user_id = 1. When disabled, always return null.
+  // Frame analysis hook – controlled explicitly by enableFrameAnalysis.
+  // When enabled and videoId is provided, the hook will extract user ID
+  // from the video frames every 20 frames using the watermark service API.
+  // When disabled or videoId is not provided, the analysis function is used.
   const analysisFunction = useCallback<FrameAnalysisFunction>(() => {
     if (!enableFrameAnalysis) {
       return null;
     }
-    // Placeholder: in the future, derive this from frameData and
-    // numeric_user_id encoded in the video. For now, always show user 1's QR.
-    // Debug log to confirm analysis is running for watermarked playback.
-    // This can be removed once frame decoding is implemented.
-    console.log("[FrameAnalysis] Returning QR URL for numeric_user_id=1");
-    return "/profile/1/qr";
+    // If videoId is provided, user ID extraction is handled by useFrameAnalysis hook
+    // This function is only used as a fallback when videoId is not available
+    return null;
   }, [enableFrameAnalysis]);
-  const {qrUrl} = useFrameAnalysis(videoRef, isPlaying, analysisFunction);
+  const {qrUrl} = useFrameAnalysis(videoRef, isPlaying, analysisFunction, enableFrameAnalysis && videoId ? videoId : undefined);
 
   useEffect(() => {
     if (!isOpen) {

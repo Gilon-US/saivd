@@ -46,18 +46,24 @@ const defaultAnalysisFunction: FrameAnalysisFunction = (_frameData: FrameData): 
  * @param videoRef - Reference to the video element
  * @param isPlaying - Whether the video is currently playing
  * @param analysisFunction - Optional custom analysis function
+ * @param videoId - Optional video ID for user ID extraction (required for watermarked videos)
  * @returns Object containing qrUrl and showOverlay state
  */
 export function useFrameAnalysis(
   videoRef: RefObject<HTMLVideoElement | null>,
   isPlaying: boolean,
-  analysisFunction: FrameAnalysisFunction = defaultAnalysisFunction
+  analysisFunction: FrameAnalysisFunction = defaultAnalysisFunction,
+  videoId?: string
 ) {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [extractedUserId, setExtractedUserId] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const skipPixelReadRef = useRef(false);
+  const frameCountRef = useRef(0);
+  const lastExtractionFrameRef = useRef(-1);
+  const isExtractingRef = useRef(false);
 
   useEffect(() => {
     // Initialize canvas for frame capture
@@ -119,13 +125,55 @@ export function useFrameAnalysis(
         videoTime: video.currentTime,
       };
 
-      // Call analysis function and update overlay QR URL
-      try {
-        const nextQrUrl = analysisFunction(frameData);
-        setQrUrl(nextQrUrl);
-      } catch (error) {
-        console.error("Error in frame analysis:", error);
-        setQrUrl(null);
+      // If we have a videoId, extract user ID every 20 frames
+      if (videoId && !isExtractingRef.current) {
+        frameCountRef.current += 1;
+        
+        // Extract user ID every 20 frames (check if we should extract on this frame)
+        if (frameCountRef.current - lastExtractionFrameRef.current >= 20) {
+          // Use frame_index=0 to extract from the current/default frame
+          // The watermark is embedded throughout the video, so any frame should work
+          const frameIndex = 0;
+          
+          isExtractingRef.current = true;
+          lastExtractionFrameRef.current = frameCountRef.current;
+          
+          // Call API to extract user ID (don't await - fire and forget to avoid blocking)
+          fetch(`/api/videos/${videoId}/extract-user-id?frame_index=${frameIndex}`)
+            .then(async (response) => {
+              if (!response.ok) {
+                console.warn("[FrameAnalysis] Failed to extract user ID", response.status);
+                return;
+              }
+              const data = await response.json();
+              if (data.success && data.data?.user_id) {
+                setExtractedUserId(data.data.user_id);
+                console.log("[FrameAnalysis] Extracted user ID:", data.data.user_id);
+              }
+            })
+            .catch((error) => {
+              console.error("[FrameAnalysis] Error extracting user ID:", error);
+            })
+            .finally(() => {
+              isExtractingRef.current = false;
+            });
+        }
+      }
+
+      // If we have an extracted user ID, use it to generate QR URL
+      // Otherwise, use the analysis function
+      if (videoId && extractedUserId) {
+        const qrUrlFromUserId = `/profile/${extractedUserId}/qr`;
+        setQrUrl(qrUrlFromUserId);
+      } else {
+        // Call analysis function and update overlay QR URL
+        try {
+          const nextQrUrl = analysisFunction(frameData);
+          setQrUrl(nextQrUrl);
+        } catch (error) {
+          console.error("Error in frame analysis:", error);
+          setQrUrl(null);
+        }
       }
 
       // Schedule next frame analysis
@@ -146,14 +194,25 @@ export function useFrameAnalysis(
         animationFrameRef.current = null;
       }
     };
-  }, [videoRef, isPlaying, analysisFunction]);
+  }, [videoRef, isPlaying, analysisFunction, videoId]);
 
-  // Reset overlay when video stops
+  // Reset overlay and frame count when video stops
   useEffect(() => {
     if (!isPlaying) {
       setQrUrl(null);
+      frameCountRef.current = 0;
+      lastExtractionFrameRef.current = -1;
+      isExtractingRef.current = false;
     }
   }, [isPlaying]);
+
+  // Reset extracted user ID when video ID changes
+  useEffect(() => {
+    setExtractedUserId(null);
+    frameCountRef.current = 0;
+    lastExtractionFrameRef.current = -1;
+    isExtractingRef.current = false;
+  }, [videoId]);
 
   return {qrUrl, showOverlay: qrUrl !== null};
 }
