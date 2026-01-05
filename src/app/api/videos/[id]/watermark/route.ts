@@ -1,6 +1,7 @@
 import {NextRequest, NextResponse} from "next/server";
 import {createClient} from "@/utils/supabase/server";
 import {generateKeyPairSync} from "crypto";
+import {WASABI_BUCKET} from "@/lib/wasabi";
 
 type WatermarkAsyncResponse = {
   status: string;
@@ -137,6 +138,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       local_key: rsaPrivate,
       client_key: rsaPrivate,
       user_id: profile.numeric_user_id,
+      bucket: WASABI_BUCKET,
       async_request: true,
       stream: true,
     };

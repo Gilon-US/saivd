@@ -113,9 +113,9 @@ export async function GET() {
       });
     }
 
-    // For any successful jobs with a concrete path, update the corresponding video
+    // For any completed jobs with a concrete path, update the corresponding video
     for (const job of jobs) {
-      if (job.status !== "success" || !job.pathKey) continue;
+      if (job.status !== "completed" || !job.pathKey) continue;
 
       // Derive original key from the processed key by removing the -watermarked suffix
       const originalKey = job.pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
