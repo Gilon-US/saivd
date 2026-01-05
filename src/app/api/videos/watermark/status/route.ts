@@ -4,7 +4,7 @@ import {normalizeWatermarkPath} from "../../[id]/watermark/route";
 
 type QueueStatusResponse = {
   timestamp: string[];
-  jobID: number[];
+  jobID: string[];
   status: string[];
   message: string[];
   path: string[];
@@ -87,7 +87,7 @@ export async function GET() {
 
     const length = payload.jobID.length;
     const jobs = [] as {
-      jobId: number;
+      jobId: string;
       timestamp: string | null;
       status: string | null;
       message: string | null;

@@ -151,62 +151,20 @@ export async function requestWatermarking(
 /**
  * Check the status of a watermarking job
  * 
- * @param jobId ID of the watermarking job
+ * @deprecated This function uses the old `/status/{jobId}` endpoint which has been removed.
+ * Use `/api/videos/watermark/status` instead, which uses the new `/queue_status` endpoint.
+ * 
+ * @param _jobId ID of the watermarking job (unused, function is deprecated)
  * @returns Promise resolving to watermarking job status
  */
-export async function checkWatermarkingStatus(jobId: string): Promise<WatermarkStatusResponse> {
-  try {
-    // Validate input
-    if (!jobId) throw new Error('Job ID is required');
-    
-    // Log request (for debugging)
-    console.log('Checking watermarking status:', { jobId });
-    
-    // Make API request with retry logic
-    const response = await backOff(() => watermarkApiClient.get<WatermarkStatusResponse>(`/status/${jobId}`), {
-      numOfAttempts: 3,
-      startingDelay: 1000,
-      timeMultiple: 2,
-      retry: (error: Error) => {
-        // Only retry on network errors or 5xx server errors
-        if (axios.isAxiosError(error)) {
-          const axiosError = error as AxiosError;
-          return !axiosError.response || (axiosError.response?.status ?? 0) >= 500;
-        }
-        return false;
-      },
-    });
-    
-    return response.data;
-  } catch (error) {
-    // Handle different error types
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError;
-      
-      if (axiosError.response) {
-        // Server responded with error status
-        const status = axiosError.response.status;
-        const message = (axiosError.response.data as { message?: string })?.message || 'Unknown server error';
-        
-        if (status === 404) {
-          throw new Error(`Job not found: ${jobId}`);
-        } else if (status >= 500) {
-          throw new Error(`Watermarking service error: ${message}`);
-        } else {
-          throw new Error(`Request failed with status ${status}: ${message}`);
-        }
-      } else if (axiosError.request) {
-        // No response received
-        throw new Error('No response from watermarking service');
-      } else {
-        // Request setup error
-        throw new Error(`Request error: ${axiosError.message}`);
-      }
-    } else {
-      // Non-Axios error
-      throw error;
-    }
-  }
+export async function checkWatermarkingStatus(_jobId: string): Promise<WatermarkStatusResponse> {
+  // This function is deprecated - the old `/status/{jobId}` endpoint no longer exists.
+  // The new API uses `/queue_status` which returns all jobs at once.
+  // Use the Next.js API route `/api/videos/watermark/status` instead.
+  throw new Error(
+    'checkWatermarkingStatus is deprecated. The old `/status/{jobId}` endpoint has been removed. ' +
+    'Use `/api/videos/watermark/status` which uses the new `/queue_status` endpoint instead.'
+  );
 }
 
 /**
