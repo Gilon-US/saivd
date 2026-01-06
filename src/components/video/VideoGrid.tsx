@@ -7,7 +7,7 @@ import {useToast} from "@/hooks/useToast";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
 import {DeleteConfirmDialog} from "./DeleteConfirmDialog";
 import {VideoPlayer} from "./VideoPlayer";
-import {useState, useEffect} from "react";
+import {useState, useEffect, useRef} from "react";
 
 export type Video = {
   id: string;
@@ -151,66 +151,77 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
   // Poll internal watermark status endpoint every 10 seconds whenever the video
   // list is visible. If the status route reports completed jobs, refresh the videos
   // so any processing/completed states are reflected.
+  // Use a ref to access current videos without causing effect re-runs
+  const videosRef = useRef(videos);
+  useEffect(() => {
+    videosRef.current = videos;
+  }, [videos]);
+
   useEffect(() => {
     let isCancelled = false;
+    let intervalId: NodeJS.Timeout | null = null;
 
     const poll = async () => {
+      if (isCancelled) return;
+
       try {
         const response = await fetch("/api/videos/watermark/status");
-        if (!response.ok) return;
+        if (!response.ok || isCancelled) return;
 
         const json = await response.json();
-        if (!json.success || !json.data?.jobs) return;
+        if (!json.success || !json.data?.jobs || isCancelled) return;
+
+        // Get current videos from ref to avoid stale closure
+        const currentVideos = videosRef.current;
 
         // Update pendingJobs with messages from status polling
         // Match jobs to videos by deriving original key from pathKey
-        const updatedPendingJobs: typeof pendingJobs = {...pendingJobs};
-        let hasUpdates = false;
+        setPendingJobs((prevPendingJobs) => {
+          const updatedPendingJobs: typeof prevPendingJobs = {...prevPendingJobs};
+          let hasUpdates = false;
 
-        for (const job of json.data.jobs) {
-          // For processing or completed jobs, try to match to a video
-          if (job.status === "processing" || job.status === "success" || job.status === "completed") {
-            // If we have a pathKey, derive the original key to match the video
-            if (job.pathKey) {
-              const originalKey = job.pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
-              // Find the video that matches this original key
-              const matchingVideo = videos.find((v) => v.original_url === originalKey);
-              if (matchingVideo && job.message) {
-                updatedPendingJobs[matchingVideo.id] = {
-                  message: job.message,
-                };
-                hasUpdates = true;
-              }
-            } else if (job.status === "processing" && job.message) {
-              // For processing jobs without pathKey yet, match to processing videos
-              // If there's only one processing video, update it
-              // If multiple, update the one that doesn't have a message yet
-              const processingVideos = videos.filter((v) => v.status === "processing");
-              if (processingVideos.length === 1) {
-                // Only one processing video - safe to update
-                updatedPendingJobs[processingVideos[0].id] = {
-                  message: job.message,
-                };
-                hasUpdates = true;
-              } else if (processingVideos.length > 1) {
-                // Multiple processing videos - update the first one without a message
-                // or the first one if all have messages (update with latest)
-                const videoToUpdate = processingVideos.find((v) => !updatedPendingJobs[v.id]) || processingVideos[0];
-                if (videoToUpdate) {
-                  updatedPendingJobs[videoToUpdate.id] = {
+          for (const job of json.data.jobs) {
+            // For processing or completed jobs, try to match to a video
+            if (job.status === "processing" || job.status === "success" || job.status === "completed") {
+              // If we have a pathKey, derive the original key to match the video
+              if (job.pathKey) {
+                const originalKey = job.pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
+                // Find the video that matches this original key
+                const matchingVideo = currentVideos.find((v) => v.original_url === originalKey);
+                if (matchingVideo && job.message) {
+                  updatedPendingJobs[matchingVideo.id] = {
                     message: job.message,
                   };
                   hasUpdates = true;
                 }
+              } else if (job.status === "processing" && job.message) {
+                // For processing jobs without pathKey yet, match to processing videos
+                // If there's only one processing video, update it
+                // If multiple, update the one that doesn't have a message yet
+                const processingVideos = currentVideos.filter((v) => v.status === "processing");
+                if (processingVideos.length === 1) {
+                  // Only one processing video - safe to update
+                  updatedPendingJobs[processingVideos[0].id] = {
+                    message: job.message,
+                  };
+                  hasUpdates = true;
+                } else if (processingVideos.length > 1) {
+                  // Multiple processing videos - update the first one without a message
+                  // or the first one if all have messages (update with latest)
+                  const videoToUpdate = processingVideos.find((v) => !prevPendingJobs[v.id]) || processingVideos[0];
+                  if (videoToUpdate) {
+                    updatedPendingJobs[videoToUpdate.id] = {
+                      message: job.message,
+                    };
+                    hasUpdates = true;
+                  }
+                }
               }
             }
           }
-        }
 
-        // Update state if we have message updates
-        if (hasUpdates) {
-          setPendingJobs(updatedPendingJobs);
-        }
+          return hasUpdates ? updatedPendingJobs : prevPendingJobs;
+        });
 
         // Check if any jobs are completed or if videos were updated
         const hasCompletedJobs = json.data.hasCompletedJobs ?? false;
@@ -218,7 +229,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
 
         // Also check if any videos are currently in "processing" state
         // If so, refresh to check for updates even if no jobs are completed yet
-        const hasProcessingVideos = videos.some((v) => v.status === "processing");
+        const hasProcessingVideos = currentVideos.some((v) => v.status === "processing");
 
         // Refresh if:
         // 1. There are completed jobs (which means videos might have been updated)
@@ -233,21 +244,26 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
           onSilentRefresh();
         }
       } catch (error) {
-        console.error("Error polling watermark status:", error);
+        if (!isCancelled) {
+          console.error("Error polling watermark status:", error);
+        }
       }
     };
 
     // Initial poll immediately, then every 10 seconds
     void poll();
-    const intervalId = setInterval(() => {
+    intervalId = setInterval(() => {
       void poll();
     }, 10000);
 
     return () => {
       isCancelled = true;
-      clearInterval(intervalId);
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
     };
-  }, [onSilentRefresh, videos]);
+  }, [onSilentRefresh]);
 
   const handleDeleteClick = (video: Video) => {
     setDeleteDialog({
