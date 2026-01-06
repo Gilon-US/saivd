@@ -148,9 +148,9 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     }
   };
 
-  // Poll internal watermark status endpoint every 5 seconds whenever the video
-  // list is visible. If the status route reports jobs, refresh the videos so
-  // any processing/completed states are reflected.
+  // Poll internal watermark status endpoint every 10 seconds whenever the video
+  // list is visible. If the status route reports completed jobs, refresh the videos
+  // so any processing/completed states are reflected.
   useEffect(() => {
     let isCancelled = false;
 
@@ -162,7 +162,74 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         const json = await response.json();
         if (!json.success || !json.data?.jobs) return;
 
-        if (!isCancelled) {
+        // Update pendingJobs with messages from status polling
+        // Match jobs to videos by deriving original key from pathKey
+        const updatedPendingJobs: typeof pendingJobs = {...pendingJobs};
+        let hasUpdates = false;
+
+        for (const job of json.data.jobs) {
+          // For processing or completed jobs, try to match to a video
+          if (job.status === "processing" || job.status === "success" || job.status === "completed") {
+            // If we have a pathKey, derive the original key to match the video
+            if (job.pathKey) {
+              const originalKey = job.pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
+              // Find the video that matches this original key
+              const matchingVideo = videos.find((v) => v.original_url === originalKey);
+              if (matchingVideo && job.message) {
+                updatedPendingJobs[matchingVideo.id] = {
+                  message: job.message,
+                };
+                hasUpdates = true;
+              }
+            } else if (job.status === "processing" && job.message) {
+              // For processing jobs without pathKey yet, match to processing videos
+              // If there's only one processing video, update it
+              // If multiple, update the one that doesn't have a message yet
+              const processingVideos = videos.filter((v) => v.status === "processing");
+              if (processingVideos.length === 1) {
+                // Only one processing video - safe to update
+                updatedPendingJobs[processingVideos[0].id] = {
+                  message: job.message,
+                };
+                hasUpdates = true;
+              } else if (processingVideos.length > 1) {
+                // Multiple processing videos - update the first one without a message
+                // or the first one if all have messages (update with latest)
+                const videoToUpdate = processingVideos.find((v) => !updatedPendingJobs[v.id]) || processingVideos[0];
+                if (videoToUpdate) {
+                  updatedPendingJobs[videoToUpdate.id] = {
+                    message: job.message,
+                  };
+                  hasUpdates = true;
+                }
+              }
+            }
+          }
+        }
+
+        // Update state if we have message updates
+        if (hasUpdates) {
+          setPendingJobs(updatedPendingJobs);
+        }
+
+        // Check if any jobs are completed or if videos were updated
+        const hasCompletedJobs = json.data.hasCompletedJobs ?? false;
+        const videosUpdated = json.data.videosUpdated ?? 0;
+
+        // Also check if any videos are currently in "processing" state
+        // If so, refresh to check for updates even if no jobs are completed yet
+        const hasProcessingVideos = videos.some((v) => v.status === "processing");
+
+        // Refresh if:
+        // 1. There are completed jobs (which means videos might have been updated)
+        // 2. Videos were actually updated in this poll
+        // 3. There are processing videos (to check for status changes)
+        if ((hasCompletedJobs || videosUpdated > 0 || hasProcessingVideos) && !isCancelled) {
+          console.log("[VideoGrid] Refreshing videos after status poll", {
+            hasCompletedJobs,
+            videosUpdated,
+            hasProcessingVideos,
+          });
           onSilentRefresh();
         }
       } catch (error) {
@@ -180,7 +247,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       isCancelled = true;
       clearInterval(intervalId);
     };
-  }, [onSilentRefresh]);
+  }, [onSilentRefresh, videos]);
 
   const handleDeleteClick = (video: Video) => {
     setDeleteDialog({

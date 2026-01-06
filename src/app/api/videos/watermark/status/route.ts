@@ -113,9 +113,13 @@ export async function GET() {
       });
     }
 
+    // Track if any videos were updated
+    let videosUpdated = 0;
+
     // For any completed jobs with a concrete path, update the corresponding video
+    // Note: API returns "success" for completed jobs, not "completed"
     for (const job of jobs) {
-      if (job.status !== "completed" || !job.pathKey) continue;
+      if ((job.status !== "completed" && job.status !== "success") || !job.pathKey) continue;
 
       // Derive original key from the processed key by removing the -watermarked suffix
       const originalKey = job.pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
@@ -150,6 +154,13 @@ export async function GET() {
 
         if (updateError) {
           console.error("[Watermark] Failed to update video for completed job", {jobId: job.jobId, updateError});
+        } else {
+          videosUpdated++;
+          console.log("[Watermark] Successfully updated video for completed job", {
+            jobId: job.jobId,
+            videoId: video.id,
+            processedUrl: job.pathKey,
+          });
         }
       } catch (e) {
         console.error("[Watermark] Unexpected error while updating video for completed job", {
@@ -159,7 +170,14 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({success: true, data: {jobs}});
+    return NextResponse.json({
+      success: true,
+      data: {
+        jobs,
+        videosUpdated,
+        hasCompletedJobs: jobs.some((j) => j.status === "completed" || j.status === "success"),
+      },
+    });
   } catch (error) {
     console.error("Unexpected error in GET /api/videos/watermark/status:", error);
     return NextResponse.json({success: false, error: {code: "server_error", message: "Server error"}}, {status: 500});
