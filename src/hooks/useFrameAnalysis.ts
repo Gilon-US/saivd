@@ -131,9 +131,8 @@ export function useFrameAnalysis(
         
         // Extract user ID every 20 frames (check if we should extract on this frame)
         if (frameCountRef.current - lastExtractionFrameRef.current >= 20) {
-          // Use frame_index=0 to extract from the current/default frame
-          // The watermark is embedded throughout the video, so any frame should work
-          const frameIndex = 0;
+          // Use the actual frame count as the frame index
+          const frameIndex = frameCountRef.current;
           
           isExtractingRef.current = true;
           lastExtractionFrameRef.current = frameCountRef.current;
