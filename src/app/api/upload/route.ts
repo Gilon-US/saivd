@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate a unique key for the file
-    const key = `uploads/${Date.now()}-${filename}`;
+    const key = `videos/${Date.now()}-${filename}`;
 
     // Create a presigned POST URL
     const presignedPost = await createPresignedPost(wasabiClient, {

@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
     const userId = userData.user?.id || 'anonymous';
     const timestamp = Date.now();
     const fileExtension = filename.split('.').pop();
-    const key = `uploads/${userId}/${timestamp}-${uuidv4()}.${fileExtension}`;
+    const key = `videos/${userId}/${timestamp}-${uuidv4()}.${fileExtension}`;
     
     // Create presigned post URL
     const presignedPost = await createPresignedPost(wasabiClient, {
