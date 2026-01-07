@@ -88,7 +88,8 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
     }
 
     // Get the full S3 key path for the processed (watermarked) video
-    // The API needs the full S3 path, not just the filename
+    // The API documentation says video_name should be "Name of the video file (without .mp4 extension)"
+    // Based on the watermark API which uses full S3 paths, we should pass the full S3 key path
     let videoKey = video.processed_url;
     
     // If it's a URL, extract the key
@@ -97,19 +98,9 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
       videoKey = urlObj.pathname.substring(1); // Remove leading "/"
     }
 
-    // The API error message suggests it constructs paths as "videos/{video_name}.mp4"
-    // But our files are stored at "uploads/{userId}/{uuid}-watermarked.mp4"
-    // Based on the watermark API which uses full paths, we should pass the full S3 key path
-    // Format: "s3://bucket/key" or just the full key path
-    // Let's pass the full key path (without extension) as the API might construct the full path
-    const videoKeyWithoutExtension = videoKey.replace(/\.(mp4|mov|avi|webm)$/i, "");
-    
-    // Construct the full S3 path format that the API might expect
-    // The API might need: "s3://bucket/key" or just the full key path
-    // Based on the error, it seems the API looks in a "videos/" directory, but our files are in "uploads/"
-    // Let's pass the full key path and see if the API can handle it
-    const s3Path = `s3://${WASABI_BUCKET}/${videoKey}`;
-    const videoNameForApi = videoKeyWithoutExtension; // Full key path without extension
+    // Remove file extension to get video_name as required by API
+    // The API expects the full S3 key path (without extension) so it can locate the file
+    const videoName = videoKey.replace(/\.(mp4|mov|avi|webm)$/i, "");
 
     // Get frame_index from query params (default to 0)
     const url = new URL(request.url);
@@ -130,25 +121,21 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
     }
 
     // Call watermark service extract_user_id endpoint
+    // According to API documentation, request body should ONLY contain:
+    // - video_name: Name of the video file (without .mp4 extension)
+    // - frame_index: Frame index to analyze (optional, default: 0)
     const extractUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/extract_user_id`;
 
-    // Try passing the full S3 path format first, if that doesn't work, we'll try just the key
-    // The API documentation says video_name should be without extension
-    // But the error suggests it might need the full path or S3 URL format
     const requestBody = {
-      video_name: videoNameForApi,
+      video_name: videoName,
       frame_index: frameIndex,
-      // Include bucket and full path if the API supports it
-      // Some APIs accept additional parameters even if not documented
-      bucket: WASABI_BUCKET,
-      video_path: videoKey, // Full key with extension
     };
 
     console.log("[ExtractUserId] Calling watermark service", {
       url: extractUrl,
       body: requestBody,
-      s3Path,
       videoKey,
+      videoName,
     });
 
     const response = await fetch(extractUrl, {
@@ -214,7 +201,7 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
       data: {
         user_id: payload.user_id,
         frame_index: payload.frame_index ?? frameIndex,
-        video_name: payload.video_name ?? videoKeyWithoutExtension,
+        video_name: payload.video_name ?? videoName,
       },
     });
   } catch (error) {
