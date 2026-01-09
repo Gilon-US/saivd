@@ -100,14 +100,7 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
 
     // Remove file extension to get video_name as required by API
     // The API expects the full S3 key path (without extension) so it can locate the file
-    let videoName = videoKey.replace(/\.(mp4|mov|avi|webm)$/i, "");
-    
-    // Remove "videos/" prefix from the path before sending to external API
-    // This is specific to the extract_user_id API call only
-    // TODO: If reverting, remove the following line that strips the "videos/" prefix
-    if (videoName.startsWith("videos/")) {
-      videoName = videoName.substring(7); // Remove "videos/" prefix (7 characters)
-    }
+    const videoName = videoKey.replace(/\.(mp4|mov|avi|webm)$/i, "");
 
     // Get frame_index from query params (default to 0)
     const url = new URL(request.url);
