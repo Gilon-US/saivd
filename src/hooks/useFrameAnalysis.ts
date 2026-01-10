@@ -194,35 +194,59 @@ export function useFrameAnalysis(
     };
   }, [videoRef, isPlaying, analysisFunction, videoId]);
 
-  // Reset overlay and frame count when video stops
+  // Reset frame count when video stops (but keep extractedUserId and QR URL)
+  // When video starts playing again, restore QR URL if we have extractedUserId
   useEffect(() => {
     if (!isPlaying) {
-      setQrUrl(null);
+      // Only reset frame counters, don't clear QR URL or extractedUserId
+      // This allows QR code to persist when video is paused or ends
       frameCountRef.current = 0;
       lastExtractionFrameRef.current = -1;
       isExtractingRef.current = false;
+    } else {
+      // When video starts playing, immediately restore QR URL if we already have extractedUserId
+      // This ensures QR code appears immediately on replay without waiting for frame extraction
+      if (videoId && extractedUserId) {
+        const qrUrlFromUserId = `/profile/${extractedUserId}/qr`;
+        setQrUrl((currentQrUrl) => {
+          // Only update if QR URL is not already set (avoid unnecessary updates)
+          if (currentQrUrl !== qrUrlFromUserId) {
+            console.log("[FrameAnalysis] Restoring QR URL on video replay:", qrUrlFromUserId);
+            return qrUrlFromUserId;
+          }
+          return currentQrUrl;
+        });
+      }
     }
-  }, [isPlaying]);
+  }, [isPlaying, videoId, extractedUserId]);
 
-  // Reset extracted user ID when video ID changes
+  // Reset extracted user ID and QR URL when video ID changes
   useEffect(() => {
     setExtractedUserId(null);
+    setQrUrl(null);
     frameCountRef.current = 0;
     lastExtractionFrameRef.current = -1;
     isExtractingRef.current = false;
   }, [videoId]);
 
-  // Update QR URL when extractedUserId changes
+  // Update QR URL when extractedUserId changes or when video starts playing again
+  // This ensures QR URL is restored when replaying if we already have extractedUserId
   useEffect(() => {
     if (videoId && extractedUserId) {
+      // Always set QR URL when we have both videoId and extractedUserId
+      // This ensures it's restored when video is replayed
       const qrUrlFromUserId = `/profile/${extractedUserId}/qr`;
       setQrUrl(qrUrlFromUserId);
-      console.log("[FrameAnalysis] Setting QR URL from extracted user ID:", qrUrlFromUserId);
+      console.log("[FrameAnalysis] Setting QR URL from extracted user ID:", qrUrlFromUserId, {
+        isPlaying,
+        videoId,
+        extractedUserId,
+      });
     } else if (!videoId) {
       // Clear QR URL if videoId is removed
       setQrUrl(null);
     }
-  }, [videoId, extractedUserId]);
+  }, [videoId, extractedUserId, isPlaying]);
 
   return {qrUrl, showOverlay: qrUrl !== null};
 }

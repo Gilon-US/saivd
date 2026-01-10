@@ -48,6 +48,10 @@ export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnal
       if (isPlaying) {
         videoRef.current.pause();
       } else {
+        // If video has ended (currentTime >= duration), seek to start before playing
+        if (videoRef.current.currentTime >= videoRef.current.duration) {
+          videoRef.current.currentTime = 0;
+        }
         videoRef.current.play();
       }
       setIsPlaying(!isPlaying);
