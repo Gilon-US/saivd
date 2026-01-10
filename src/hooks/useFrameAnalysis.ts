@@ -159,13 +159,11 @@ export function useFrameAnalysis(
         }
       }
 
-      // If we have an extracted user ID, use it to generate QR URL
-      // Otherwise, use the analysis function
-      if (videoId && extractedUserId) {
-        const qrUrlFromUserId = `/profile/${extractedUserId}/qr`;
-        setQrUrl(qrUrlFromUserId);
-      } else {
-        // Call analysis function and update overlay QR URL
+      // Note: QR URL is set in a separate useEffect that watches extractedUserId
+      // If we have a videoId, we're using user ID extraction, so don't use analysis function
+      // Only use analysis function when videoId is not provided (fallback mode)
+      if (!videoId) {
+        // Call analysis function and update overlay QR URL (only when not using user ID extraction)
         try {
           const nextQrUrl = analysisFunction(frameData);
           setQrUrl(nextQrUrl);
@@ -174,6 +172,7 @@ export function useFrameAnalysis(
           setQrUrl(null);
         }
       }
+      // If videoId is provided, the QR URL will be set by the useEffect that watches extractedUserId
 
       // Schedule next frame analysis
       if (isPlaying) {
@@ -212,6 +211,18 @@ export function useFrameAnalysis(
     lastExtractionFrameRef.current = -1;
     isExtractingRef.current = false;
   }, [videoId]);
+
+  // Update QR URL when extractedUserId changes
+  useEffect(() => {
+    if (videoId && extractedUserId) {
+      const qrUrlFromUserId = `/profile/${extractedUserId}/qr`;
+      setQrUrl(qrUrlFromUserId);
+      console.log("[FrameAnalysis] Setting QR URL from extracted user ID:", qrUrlFromUserId);
+    } else if (!videoId) {
+      // Clear QR URL if videoId is removed
+      setQrUrl(null);
+    }
+  }, [videoId, extractedUserId]);
 
   return {qrUrl, showOverlay: qrUrl !== null};
 }
