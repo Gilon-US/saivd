@@ -135,7 +135,6 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     const requestBody = {
       input_location: inputLocation,
       output_location: outputLocation,
-      local_key: rsaPrivate,
       client_key: rsaPrivate,
       user_id: profile.numeric_user_id,
       bucket: WASABI_BUCKET,
@@ -146,7 +145,6 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     // Call external watermark service (log payload with redacted keys)
     const safeLogBody = {
       ...requestBody,
-      local_key: requestBody.local_key ? `[REDACTED_LOCAL_KEY:${(requestBody.local_key as string).length}chars]` : null,
       client_key: requestBody.client_key
         ? `[REDACTED_CLIENT_KEY:${(requestBody.client_key as string).length}chars]`
         : null,
