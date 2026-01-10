@@ -4,11 +4,9 @@ import {WASABI_BUCKET} from "@/lib/wasabi";
 
 type ExtractUserIdResponse = {
   success: boolean;
-  data?: {
-    user_id?: string;
-    frame_index?: number;
-    video_name?: string;
-  };
+  user_id?: string;
+  frame_index?: number;
+  video_name?: string;
   error?: string;
 };
 
@@ -205,11 +203,9 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
       );
     }
 
-    if (!payload.data?.user_id) {
-      console.error("[ExtractUserId] Missing user_id in response data", {
-        hasData: !!payload.data,
-        dataStructure: payload.data,
-        fullPayload: payload,
+    if (!payload.user_id) {
+      console.error("[ExtractUserId] Missing user_id in response", {
+        payloadStructure: payload,
       });
       return NextResponse.json(
         {
@@ -226,9 +222,9 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
     return NextResponse.json({
       success: true,
       data: {
-        user_id: payload.data.user_id,
-        frame_index: payload.data.frame_index ?? frameIndex,
-        video_name: payload.data.video_name ?? videoName,
+        user_id: payload.user_id,
+        frame_index: payload.frame_index ?? frameIndex,
+        video_name: payload.video_name ?? videoName,
       },
     });
   } catch (error) {
