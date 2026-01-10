@@ -121,14 +121,16 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
     }
 
     // Call watermark service extract_user_id endpoint
-    // According to API documentation, request body should ONLY contain:
+    // According to API documentation, request body should contain:
     // - video_name: Name of the video file (without .mp4 extension)
     // - frame_index: Frame index to analyze (optional, default: 0)
+    // - bucket: S3 bucket name
     const extractUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/extract_user_id`;
 
     const requestBody = {
       video_name: videoName,
       frame_index: frameIndex,
+      bucket: WASABI_BUCKET,
     };
 
     console.log("[ExtractUserId] Calling watermark service", {
