@@ -89,7 +89,6 @@ The watermarking process involves:
      {
        "input_location": "videos/userId/timestamp-uuid.mp4",
        "output_location": "videos/userId/timestamp-uuid-watermarked.mp4",
-       "local_key": "<RSA_PRIVATE_KEY>",
        "client_key": "<RSA_PRIVATE_KEY>",
        "user_id": 30129560,  // numeric_user_id
        "bucket": "saivd-app",
