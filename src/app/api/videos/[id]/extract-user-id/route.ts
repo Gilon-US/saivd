@@ -171,8 +171,9 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
     let payload: ExtractUserIdResponse | null = null;
     try {
       payload = rawText ? (JSON.parse(rawText) as ExtractUserIdResponse) : null;
+      console.log("[ExtractUserId] Parsed payload:", JSON.stringify(payload, null, 2));
     } catch (e) {
-      console.error("[ExtractUserId] Failed to parse JSON from watermark service", e);
+      console.error("[ExtractUserId] Failed to parse JSON from watermark service", e, {rawText});
       return NextResponse.json(
         {
           success: false,
@@ -185,13 +186,37 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
       );
     }
 
-    if (!payload || !payload.success || !payload.data?.user_id) {
+    if (!payload || !payload.success) {
+      console.error("[ExtractUserId] Invalid payload structure or unsuccessful response", {
+        hasPayload: !!payload,
+        success: payload?.success,
+        error: payload?.error,
+        payloadStructure: payload,
+      });
       return NextResponse.json(
         {
           success: false,
           error: {
             code: "extraction_failed",
             message: payload?.error || "Failed to extract user ID from video frame",
+          },
+        },
+        {status: 502}
+      );
+    }
+
+    if (!payload.data?.user_id) {
+      console.error("[ExtractUserId] Missing user_id in response data", {
+        hasData: !!payload.data,
+        dataStructure: payload.data,
+        fullPayload: payload,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "extraction_failed",
+            message: "User ID not found in response",
           },
         },
         {status: 502}
