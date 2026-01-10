@@ -88,8 +88,7 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
     }
 
     // Get the full S3 key path for the processed (watermarked) video
-    // The API documentation says video_name should be "Name of the video file (without .mp4 extension)"
-    // Based on the watermark API which uses full S3 paths, we should pass the full S3 key path
+    // Include the full S3 key path with file extension
     let videoKey = video.processed_url;
     
     // If it's a URL, extract the key
@@ -98,9 +97,8 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
       videoKey = urlObj.pathname.substring(1); // Remove leading "/"
     }
 
-    // Remove file extension to get video_name as required by API
-    // The API expects the full S3 key path (without extension) so it can locate the file
-    const videoName = videoKey.replace(/\.(mp4|mov|avi|webm)$/i, "");
+    // Use the full video key path including the file extension
+    const videoName = videoKey;
 
     // Get frame_index from query params (default to 0)
     const url = new URL(request.url);
@@ -121,8 +119,8 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
     }
 
     // Call watermark service extract_user_id endpoint
-    // According to API documentation, request body should contain:
-    // - video_name: Name of the video file (without .mp4 extension)
+    // Request body contains:
+    // - video_name: Full S3 key path including file extension
     // - frame_index: Frame index to analyze (optional, default: 0)
     // - bucket: S3 bucket name
     const extractUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/extract_user_id`;
