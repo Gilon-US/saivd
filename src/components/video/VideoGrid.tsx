@@ -55,14 +55,17 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     videoUrl: string | null;
     videoId: string | null;
     enableFrameAnalysis: boolean;
+    verificationStatus: "verifying" | "verified" | "failed" | null;
   }>({
     isOpen: false,
     videoUrl: null,
     videoId: null,
     enableFrameAnalysis: false,
+    verificationStatus: null,
   });
 
   const [isOpeningVideo, setIsOpeningVideo] = useState<string | null>(null);
+  const verificationAbortControllerRef = useRef<AbortController | null>(null);
 
   const handleVideoClick = async (video: Video, variant: "original" | "watermarked" = "original") => {
     try {
@@ -76,12 +79,64 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       if (!response.ok || !data.success || !data.data?.playbackUrl) {
         throw new Error(data.error?.message || "Failed to generate playback URL");
       }
-      setVideoPlayer({
-        isOpen: true,
-        videoUrl: data.data.playbackUrl,
-        videoId: video.id,
-        enableFrameAnalysis: variant === "watermarked",
-      });
+
+      // For watermarked videos, verify authenticity before allowing playback
+      if (variant === "watermarked") {
+        // Set initial state to verifying
+        setVideoPlayer({
+          isOpen: true,
+          videoUrl: data.data.playbackUrl,
+          videoId: video.id,
+          enableFrameAnalysis: true,
+          verificationStatus: "verifying",
+        });
+
+        // Create AbortController for this request
+        verificationAbortControllerRef.current = new AbortController();
+
+        // Immediately verify by extracting user ID from frame 0
+        try {
+          const verifyResponse = await fetch(`/api/videos/${video.id}/extract-user-id?frame_index=0`, {
+            signal: verificationAbortControllerRef.current.signal,
+          });
+          const verifyData = await verifyResponse.json();
+
+          if (verifyResponse.ok && verifyData.success && verifyData.data?.user_id) {
+            // Verification successful - allow playback
+            setVideoPlayer((prev) => ({
+              ...prev,
+              verificationStatus: "verified",
+            }));
+          } else {
+            // Verification failed - no valid user ID
+            setVideoPlayer((prev) => ({
+              ...prev,
+              verificationStatus: "failed",
+            }));
+          }
+        } catch (verifyError) {
+          // Handle abort separately (user closed player)
+          if (verifyError instanceof Error && verifyError.name === "AbortError") {
+            console.log("[VideoGrid] Verification request aborted");
+            return;
+          }
+          // Other errors - verification failed
+          console.error("[VideoGrid] Verification error:", verifyError);
+          setVideoPlayer((prev) => ({
+            ...prev,
+            verificationStatus: "failed",
+          }));
+        }
+      } else {
+        // Original videos don't need verification
+        setVideoPlayer({
+          isOpen: true,
+          videoUrl: data.data.playbackUrl,
+          videoId: video.id,
+          enableFrameAnalysis: false,
+          verificationStatus: null,
+        });
+      }
     } catch (error) {
       console.error("Error opening video:", error);
       toast({
@@ -96,11 +151,18 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
   };
 
   const handleClosePlayer = () => {
+    // Cancel any pending verification request
+    if (verificationAbortControllerRef.current) {
+      verificationAbortControllerRef.current.abort();
+      verificationAbortControllerRef.current = null;
+    }
+
     setVideoPlayer({
       isOpen: false,
       videoUrl: null,
       videoId: null,
       enableFrameAnalysis: false,
+      verificationStatus: null,
     });
   };
 
@@ -615,6 +677,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
           onClose={handleClosePlayer}
           isOpen={videoPlayer.isOpen}
           enableFrameAnalysis={videoPlayer.enableFrameAnalysis}
+          verificationStatus={videoPlayer.verificationStatus}
         />
       )}
     </div>

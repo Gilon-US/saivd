@@ -3,6 +3,7 @@
 import {useEffect, useRef, useState, useCallback} from "react";
 import {X, Play, Pause, Volume2, VolumeX, Maximize} from "lucide-react";
 import {useFrameAnalysis, type FrameAnalysisFunction} from "@/hooks/useFrameAnalysis";
+import {LoadingSpinner} from "@/components/ui/loading-spinner";
 
 interface VideoPlayerProps {
   videoUrl: string;
@@ -10,14 +11,18 @@ interface VideoPlayerProps {
   onClose: () => void;
   isOpen: boolean;
   enableFrameAnalysis: boolean;
+  verificationStatus?: "verifying" | "verified" | "failed" | null;
 }
 
-export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnalysis}: VideoPlayerProps) {
+export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnalysis, verificationStatus}: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+
+  // Prevent playback until verification passes (for watermarked videos)
+  const isPlaybackAllowed = verificationStatus === null || verificationStatus === "verified";
 
   // Frame analysis hook – controlled explicitly by enableFrameAnalysis.
   // When enabled and videoId is provided, the hook will extract user ID
@@ -44,6 +49,11 @@ export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnal
   }, [isOpen]);
 
   const togglePlay = () => {
+    // Prevent playback if verification hasn't passed
+    if (!isPlaybackAllowed) {
+      return;
+    }
+
     if (videoRef.current) {
       if (isPlaying) {
         videoRef.current.pause();
@@ -117,20 +127,42 @@ export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnal
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={() => setIsPlaying(false)}
+            controls={false}
           />
+
+          {/* Verification overlay */}
+          {verificationStatus === "verifying" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
+              <LoadingSpinner size="lg" />
+              <p className="mt-4 text-white text-center px-4 max-w-md">
+                We are verifying the video&apos;s authenticity. Your video will play shortly, please wait.
+              </p>
+            </div>
+          )}
+
+          {verificationStatus === "failed" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
+              <div className="bg-red-500/20 border border-red-500 rounded-lg p-6 max-w-md mx-4">
+                <p className="text-white text-center text-lg font-medium">
+                  This video is not authentic, viewing not allowed
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* QR overlay – shown only when frame analysis returns a QR URL. The
               image itself is served from the public profile QR route, which
               ultimately reads the QR PNG from Wasabi. */}
-          {qrUrl && (
-            <div className="absolute top-2 left-2 pointer-events-none">
+          {qrUrl && isPlaybackAllowed && (
+            <div className="absolute top-2 left-2 pointer-events-none z-10">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qrUrl} alt="Creator QR code" className="w-16 h-16 object-contain rounded-md shadow-md" />
             </div>
           )}
 
-          {/* Custom controls */}
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+          {/* Custom controls - only shown when playback is allowed */}
+          {isPlaybackAllowed && (
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
             {/* Seek bar */}
             <input
               type="range"
@@ -171,6 +203,7 @@ export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnal
               </button>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>
