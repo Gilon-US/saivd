@@ -1,7 +1,7 @@
 "use client";
 import {Card, CardContent} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
-import {UploadIcon, RefreshCwIcon, TrashIcon} from "lucide-react";
+import {UploadIcon, RefreshCwIcon, TrashIcon, Download} from "lucide-react";
 import Image from "next/image";
 import {useToast} from "@/hooks/useToast";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
@@ -102,6 +102,72 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       videoId: null,
       enableFrameAnalysis: false,
     });
+  };
+
+  const handleDownloadWatermarked = async (video: Video) => {
+    try {
+      // Check if watermarked version exists
+      if (!video.processed_url || video.status !== "processed") {
+        toast({
+          title: "Download unavailable",
+          description: "Watermarked version is not available for download.",
+          variant: "error",
+        });
+        return;
+      }
+
+      // Show loading toast
+      toast({
+        title: "Preparing download",
+        description: `Generating download link for "${video.filename}"...`,
+      });
+
+      // Get presigned URL for watermarked video
+      const response = await fetch(`/api/videos/${video.id}/play?variant=watermarked`);
+      const data = await response.json();
+
+      if (!response.ok || !data.success || !data.data?.playbackUrl) {
+        throw new Error(data.error?.message || "Failed to generate download URL");
+      }
+
+      const presignedUrl = data.data.playbackUrl;
+
+      // Fetch the video file as a blob
+      const videoResponse = await fetch(presignedUrl);
+      if (!videoResponse.ok) {
+        throw new Error("Failed to fetch video file");
+      }
+
+      const blob = await videoResponse.blob();
+
+      // Create object URL from blob
+      const blobUrl = URL.createObjectURL(blob);
+
+      // Create temporary anchor element for download
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = video.filename.replace(/\.[^/.]+$/, "-watermarked.mp4"); // Add -watermarked suffix
+      document.body.appendChild(anchor);
+      anchor.click();
+
+      // Cleanup
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(blobUrl);
+
+      // Show success toast
+      toast({
+        title: "Download started",
+        description: `Downloading "${video.filename}"...`,
+        variant: "success",
+      });
+    } catch (error) {
+      console.error("Error downloading watermarked video:", error);
+      toast({
+        title: "Download failed",
+        description: error instanceof Error ? error.message : "Failed to download video. Please try again.",
+        variant: "error",
+      });
+    }
   };
 
   const handleCreateWatermark = async (video: Video) => {
@@ -455,6 +521,22 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                       onClick={() => handleCreateWatermark(video)}>
                       <UploadIcon className="h-3 w-3" />
                     </Button>
+
+                    {/* Download button - only shown when watermarked version is available */}
+                    {video.status === "processed" && video.processed_url && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-1 left-1 h-7 w-7 rounded-full bg-white/80 hover:bg-white shadow-sm z-10"
+                        title="Download watermarked video"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent triggering video play
+                          handleDownloadWatermarked(video);
+                        }}>
+                        <Download className="h-3 w-3" />
+                      </Button>
+                    )}
 
                     {video.status === "processed" &&
                     (video.processed_thumbnail_url ||
