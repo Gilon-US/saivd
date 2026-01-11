@@ -6,6 +6,7 @@ import Image from "next/image";
 import {useToast} from "@/hooks/useToast";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
 import {DeleteConfirmDialog} from "./DeleteConfirmDialog";
+import {DeleteWatermarkedConfirmDialog} from "./DeleteWatermarkedConfirmDialog";
 import {VideoPlayer} from "./VideoPlayer";
 import {useState, useEffect, useRef} from "react";
 
@@ -41,6 +42,16 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     >
   >({});
   const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    video: Video | null;
+    isDeleting: boolean;
+  }>({
+    isOpen: false,
+    video: null,
+    isDeleting: false,
+  });
+
+  const [deleteWatermarkedDialog, setDeleteWatermarkedDialog] = useState<{
     isOpen: boolean;
     video: Video | null;
     isDeleting: boolean;
@@ -166,30 +177,39 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     });
   };
 
-  const handleDeleteWatermarked = async (video: Video) => {
-    try {
-      // Check if watermarked version exists
-      if (!video.processed_url || video.status !== "processed") {
-        toast({
-          title: "Delete unavailable",
-          description: "Watermarked version is not available for deletion.",
-          variant: "error",
-        });
-        return;
-      }
-
-      // Confirm deletion
-      if (!confirm(`Are you sure you want to delete the watermarked version of "${video.filename}"?`)) {
-        return;
-      }
-
+  const handleDeleteWatermarkedClick = (video: Video) => {
+    // Check if watermarked version exists
+    if (!video.processed_url || video.status !== "processed") {
       toast({
-        title: "Deleting watermarked video",
-        description: `Deleting watermarked version of "${video.filename}"...`,
+        title: "Delete unavailable",
+        description: "Watermarked version is not available for deletion.",
+        variant: "error",
       });
+      return;
+    }
 
-      // Delete watermarked video
-      const response = await fetch(`/api/videos/${video.id}/watermarked`, {
+    setDeleteWatermarkedDialog({
+      isOpen: true,
+      video,
+      isDeleting: false,
+    });
+  };
+
+  const handleDeleteWatermarkedCancel = () => {
+    setDeleteWatermarkedDialog({
+      isOpen: false,
+      video: null,
+      isDeleting: false,
+    });
+  };
+
+  const handleDeleteWatermarkedConfirm = async () => {
+    if (!deleteWatermarkedDialog.video) return;
+
+    setDeleteWatermarkedDialog((prev) => ({...prev, isDeleting: true}));
+
+    try {
+      const response = await fetch(`/api/videos/${deleteWatermarkedDialog.video.id}/watermarked`, {
         method: "DELETE",
       });
 
@@ -201,11 +221,17 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
 
       toast({
         title: "Watermarked video deleted",
-        description: `Watermarked version of "${video.filename}" has been deleted successfully.`,
+        description: `Watermarked version of "${deleteWatermarkedDialog.video.filename}" has been deleted successfully.`,
         variant: "success",
       });
 
-      // Refresh the video list
+      // Close dialog and refresh the grid
+      setDeleteWatermarkedDialog({
+        isOpen: false,
+        video: null,
+        isDeleting: false,
+      });
+
       onRefresh();
     } catch (error) {
       console.error("Error deleting watermarked video:", error);
@@ -214,6 +240,8 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         description: error instanceof Error ? error.message : "Failed to delete watermarked video. Please try again.",
         variant: "error",
       });
+
+      setDeleteWatermarkedDialog((prev) => ({...prev, isDeleting: false}));
     }
   };
 
@@ -661,7 +689,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                         title="Delete watermarked video"
                         onClick={(e) => {
                           e.stopPropagation(); // Prevent triggering video play
-                          handleDeleteWatermarked(video);
+                          handleDeleteWatermarkedClick(video);
                         }}>
                         <TrashIcon className="h-3 w-3" />
                       </Button>
@@ -734,6 +762,15 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         onConfirm={handleDeleteConfirm}
         videoFilename={deleteDialog.video?.filename || ""}
         isDeleting={deleteDialog.isDeleting}
+      />
+
+      {/* Delete watermarked video confirmation dialog */}
+      <DeleteWatermarkedConfirmDialog
+        isOpen={deleteWatermarkedDialog.isOpen}
+        onClose={handleDeleteWatermarkedCancel}
+        onConfirm={handleDeleteWatermarkedConfirm}
+        videoFilename={deleteWatermarkedDialog.video?.filename || ""}
+        isDeleting={deleteWatermarkedDialog.isDeleting}
       />
 
       {/* Video player */}
