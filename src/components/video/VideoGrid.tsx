@@ -1,7 +1,7 @@
 "use client";
 import {Card, CardContent} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
-import {UploadIcon, RefreshCwIcon, TrashIcon, Download} from "lucide-react";
+import {UploadIcon, RefreshCwIcon, TrashIcon, Download, QrCode} from "lucide-react";
 import Image from "next/image";
 import {useToast} from "@/hooks/useToast";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
@@ -581,7 +581,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                       className="absolute top-1 right-1 h-7 w-7 rounded-full bg-white/80 hover:bg-white shadow-sm z-10"
                       title="Create or refresh watermarked version"
                       onClick={() => handleCreateWatermark(video)}>
-                      <UploadIcon className="h-3 w-3" />
+                      <QrCode className="h-3 w-3" />
                     </Button>
 
                     {/* Download button - only shown when watermarked version is available */}
