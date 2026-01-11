@@ -572,7 +572,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                         )}
                       </div>
                     ) : video.status === "processing" ? (
-                      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700">
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700 animate-pulse">
                         <LoadingSpinner size="sm" />
                         <span className="text-gray-400 text-xs mt-2 text-center px-2">
                           {(() => {
