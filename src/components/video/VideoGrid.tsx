@@ -67,12 +67,14 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     videoId: string | null;
     enableFrameAnalysis: boolean;
     verificationStatus: "verifying" | "verified" | "failed" | null;
+    verifiedUserId: string | null;
   }>({
     isOpen: false,
     videoUrl: null,
     videoId: null,
     enableFrameAnalysis: false,
     verificationStatus: null,
+    verifiedUserId: null,
   });
 
   const [isOpeningVideo, setIsOpeningVideo] = useState<string | null>(null);
@@ -100,6 +102,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
           videoId: video.id,
           enableFrameAnalysis: true,
           verificationStatus: "verifying",
+          verifiedUserId: null,
         });
 
         // Create AbortController for this request
@@ -113,10 +116,11 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
           const verifyData = await verifyResponse.json();
 
           if (verifyResponse.ok && verifyData.success && verifyData.data?.user_id) {
-            // Verification successful - allow playback
+            // Verification successful - allow playback and store user ID for QR code
             setVideoPlayer((prev) => ({
               ...prev,
               verificationStatus: "verified",
+              verifiedUserId: verifyData.data.user_id,
             }));
           } else {
             // Verification failed - no valid user ID
@@ -139,14 +143,15 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
           }));
         }
       } else {
-        // Original videos don't need verification
-        setVideoPlayer({
-          isOpen: true,
-          videoUrl: data.data.playbackUrl,
-          videoId: video.id,
-          enableFrameAnalysis: false,
-          verificationStatus: null,
-        });
+            // Original videos don't need verification
+            setVideoPlayer({
+              isOpen: true,
+              videoUrl: data.data.playbackUrl,
+              videoId: video.id,
+              enableFrameAnalysis: false,
+              verificationStatus: null,
+              verifiedUserId: null,
+            });
       }
     } catch (error) {
       console.error("Error opening video:", error);
@@ -174,6 +179,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       videoId: null,
       enableFrameAnalysis: false,
       verificationStatus: null,
+      verifiedUserId: null,
     });
   };
 
@@ -782,6 +788,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
           isOpen={videoPlayer.isOpen}
           enableFrameAnalysis={videoPlayer.enableFrameAnalysis}
           verificationStatus={videoPlayer.verificationStatus}
+          verifiedUserId={videoPlayer.verifiedUserId}
         />
       )}
     </div>

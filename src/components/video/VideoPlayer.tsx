@@ -12,9 +12,10 @@ interface VideoPlayerProps {
   isOpen: boolean;
   enableFrameAnalysis: boolean;
   verificationStatus?: "verifying" | "verified" | "failed" | null;
+  verifiedUserId?: string | null;
 }
 
-export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnalysis, verificationStatus}: VideoPlayerProps) {
+export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnalysis, verificationStatus, verifiedUserId}: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -36,7 +37,10 @@ export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnal
     // This function is only used as a fallback when videoId is not available
     return null;
   }, [enableFrameAnalysis]);
-  const {qrUrl} = useFrameAnalysis(videoRef, isPlaying, analysisFunction, enableFrameAnalysis && videoId ? videoId : undefined);
+  const {qrUrl: frameAnalysisQrUrl} = useFrameAnalysis(videoRef, isPlaying, analysisFunction, enableFrameAnalysis && videoId ? videoId : undefined);
+
+  // Use verified user ID for QR code if available, otherwise use frame analysis QR URL
+  const qrUrl = verifiedUserId ? `/profile/${verifiedUserId}/qr` : frameAnalysisQrUrl;
 
   useEffect(() => {
     if (!isOpen) {
@@ -150,8 +154,8 @@ export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnal
             </div>
           )}
 
-          {/* QR overlay – shown only when frame analysis returns a QR URL. The
-              image itself is served from the public profile QR route, which
+          {/* QR overlay – shown when we have a verified user ID or frame analysis returns a QR URL.
+              The image itself is served from the public profile QR route, which
               ultimately reads the QR PNG from Wasabi. */}
           {qrUrl && isPlaybackAllowed && (
             <div className="absolute top-2 left-2 pointer-events-none z-10">
