@@ -166,6 +166,57 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     });
   };
 
+  const handleDeleteWatermarked = async (video: Video) => {
+    try {
+      // Check if watermarked version exists
+      if (!video.processed_url || video.status !== "processed") {
+        toast({
+          title: "Delete unavailable",
+          description: "Watermarked version is not available for deletion.",
+          variant: "error",
+        });
+        return;
+      }
+
+      // Confirm deletion
+      if (!confirm(`Are you sure you want to delete the watermarked version of "${video.filename}"?`)) {
+        return;
+      }
+
+      toast({
+        title: "Deleting watermarked video",
+        description: `Deleting watermarked version of "${video.filename}"...`,
+      });
+
+      // Delete watermarked video
+      const response = await fetch(`/api/videos/${video.id}/watermarked`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error?.message || "Failed to delete watermarked video");
+      }
+
+      toast({
+        title: "Watermarked video deleted",
+        description: `Watermarked version of "${video.filename}" has been deleted successfully.`,
+        variant: "success",
+      });
+
+      // Refresh the video list
+      onRefresh();
+    } catch (error) {
+      console.error("Error deleting watermarked video:", error);
+      toast({
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Failed to delete watermarked video. Please try again.",
+        variant: "error",
+      });
+    }
+  };
+
   const handleDownloadWatermarked = async (video: Video) => {
     try {
       // Check if watermarked version exists
@@ -597,6 +648,22 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                           handleDownloadWatermarked(video);
                         }}>
                         <Download className="h-3 w-3" />
+                      </Button>
+                    )}
+
+                    {/* Delete watermarked video button - only shown when watermarked version is available */}
+                    {video.status === "processed" && video.processed_url && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute bottom-1 right-1 h-7 w-7 rounded-full bg-white/80 hover:bg-white shadow-sm z-10 text-gray-600 hover:text-red-500"
+                        title="Delete watermarked video"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent triggering video play
+                          handleDeleteWatermarked(video);
+                        }}>
+                        <TrashIcon className="h-3 w-3" />
                       </Button>
                     )}
 
