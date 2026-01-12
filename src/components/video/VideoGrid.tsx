@@ -361,7 +361,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     }
   };
 
-  // Poll internal watermark status endpoint every 10 seconds whenever the video
+  // Poll internal watermark status endpoint every 2 seconds whenever the video
   // list is visible. If the status route reports completed jobs, refresh the videos
   // so any processing/completed states are reflected.
   // Use a ref to access current videos without causing effect re-runs
@@ -463,11 +463,11 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       }
     };
 
-    // Initial poll immediately, then every 10 seconds
+    // Initial poll immediately, then every 2 seconds
     void poll();
     intervalId = setInterval(() => {
       void poll();
-    }, 10000);
+    }, 2000);
 
     return () => {
       isCancelled = true;
