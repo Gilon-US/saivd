@@ -170,6 +170,35 @@ export async function GET() {
       }
     }
 
+    // After all database updates are persisted, check if all jobs are completed
+    // If all jobs are completed, call clear_queue to avoid loading stale data
+    const allJobsCompleted = jobs.length > 0 && jobs.every((job) => job.status === "completed" || job.status === "success");
+    
+    if (allJobsCompleted) {
+      try {
+        const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue`;
+        const clearQueueResponse = await fetch(clearQueueUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (clearQueueResponse.ok) {
+          console.log("[Watermark] Successfully cleared watermarking queue after all jobs completed");
+        } else {
+          console.warn("[Watermark] Failed to clear watermarking queue", {
+            status: clearQueueResponse.status,
+            statusText: clearQueueResponse.statusText,
+          });
+          // Don't fail the request if clear_queue fails - this is a cleanup operation
+        }
+      } catch (clearQueueError) {
+        console.error("[Watermark] Error calling clear_queue", clearQueueError);
+        // Don't fail the request if clear_queue fails - this is a cleanup operation
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
