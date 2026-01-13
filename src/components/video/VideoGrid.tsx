@@ -7,6 +7,7 @@ import {useToast} from "@/hooks/useToast";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
 import {DeleteConfirmDialog} from "./DeleteConfirmDialog";
 import {DeleteWatermarkedConfirmDialog} from "./DeleteWatermarkedConfirmDialog";
+import {WatermarkStartNotification} from "./WatermarkStartNotification";
 import {VideoPlayer} from "./VideoPlayer";
 import {useState, useEffect, useRef} from "react";
 
@@ -59,6 +60,14 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     isOpen: false,
     video: null,
     isDeleting: false,
+  });
+
+  const [watermarkStartNotification, setWatermarkStartNotification] = useState<{
+    isOpen: boolean;
+    videoFilename: string;
+  }>({
+    isOpen: false,
+    videoFilename: "",
   });
 
   const [videoPlayer, setVideoPlayer] = useState<{
@@ -343,10 +352,10 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         },
       }));
 
-      toast({
-        title: "Watermark job started",
-        description: `Watermarking has started for "${video.filename}".`,
-        variant: "success",
+      // Show notification modal
+      setWatermarkStartNotification({
+        isOpen: true,
+        videoFilename: video.filename,
       });
 
       // Refresh the video list so the status is updated to processing
@@ -777,6 +786,13 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         onConfirm={handleDeleteWatermarkedConfirm}
         videoFilename={deleteWatermarkedDialog.video?.filename || ""}
         isDeleting={deleteWatermarkedDialog.isDeleting}
+      />
+
+      {/* Watermark start notification */}
+      <WatermarkStartNotification
+        isOpen={watermarkStartNotification.isOpen}
+        onClose={() => setWatermarkStartNotification({ isOpen: false, videoFilename: "" })}
+        videoFilename={watermarkStartNotification.videoFilename}
       />
 
       {/* Video player */}
