@@ -640,11 +640,12 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                     {video.preview_thumbnail_data ? (
                       // Using <img> for base64 data URLs is appropriate since Next.js Image component
                       // is designed for external URLs and file paths, not data URLs
+                      // Use object-contain to preserve aspect ratio without stretching
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={video.preview_thumbnail_data}
                         alt={`${video.filename} - Browser Generated Preview`}
-                        className="object-cover w-full h-full"
+                        className="object-contain w-full h-full"
                       />
                     ) : video.original_thumbnail_url &&
                       !video.original_thumbnail_url.includes("placeholder-video-thumbnail") ? (
@@ -731,7 +732,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                           <img
                             src={video.preview_thumbnail_data}
                             alt={`${video.filename} - Watermarked Preview`}
-                            className="object-cover w-full h-full"
+                            className="object-contain w-full h-full"
                           />
                         ) : (
                           <Image

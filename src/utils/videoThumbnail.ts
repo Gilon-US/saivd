@@ -20,8 +20,8 @@ export function generateVideoThumbnail(
   options: ThumbnailOptions = {}
 ): Promise<string> {
   const {
-    width = 240,
-    height = 135, // 16:9 aspect ratio
+    width: maxWidth = 240,
+    height: maxHeight = 135, // Default max dimensions (16:9)
     quality = 0.8,
     seekTime = 0.1 // Default to 10% of video duration
   } = options;
@@ -88,27 +88,44 @@ export function generateVideoThumbnail(
           return;
         }
 
-        // Calculate canvas dimensions maintaining aspect ratio
-        // We want to fit the video within the target dimensions while preserving its aspect ratio
+        // Calculate canvas dimensions based on video's actual aspect ratio
+        // Scale proportionally to fit within max dimensions while preserving aspect ratio
         const videoAspectRatio = video.videoWidth / video.videoHeight;
-        const targetAspectRatio = width / height;
+        const isPortrait = video.videoHeight > video.videoWidth;
         
         let canvasWidth: number;
         let canvasHeight: number;
         
-        if (videoAspectRatio > targetAspectRatio) {
-          // Video is wider than target - fit to width, calculate height
-          canvasWidth = width;
-          canvasHeight = width / videoAspectRatio;
+        // Scale the video dimensions to fit within max bounds while preserving aspect ratio
+        if (isPortrait) {
+          // Portrait video: fit to max height, calculate width
+          canvasHeight = maxHeight;
+          canvasWidth = maxHeight * videoAspectRatio;
+          
+          // If calculated width exceeds max width, fit to width instead
+          if (canvasWidth > maxWidth) {
+            canvasWidth = maxWidth;
+            canvasHeight = maxWidth / videoAspectRatio;
+          }
         } else {
-          // Video is taller than target (or same) - fit to height, calculate width
-          canvasWidth = height * videoAspectRatio;
-          canvasHeight = height;
+          // Landscape video: fit to max width, calculate height
+          canvasWidth = maxWidth;
+          canvasHeight = maxWidth / videoAspectRatio;
+          
+          // If calculated height exceeds max height, fit to height instead
+          if (canvasHeight > maxHeight) {
+            canvasHeight = maxHeight;
+            canvasWidth = maxHeight * videoAspectRatio;
+          }
         }
         
         // Ensure dimensions are integers for better rendering
         canvasWidth = Math.round(canvasWidth);
         canvasHeight = Math.round(canvasHeight);
+        
+        // Ensure minimum dimensions
+        canvasWidth = Math.max(1, canvasWidth);
+        canvasHeight = Math.max(1, canvasHeight);
         
         canvas.width = canvasWidth;
         canvas.height = canvasHeight;
