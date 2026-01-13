@@ -36,52 +36,114 @@ export function generateVideoThumbnail(
       return;
     }
 
-    // Set canvas dimensions
-    canvas.width = width;
-    canvas.height = height;
+    // Set video attributes for better compatibility with MOV files
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+
+    let hasCaptured = false;
+    let objectUrl: string | null = null;
 
     // Handle video loading errors
-    video.onerror = () => {
-      reject(new Error('Failed to load video file'));
+    video.onerror = (e) => {
+      const error = video.error;
+      const errorMsg = error 
+        ? `Failed to load video file: ${error.message || `Error code ${error.code}`}`
+        : 'Failed to load video file';
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      reject(new Error(errorMsg));
     };
 
     // When metadata is loaded, we can seek to the desired time
     video.onloadedmetadata = () => {
       try {
-        // Calculate seek time
-        const targetTime = seekTime < 1 
+        // Calculate seek time - use at least 0.5 seconds to avoid keyframe issues
+        // (MOV files and some MP4 files have keyframes that may not be at the very start)
+        let targetTime = seekTime < 1 
           ? video.duration * seekTime  // Percentage of duration
           : Math.min(seekTime, video.duration); // Absolute time in seconds
+        
+        // Ensure minimum seek time of 0.5 seconds for better keyframe compatibility
+        // But don't exceed video duration
+        targetTime = Math.max(0.5, Math.min(targetTime, video.duration - 0.1));
 
         video.currentTime = targetTime;
-      } catch {
+      } catch (err) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
         reject(new Error('Failed to seek video'));
       }
     };
 
-    // When we've seeked to the target time, capture the frame
-    video.onseeked = () => {
+    // Wait for the frame to be fully decoded after seeking
+    // This is critical for MOV files which may have frame decoding delays
+    const captureFrame = () => {
+      if (hasCaptured) return; // Prevent multiple captures
+      hasCaptured = true;
+
       try {
-        // Draw the video frame to canvas
-        ctx.drawImage(video, 0, 0, width, height);
+        // Ensure video dimensions are valid before drawing
+        if (video.videoWidth <= 0 || video.videoHeight <= 0) {
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          reject(new Error('Video dimensions are invalid'));
+          return;
+        }
+
+        // Calculate canvas dimensions maintaining aspect ratio
+        const videoAspectRatio = video.videoWidth / video.videoHeight;
+        const targetAspectRatio = width / height;
+        let canvasWidth = width;
+        let canvasHeight = height;
         
-        // Convert canvas to base64 data URL
-        const thumbnailDataUrl = canvas.toDataURL('image/jpeg', quality);
+        if (videoAspectRatio > targetAspectRatio) {
+          // Video is wider - fit to width
+          canvasHeight = width / videoAspectRatio;
+        } else {
+          // Video is taller - fit to height
+          canvasWidth = height * videoAspectRatio;
+        }
         
-        // Clean up
-        URL.revokeObjectURL(video.src);
-        
-        resolve(thumbnailDataUrl);
-      } catch {
-        reject(new Error('Failed to generate thumbnail'));
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        // Use requestAnimationFrame to ensure the frame is fully rendered
+        requestAnimationFrame(() => {
+          try {
+            // Draw the video frame to canvas
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Convert canvas to base64 data URL
+            const thumbnailDataUrl = canvas.toDataURL('image/jpeg', quality);
+            
+            // Clean up
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            
+            resolve(thumbnailDataUrl);
+          } catch (err) {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            reject(new Error('Failed to generate thumbnail: ' + (err instanceof Error ? err.message : 'Unknown error')));
+          }
+        });
+      } catch (err) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        reject(new Error('Failed to capture frame'));
       }
+    };
+
+    // When we've seeked to the target time, wait a bit for frame to decode
+    // This delay is especially important for MOV files with certain codecs
+    // where the frame might not be fully decoded immediately after seeking
+    video.onseeked = () => {
+      // Add a small delay to ensure the frame is fully decoded
+      // 100ms should be enough for most codecs, including MOV files
+      setTimeout(captureFrame, 100);
     };
 
     // Load the video file
     try {
-      video.src = URL.createObjectURL(videoFile);
+      objectUrl = URL.createObjectURL(videoFile);
+      video.src = objectUrl;
       video.load();
-    } catch {
+    } catch (err) {
       reject(new Error('Failed to create video object URL'));
     }
   });
