@@ -89,18 +89,26 @@ export function generateVideoThumbnail(
         }
 
         // Calculate canvas dimensions maintaining aspect ratio
+        // We want to fit the video within the target dimensions while preserving its aspect ratio
         const videoAspectRatio = video.videoWidth / video.videoHeight;
         const targetAspectRatio = width / height;
-        let canvasWidth = width;
-        let canvasHeight = height;
+        
+        let canvasWidth: number;
+        let canvasHeight: number;
         
         if (videoAspectRatio > targetAspectRatio) {
-          // Video is wider - fit to width
+          // Video is wider than target - fit to width, calculate height
+          canvasWidth = width;
           canvasHeight = width / videoAspectRatio;
         } else {
-          // Video is taller - fit to height
+          // Video is taller than target (or same) - fit to height, calculate width
           canvasWidth = height * videoAspectRatio;
+          canvasHeight = height;
         }
+        
+        // Ensure dimensions are integers for better rendering
+        canvasWidth = Math.round(canvasWidth);
+        canvasHeight = Math.round(canvasHeight);
         
         canvas.width = canvasWidth;
         canvas.height = canvasHeight;
@@ -108,8 +116,13 @@ export function generateVideoThumbnail(
         // Use requestAnimationFrame to ensure the frame is fully rendered
         requestAnimationFrame(() => {
           try {
-            // Draw the video frame to canvas
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            // Draw the video frame to canvas at its natural aspect ratio
+            // This will fit the video within the canvas bounds without stretching
+            ctx.drawImage(
+              video,
+              0, 0, video.videoWidth, video.videoHeight,  // Source rectangle (full video)
+              0, 0, canvasWidth, canvasHeight              // Destination rectangle (scaled to fit)
+            );
             
             // Convert canvas to base64 data URL
             const thumbnailDataUrl = canvas.toDataURL('image/jpeg', quality);
