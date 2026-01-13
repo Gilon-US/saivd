@@ -737,7 +737,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                     ) : video.status === "processing" ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700 animate-pulse">
                         <LoadingSpinner size="sm" />
-                        <span className="text-gray-700 dark:text-gray-200 text-xs mt-2 text-center px-2">
+                        <span className="text-black dark:text-black text-xs mt-2 text-center px-2">
                           {(() => {
                             const message = pendingJobs[video.id]?.message ?? "Processing...";
                             return message.length > 32 ? `${message.substring(0, 32)}...` : message;
