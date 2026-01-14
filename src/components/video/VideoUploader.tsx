@@ -161,14 +161,30 @@ export function VideoUploader({
         </Card>
       )}
       
-      {selectedVideo && !isUploading && (
+      {selectedVideo && (
         <div className="flex justify-end space-x-2">
-          <Button variant="outline" onClick={() => setSelectedVideo(null)}>
+          <Button 
+            variant="outline" 
+            onClick={() => setSelectedVideo(null)}
+            disabled={isUploading}
+          >
             Cancel
           </Button>
-          <Button onClick={handleUpload}>
-            <UploadIcon className="mr-2 h-4 w-4" />
-            Upload Video
+          <Button 
+            onClick={handleUpload}
+            disabled={isUploading}
+          >
+            {isUploading ? (
+              <>
+                <LoadingSpinner size="sm" className="mr-2" />
+                Uploading...
+              </>
+            ) : (
+              <>
+                <UploadIcon className="mr-2 h-4 w-4" />
+                Upload Video
+              </>
+            )}
           </Button>
         </div>
       )}
