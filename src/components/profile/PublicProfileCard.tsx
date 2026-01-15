@@ -71,11 +71,11 @@ export function PublicProfileCard({profile}: PublicProfileCardProps) {
           <Bio bio={profile.bio} />
 
           <div className="pt-4 space-y-4">
-            <button
+            { /* <button
               type="button"
               className="w-full py-3 rounded-full border border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-gray-800">
               + Follow
-            </button>
+            </button> */}
 
             <div className="flex items-center justify-center gap-3 text-gray-700 dark:text-gray-200">
               <span className="sr-only">Social links</span>
