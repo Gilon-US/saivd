@@ -182,18 +182,17 @@ function ProfilePhoto({photo, displayName}: {photo: string | null; displayName: 
           <LoadingSpinner size="sm" />
         </div>
       )}
-      <Image
+      {/* Use regular img tag for external URLs - allows any domain without Next.js config */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
         src={photo}
         alt={`Profile photo of ${displayName || "user"}`}
-        width={128}
-        height={128}
         className="rounded-full object-cover w-full h-full shadow-lg ring-4 ring-white"
         onLoad={() => setImageLoading(false)}
         onError={() => {
           setImageError(true);
           setImageLoading(false);
         }}
-        priority
       />
     </div>
   );
