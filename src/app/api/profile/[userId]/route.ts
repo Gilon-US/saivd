@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, context: {params: Promise<{userI
     // Fetch public profile data - only safe fields
     const {data: profile, error} = await supabase
       .from("profiles")
-      .select("id, display_name, bio, photo, created_at, numeric_user_id")
+      .select("id, display_name, bio, photo, created_at, numeric_user_id, twitter_url, instagram_url, facebook_url, youtube_url, tiktok_url, website_url")
       .eq("numeric_user_id", numericUserId)
       .single();
 
@@ -52,10 +52,20 @@ export async function GET(request: NextRequest, context: {params: Promise<{userI
     }
 
     // Success response with profile data
-    return NextResponse.json({
-      success: true,
-      data: profile,
-    });
+    // Add cache control headers to prevent stale data
+    return NextResponse.json(
+      {
+        success: true,
+        data: profile,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     // Log unexpected errors
     console.error("Unexpected error in profile API:", error);

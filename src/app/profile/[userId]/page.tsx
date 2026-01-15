@@ -11,6 +11,12 @@ interface PublicProfile {
   bio: string | null;
   photo: string | null;
   created_at?: string;
+  twitter_url?: string | null;
+  instagram_url?: string | null;
+  facebook_url?: string | null;
+  youtube_url?: string | null;
+  tiktok_url?: string | null;
+  website_url?: string | null;
 }
 
 /**
@@ -40,7 +46,9 @@ export default function PublicProfilePage() {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/profile/${userId}`);
+        const response = await fetch(`/api/profile/${userId}`, {
+          cache: 'no-store', // Prevent caching to ensure fresh data
+        });
         const data = await response.json();
 
         if (data.success) {

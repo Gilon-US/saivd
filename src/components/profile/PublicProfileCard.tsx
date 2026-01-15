@@ -11,6 +11,12 @@ interface PublicProfile {
   bio: string | null;
   photo: string | null;
   created_at?: string;
+  twitter_url?: string | null;
+  instagram_url?: string | null;
+  facebook_url?: string | null;
+  youtube_url?: string | null;
+  tiktok_url?: string | null;
+  website_url?: string | null;
 }
 
 interface PublicProfileCardProps {
@@ -73,36 +79,66 @@ export function PublicProfileCard({profile}: PublicProfileCardProps) {
 
             <div className="flex items-center justify-center gap-3 text-gray-700 dark:text-gray-200">
               <span className="sr-only">Social links</span>
-              <div
-                className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center"
-                aria-hidden="true">
-                <Twitter className="h-4 w-4" />
-              </div>
-              <div
-                className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center"
-                aria-hidden="true">
-                <Instagram className="h-4 w-4" />
-              </div>
-              <div
-                className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center"
-                aria-hidden="true">
-                <Facebook className="h-4 w-4" />
-              </div>
-              <div
-                className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center"
-                aria-hidden="true">
-                <Youtube className="h-4 w-4" />
-              </div>
-              <div
-                className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center"
-                aria-hidden="true">
-                <LinkIcon className="h-4 w-4" />
-              </div>
-              <div
-                className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center"
-                aria-hidden="true">
-                <Globe className="h-4 w-4" />
-              </div>
+              {profile.twitter_url && (
+                <a
+                  href={profile.twitter_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center hover:bg-gray-800 transition-colors"
+                  aria-label="Twitter profile">
+                  <Twitter className="h-4 w-4" />
+                </a>
+              )}
+              {profile.instagram_url && (
+                <a
+                  href={profile.instagram_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center hover:bg-gray-800 transition-colors"
+                  aria-label="Instagram profile">
+                  <Instagram className="h-4 w-4" />
+                </a>
+              )}
+              {profile.facebook_url && (
+                <a
+                  href={profile.facebook_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center hover:bg-gray-800 transition-colors"
+                  aria-label="Facebook profile">
+                  <Facebook className="h-4 w-4" />
+                </a>
+              )}
+              {profile.youtube_url && (
+                <a
+                  href={profile.youtube_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center hover:bg-gray-800 transition-colors"
+                  aria-label="YouTube channel">
+                  <Youtube className="h-4 w-4" />
+                </a>
+              )}
+              {profile.tiktok_url && (
+                <a
+                  href={profile.tiktok_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center hover:bg-gray-800 transition-colors"
+                  aria-label="TikTok profile">
+                  <LinkIcon className="h-4 w-4" />
+                </a>
+              )}
+              {profile.website_url && (
+                <a
+                  href={profile.website_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 w-8 rounded-md bg-black text-white flex items-center justify-center hover:bg-gray-800 transition-colors"
+                  aria-label="Website">
+                  <Globe className="h-4 w-4" />
+                </a>
+              )}
             </div>
           </div>
         </div>
