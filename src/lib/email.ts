@@ -16,8 +16,8 @@ import nodemailer from 'nodemailer';
 const createTransporter = () => {
   const host = process.env.SES_SMTP_HOST;
   const port = parseInt(process.env.SES_SMTP_PORT || '587', 10);
-  const user = process.env.SES_SMTP_USER;
-  const pass = process.env.SES_SMTP_PASS;
+  let user = process.env.SES_SMTP_USER;
+  let pass = process.env.SES_SMTP_PASS;
 
   if (!host || !user || !pass) {
     throw new Error(
@@ -25,8 +25,32 @@ const createTransporter = () => {
     );
   }
 
+  // Trim whitespace that might cause authentication issues
+  user = user.trim();
+  pass = pass.trim();
+
+  // Validate host format (should be email-smtp.{region}.amazonaws.com)
+  if (!host.includes('email-smtp.') || !host.includes('.amazonaws.com')) {
+    console.warn('[Email] Warning: SES_SMTP_HOST does not match expected format (email-smtp.{region}.amazonaws.com)');
+  }
+
+  // Validate port
+  if (port !== 25 && port !== 465 && port !== 587 && port !== 2465 && port !== 2587) {
+    console.warn('[Email] Warning: SES_SMTP_PORT should typically be 587 (STARTTLS) or 465 (SSL)');
+  }
+
   // Port 465 uses SSL, ports 25/587 use STARTTLS
   const secure = port === 465;
+
+  // Log configuration (without sensitive data) for debugging
+  console.log('[Email] Creating SMTP transporter', {
+    host,
+    port,
+    secure,
+    userLength: user.length,
+    passLength: pass.length,
+    userPrefix: user.substring(0, 4) + '...',
+  });
 
   return nodemailer.createTransport({
     host,
@@ -40,6 +64,12 @@ const createTransporter = () => {
       // Reject unauthorized certificates
       rejectUnauthorized: true,
     },
+    // Add connection timeout
+    connectionTimeout: 10000, // 10 seconds
+    // Add greeting timeout
+    greetingTimeout: 10000, // 10 seconds
+    // Add socket timeout
+    socketTimeout: 10000, // 10 seconds
   });
 };
 
@@ -72,6 +102,10 @@ export async function sendEmail({
   const transporter = createTransporter();
 
   try {
+    // Verify connection before sending
+    await transporter.verify();
+    console.log('[Email] SMTP connection verified successfully');
+
     const info = await transporter.sendMail({
       from: `${fromName} <${fromEmail}>`,
       to,
@@ -88,11 +122,39 @@ export async function sendEmail({
 
     return info;
   } catch (error) {
+    // Enhanced error logging for authentication issues
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorCode = error instanceof Error && 'code' in error ? String((error as Error & { code?: unknown }).code) : undefined;
+    const errorResponse = error instanceof Error && 'response' in error ? (error as Error & { response?: { code?: unknown } }).response : undefined;
+    const errorResponseCode = errorResponse && 'code' in errorResponse ? String(errorResponse.code) : undefined;
+
     console.error('[Email] Error sending email:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: errorMessage,
+      errorCode,
+      errorResponseCode,
       to,
       subject,
+      host: process.env.SES_SMTP_HOST,
+      port: process.env.SES_SMTP_PORT,
+      // Don't log credentials, but log if they exist
+      hasUser: !!process.env.SES_SMTP_USER,
+      hasPass: !!process.env.SES_SMTP_PASS,
+      userLength: process.env.SES_SMTP_USER?.length,
     });
+
+    // Provide helpful error messages for common issues
+    if (errorMessage.includes('535') || errorMessage.includes('Authentication') || errorMessage.includes('Invalid login')) {
+      const troubleshootingTips = [
+        '1. Verify SMTP credentials were generated via SES Console → SMTP Settings → Create SMTP Credentials',
+        '2. Ensure SES_SMTP_HOST matches the region where credentials were created (e.g., email-smtp.us-east-1.amazonaws.com)',
+        '3. Check for extra spaces or special characters in SES_SMTP_USER or SES_SMTP_PASS',
+        '4. Verify the "From" email address (SES_FROM_EMAIL) is verified in AWS SES',
+        '5. Ensure IAM user has ses:SendEmail and ses:SendRawEmail permissions',
+        '6. Try regenerating SMTP credentials if they are old or may have been rotated',
+      ];
+      console.error('[Email] Troubleshooting tips for authentication error:', troubleshootingTips);
+    }
+
     throw error;
   }
 }
