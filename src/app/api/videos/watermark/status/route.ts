@@ -127,7 +127,7 @@ export async function GET() {
       try {
         const {data: video, error: fetchError} = await supabase
           .from("videos")
-          .select("id, user_id, original_thumbnail_url")
+          .select("id, user_id, filename, original_thumbnail_url, notification_sent_at")
           .eq("user_id", user.id)
           .eq("original_url", originalKey)
           .single();
@@ -161,6 +161,49 @@ export async function GET() {
             videoId: video.id,
             processedUrl: job.pathKey,
           });
+
+          // Send email notification if not already sent
+          if (!video.notification_sent_at && video.filename) {
+            try {
+              // Get user's display name from profile (optional)
+              const {data: profile} = await supabase
+                .from("profiles")
+                .select("display_name")
+                .eq("id", user.id)
+                .single();
+
+              // Import email function dynamically to avoid loading issues if env vars are missing
+              const {sendWatermarkCompleteEmail} = await import("@/lib/email");
+              
+              await sendWatermarkCompleteEmail(
+                user.email || '',
+                video.filename,
+                profile?.display_name || null
+              );
+
+              // Update notification_sent_at timestamp
+              await supabase
+                .from("videos")
+                .update({
+                  notification_sent_at: new Date().toISOString(),
+                })
+                .eq("id", video.id)
+                .eq("user_id", user.id);
+
+              console.log("[Watermark] Successfully sent completion email", {
+                videoId: video.id,
+                filename: video.filename,
+                userEmail: user.email,
+              });
+            } catch (emailError) {
+              console.error("[Watermark] Failed to send completion email", {
+                videoId: video.id,
+                filename: video.filename,
+                error: emailError instanceof Error ? emailError.message : 'Unknown error',
+              });
+              // Don't fail the video update - email is nice-to-have
+            }
+          }
         }
       } catch (e) {
         console.error("[Watermark] Unexpected error while updating video for completed job", {
