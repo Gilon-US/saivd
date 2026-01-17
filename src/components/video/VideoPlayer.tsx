@@ -112,14 +112,14 @@ export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnal
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-2 sm:p-4">
       <div className="relative w-full max-w-5xl">
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+          className="absolute -top-10 sm:-top-12 right-0 sm:right-2 text-white hover:text-gray-300 transition-colors touch-manipulation z-30"
           aria-label="Close video player">
-          <X className="w-8 h-8" />
+          <X className="w-6 h-6 sm:w-8 sm:h-8" />
         </button>
 
         {/* Video container */}
@@ -156,11 +156,21 @@ export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnal
 
           {/* QR overlay – shown when we have a verified user ID or frame analysis returns a QR URL.
               The image itself is served from the public profile QR route, which
-              ultimately reads the QR PNG from Wasabi. */}
+              ultimately reads the QR PNG from Wasabi. 
+              Uses responsive sizing for consistent display across all devices. */}
           {qrUrl && isPlaybackAllowed && (
-            <div className="absolute top-2 left-2 pointer-events-none z-10">
+            <div className="absolute top-2 left-2 sm:top-4 sm:left-4 pointer-events-none z-10">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={qrUrl} alt="Creator QR code" className="w-16 h-16 object-contain rounded-md shadow-md" />
+              <img 
+                src={qrUrl} 
+                alt="Creator QR code" 
+                className="object-contain rounded-md shadow-lg bg-white/90 p-1" 
+                style={{
+                  aspectRatio: '1 / 1',
+                  width: 'clamp(48px, 12vw, 80px)',
+                  height: 'clamp(48px, 12vw, 80px)',
+                }}
+              />
             </div>
           )}
 
