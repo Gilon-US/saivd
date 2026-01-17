@@ -49,7 +49,7 @@ export default function VideosPage() {
           </Button>
           <Button size="sm" onClick={handleOpenUploadModal}>
             <UploadIcon className="h-4 w-4 mr-2" />
-            Upload Video
+            Upload A Video
           </Button>
         </div>
       </div>

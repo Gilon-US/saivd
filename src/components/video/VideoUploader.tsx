@@ -208,7 +208,7 @@ export function VideoUploader({
             ) : (
               <>
                 <UploadIcon className="mr-2 h-4 w-4" />
-                Upload Video
+                Upload Now
               </>
             )}
           </Button>
