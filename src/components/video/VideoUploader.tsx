@@ -26,6 +26,7 @@ export function VideoUploader({
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploadId, setUploadId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   
   const { uploadVideo, cancelUpload, uploads } = useVideoUpload();
   
@@ -54,13 +55,14 @@ export function VideoUploader({
   };
   
   const handleUpload = async () => {
-    if (!selectedVideo) return;
+    if (!selectedVideo || isUploading) return;
     
     const id = uuidv4();
     setUploadId(id);
+    setIsUploading(true);
+    setError(null);
     
     try {
-      setError(null);
       const result = await uploadVideo(selectedVideo);
       
       if (onUploadComplete) {
@@ -75,6 +77,9 @@ export function VideoUploader({
       } else {
         setError('An unknown error occurred during upload');
       }
+    } finally {
+      setIsUploading(false);
+      setUploadId(null);
     }
   };
   
@@ -82,11 +87,13 @@ export function VideoUploader({
     if (uploadId) {
       cancelUpload(uploadId);
       setUploadId(null);
+      setIsUploading(false);
     }
   };
   
   const currentUpload = uploadId ? uploads[uploadId] : null;
-  const isUploading = currentUpload?.uploading;
+  // Use local isUploading state OR check currentUpload if available
+  const uploading = isUploading || (currentUpload?.uploading ?? false);
   
   // Helper function to format file size
   const formatFileSize = (bytes: number): string => {
@@ -141,7 +148,7 @@ export function VideoUploader({
         onFilesSelected={handleFilesSelected}
       />
       
-      {videoPreviewUrl && selectedVideo && !isUploading && (
+      {videoPreviewUrl && selectedVideo && !uploading && (
         <Card>
           <CardContent className="p-4">
             <h3 className="font-medium mb-2">Video Preview</h3>
@@ -166,15 +173,15 @@ export function VideoUploader({
           <Button 
             variant="outline" 
             onClick={() => setSelectedVideo(null)}
-            disabled={isUploading}
+            disabled={uploading}
           >
             Cancel
           </Button>
           <Button 
             onClick={handleUpload}
-            disabled={isUploading}
+            disabled={uploading}
           >
-            {isUploading ? (
+            {uploading ? (
               <>
                 <LoadingSpinner size="sm" className="mr-2" />
                 Uploading...
@@ -189,7 +196,7 @@ export function VideoUploader({
         </div>
       )}
       
-      {isUploading && currentUpload && (
+      {uploading && currentUpload && (
         <Card>
           <CardContent className="p-6">
             <div className="space-y-4">
