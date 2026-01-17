@@ -123,10 +123,26 @@ export async function sendEmail({
     return info;
   } catch (error) {
     // Enhanced error logging for authentication issues
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorCode = error instanceof Error && 'code' in error ? String((error as Error & { code?: unknown }).code) : undefined;
-    const errorResponse = error instanceof Error && 'response' in error ? (error as Error & { response?: { code?: unknown } }).response : undefined;
-    const errorResponseCode = errorResponse && 'code' in errorResponse ? String(errorResponse.code) : undefined;
+    let errorMessage = 'Unknown error';
+    let errorCode: string | undefined;
+    let errorResponseCode: string | undefined;
+
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      // Safely check for code property
+      if (error && typeof error === 'object' && 'code' in error) {
+        errorCode = String((error as { code?: unknown }).code);
+      }
+      // Safely check for response property
+      if (error && typeof error === 'object' && 'response' in error) {
+        const response = (error as { response?: { code?: unknown } }).response;
+        if (response && typeof response === 'object' && 'code' in response) {
+          errorResponseCode = String(response.code);
+        }
+      }
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
 
     console.error('[Email] Error sending email:', {
       error: errorMessage,
