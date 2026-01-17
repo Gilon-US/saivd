@@ -67,6 +67,7 @@ export default function VideosPage() {
         isOpen={isUploadModalOpen}
         onClose={handleCloseUploadModal}
         onUploadComplete={handleUploadComplete}
+        existingVideos={videos}
       />
     </div>
   );

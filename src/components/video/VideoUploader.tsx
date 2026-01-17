@@ -9,18 +9,32 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useVideoUpload, UploadResult, UploadPhase } from '@/hooks/useVideoUpload';
 import { v4 as uuidv4 } from 'uuid';
-import { UploadIcon, CheckCircleIcon, AlertCircleIcon } from 'lucide-react';
+import { UploadIcon, CheckCircleIcon, AlertCircleIcon, AlertTriangleIcon } from 'lucide-react';
+
+export type Video = {
+  id: string;
+  filename: string;
+  original_url: string;
+  original_thumbnail_url: string;
+  preview_thumbnail_data: string | null;
+  processed_url: string | null;
+  processed_thumbnail_url: string | null;
+  status: "uploaded" | "processing" | "processed" | "failed";
+  upload_date: string;
+};
 
 type VideoUploaderProps = {
   onUploadComplete?: (result: UploadResult) => void;
   className?: string;
   maxSize?: number;
+  existingVideos?: Video[];
 };
 
 export function VideoUploader({ 
   onUploadComplete, 
   className = '',
   maxSize = 500 * 1024 * 1024, // 500MB
+  existingVideos = [],
 }: VideoUploaderProps) {
   const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
@@ -29,6 +43,11 @@ export function VideoUploader({
   const [isUploading, setIsUploading] = useState(false);
   
   const { uploadVideo, cancelUpload, uploads } = useVideoUpload();
+  
+  // Check if selected video filename already exists
+  const hasDuplicateFilename = selectedVideo 
+    ? existingVideos.some(video => video.filename === selectedVideo.name)
+    : false;
   
   // Generate video thumbnail when a video is selected
   useEffect(() => {
@@ -273,8 +292,19 @@ export function VideoUploader({
         </Card>
       )}
       
+      {hasDuplicateFilename && selectedVideo && (
+        <Alert variant="default" className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20">
+          <AlertTriangleIcon className="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
+          <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+            You already have a video with the filename <strong>&ldquo;{selectedVideo.name}&rdquo;</strong> in your video list. 
+            This upload will create a new video with the same name. Consider renaming the file before uploading to avoid confusion.
+          </AlertDescription>
+        </Alert>
+      )}
+      
       {error && (
         <Alert variant="destructive">
+          <AlertCircleIcon className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}

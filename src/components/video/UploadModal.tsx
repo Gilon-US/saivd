@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { VideoUploader } from '@/components/video/VideoUploader';
+import { VideoUploader, Video } from '@/components/video/VideoUploader';
 import { Button } from '@/components/ui/button';
 import { XIcon } from 'lucide-react';
 import { UploadResult } from '@/hooks/useVideoUpload';
@@ -10,9 +10,10 @@ type UploadModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onUploadComplete: (result: UploadResult) => void;
+  existingVideos?: Video[];
 };
 
-export function UploadModal({ isOpen, onClose, onUploadComplete }: UploadModalProps) {
+export function UploadModal({ isOpen, onClose, onUploadComplete, existingVideos = [] }: UploadModalProps) {
   const [uploadComplete, setUploadComplete] = useState(false);
   
   const handleUploadComplete = (result: UploadResult) => {
@@ -47,7 +48,7 @@ export function UploadModal({ isOpen, onClose, onUploadComplete }: UploadModalPr
               <p className="text-gray-500 dark:text-gray-400 mb-4">
                 Select a video to upload. Supported formats: MP4, MOV, AVI, WEBM. Maximum file size: 500MB.
               </p>
-              <VideoUploader onUploadComplete={handleUploadComplete} />
+              <VideoUploader onUploadComplete={handleUploadComplete} existingVideos={existingVideos} />
             </div>
           ) : (
             <div className="text-center py-4">
