@@ -74,7 +74,7 @@ export function VideoUploader({
   };
   
   const handleUpload = async () => {
-    if (!selectedVideo || isUploading) return;
+    if (!selectedVideo || isUploading || hasDuplicateFilename) return;
     
     const id = uuidv4();
     setUploadId(id);
@@ -198,7 +198,7 @@ export function VideoUploader({
           </Button>
           <Button 
             onClick={handleUpload}
-            disabled={uploading}
+            disabled={uploading || hasDuplicateFilename}
           >
             {uploading ? (
               <>
@@ -293,11 +293,11 @@ export function VideoUploader({
       )}
       
       {hasDuplicateFilename && selectedVideo && (
-        <Alert variant="default" className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20">
-          <AlertTriangleIcon className="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
-          <AlertDescription className="text-yellow-800 dark:text-yellow-200">
-            You already have a video with the filename <strong>&ldquo;{selectedVideo.name}&rdquo;</strong> in your video list. 
-            This upload will create a new video with the same name. Consider renaming the file before uploading to avoid confusion.
+        <Alert variant="destructive">
+          <AlertCircleIcon className="h-4 w-4" />
+          <AlertDescription>
+            You cannot upload a file with the filename <strong>&ldquo;{selectedVideo.name}&rdquo;</strong> because you already have a video with this name in your video list. 
+            Please select a different file or rename the file before uploading.
           </AlertDescription>
         </Alert>
       )}
