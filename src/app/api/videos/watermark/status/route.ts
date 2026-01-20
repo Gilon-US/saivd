@@ -38,7 +38,29 @@ export async function GET() {
       );
     }
 
-    const queueStatusUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/queue_status`;
+    // Fetch user's numeric_user_id from profile
+    const {data: profile, error: profileError} = await supabase
+      .from("profiles")
+      .select("numeric_user_id")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile?.numeric_user_id) {
+      console.error("[Watermark] Failed to fetch user's numeric_user_id", {profileError});
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "user_profile_error",
+            message: "Failed to fetch user profile",
+          },
+        },
+        {status: 500}
+      );
+    }
+
+    const numericUserId = profile.numeric_user_id;
+    const queueStatusUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/queue_status/${numericUserId}`;
 
     const response = await fetch(queueStatusUrl, {
       method: "GET",
@@ -219,7 +241,7 @@ export async function GET() {
     
     if (allJobsCompleted) {
       try {
-        const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue`;
+        const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue/${numericUserId}`;
         const clearQueueResponse = await fetch(clearQueueUrl, {
           method: "POST",
           headers: {
