@@ -150,9 +150,12 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
         : null,
     };
 
-    console.log("[Watermark] Sending request to external service", {
+    console.log(`[Watermark] Sending request to external service - URL: ${watermarkServiceUrl}`);
+    console.log("[Watermark] External service request details", {
       url: watermarkServiceUrl,
       body: safeLogBody,
+      numericUserId: profile.numeric_user_id,
+      method: "POST",
     });
 
     const timeoutMsEnv = process.env.WATERMARK_TIMEOUT_MS;
@@ -174,7 +177,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       });
     } catch (error: unknown) {
       if (error instanceof Error && error.name === "AbortError") {
-        console.error("[Watermark] External service request timed out", {timeoutMs});
+        console.error(`[Watermark] External service request timed out - URL: ${watermarkServiceUrl}`, {timeoutMs});
         return NextResponse.json(
           {
             success: false,
@@ -192,9 +195,13 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     }
 
     const rawText = await response.text();
-    console.log("[Watermark] Received response from external service", {
+    console.log(`[Watermark] Received response from external service - URL: ${watermarkServiceUrl}`);
+    console.log("[Watermark] External service response details", {
+      url: watermarkServiceUrl,
       status: response.status,
       statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+      bodyLength: rawText?.length || 0,
       body: rawText,
     });
 

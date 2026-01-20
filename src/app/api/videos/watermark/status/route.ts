@@ -39,6 +39,11 @@ export async function GET() {
     }
 
     // Fetch user's numeric_user_id from profile
+    console.log("[Watermark] Fetching user's numeric_user_id", {
+      userId: user.id,
+      email: user.email,
+    });
+
     const {data: profile, error: profileError} = await supabase
       .from("profiles")
       .select("numeric_user_id")
@@ -46,7 +51,11 @@ export async function GET() {
       .single();
 
     if (profileError || !profile?.numeric_user_id) {
-      console.error("[Watermark] Failed to fetch user's numeric_user_id", {profileError});
+      console.error("[Watermark] Failed to fetch user's numeric_user_id", {
+        profileError,
+        profileData: profile,
+        userId: user.id,
+      });
       return NextResponse.json(
         {
           success: false,
@@ -60,16 +69,33 @@ export async function GET() {
     }
 
     const numericUserId = profile.numeric_user_id;
+    console.log("[Watermark] Successfully fetched numeric_user_id", {
+      userId: user.id,
+      numericUserId,
+    });
+
     const queueStatusUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/queue_status/${numericUserId}`;
+    console.log(`[Watermark] Calling queue_status endpoint - URL: ${queueStatusUrl}`);
+    console.log("[Watermark] queue_status request details", {
+      url: queueStatusUrl,
+      numericUserId,
+      watermarkServiceUrl,
+      method: "GET",
+    });
 
     const response = await fetch(queueStatusUrl, {
       method: "GET",
     });
 
     const rawText = await response.text();
-    console.log("[Watermark] Received queue_status response", {
+    console.log(`[Watermark] Received queue_status response from URL: ${queueStatusUrl}`);
+    console.log("[Watermark] queue_status response details", {
+      url: queueStatusUrl,
+      numericUserId,
       status: response.status,
       statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+      bodyLength: rawText?.length || 0,
       body: rawText,
     });
 
@@ -240,8 +266,18 @@ export async function GET() {
     const allJobsCompleted = jobs.length > 0 && jobs.every((job) => job.status === "completed" || job.status === "success");
     
     if (allJobsCompleted) {
+      const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue/${numericUserId}`;
       try {
-        const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue/${numericUserId}`;
+        console.log(`[Watermark] Calling clear_queue endpoint - URL: ${clearQueueUrl}`);
+        console.log("[Watermark] clear_queue request details", {
+          url: clearQueueUrl,
+          numericUserId,
+          watermarkServiceUrl,
+          method: "POST",
+          allJobsCompleted,
+          jobsCount: jobs.length,
+        });
+
         const clearQueueResponse = await fetch(clearQueueUrl, {
           method: "POST",
           headers: {
@@ -249,17 +285,36 @@ export async function GET() {
           },
         });
 
+        const clearQueueResponseText = await clearQueueResponse.text();
+        
         if (clearQueueResponse.ok) {
-          console.log("[Watermark] Successfully cleared watermarking queue after all jobs completed");
+          console.log(`[Watermark] Successfully cleared watermarking queue - URL: ${clearQueueUrl}`);
+          console.log("[Watermark] clear_queue success details", {
+            url: clearQueueUrl,
+            numericUserId,
+            status: clearQueueResponse.status,
+            responseText: clearQueueResponseText,
+          });
         } else {
-          console.warn("[Watermark] Failed to clear watermarking queue", {
+          console.warn(`[Watermark] Failed to clear watermarking queue - URL: ${clearQueueUrl}`);
+          console.warn("[Watermark] clear_queue failure details", {
+            url: clearQueueUrl,
+            numericUserId,
             status: clearQueueResponse.status,
             statusText: clearQueueResponse.statusText,
+            headers: Object.fromEntries(clearQueueResponse.headers.entries()),
+            responseText: clearQueueResponseText,
           });
           // Don't fail the request if clear_queue fails - this is a cleanup operation
         }
       } catch (clearQueueError) {
-        console.error("[Watermark] Error calling clear_queue", clearQueueError);
+        console.error(`[Watermark] Error calling clear_queue - URL: ${clearQueueUrl}`);
+        console.error("[Watermark] clear_queue error details", {
+          url: clearQueueUrl,
+          numericUserId,
+          error: clearQueueError instanceof Error ? clearQueueError.message : String(clearQueueError),
+          errorStack: clearQueueError instanceof Error ? clearQueueError.stack : undefined,
+        });
         // Don't fail the request if clear_queue fails - this is a cleanup operation
       }
     }
