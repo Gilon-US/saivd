@@ -74,7 +74,7 @@ export async function GET() {
       numericUserId,
     });
 
-    const queueStatusUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/queue_status/${numericUserId}`;
+    const queueStatusUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/queue_status`;
     const requestBody = {
       user_id: numericUserId,
     };
