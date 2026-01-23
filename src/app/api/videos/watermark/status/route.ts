@@ -75,16 +75,25 @@ export async function GET() {
     });
 
     const queueStatusUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/queue_status/${numericUserId}`;
+    const requestBody = {
+      user_id: numericUserId,
+    };
+    
     console.log(`[Watermark] Calling queue_status endpoint - URL: ${queueStatusUrl}`);
     console.log("[Watermark] queue_status request details", {
       url: queueStatusUrl,
       numericUserId,
       watermarkServiceUrl,
-      method: "GET",
+      method: "POST",
+      body: requestBody,
     });
 
     const response = await fetch(queueStatusUrl, {
-      method: "GET",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
     });
 
     const rawText = await response.text();
