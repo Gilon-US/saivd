@@ -119,10 +119,9 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
     }
 
     // Call watermark service extract_user_id endpoint
-    // Request body contains:
-    // - video_name: Full S3 key path including file extension
-    // - frame_index: Frame index to analyze (optional, default: 0)
-    // - bucket: S3 bucket name
+    // According to API docs: POST /extract_user_id
+    // Request body: { video_name: string, frame_index?: number, bucket?: string }
+    // video_name can be just the filename (without .mp4 extension) or full S3 key path
     const extractUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/extract_user_id`;
 
     const requestBody = {
@@ -131,11 +130,13 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
       bucket: WASABI_BUCKET,
     };
 
-    console.log("[ExtractUserId] Calling watermark service", {
+    console.log(`[ExtractUserId] Calling extract_user_id endpoint - URL: ${extractUrl}`);
+    console.log("[ExtractUserId] extract_user_id request details", {
       url: extractUrl,
       body: requestBody,
       videoKey,
       videoName,
+      method: "POST",
     });
 
     const response = await fetch(extractUrl, {
@@ -147,9 +148,13 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
     });
 
     const rawText = await response.text();
-    console.log("[ExtractUserId] Received response from watermark service", {
+    console.log(`[ExtractUserId] Received response from extract_user_id - URL: ${extractUrl}`);
+    console.log("[ExtractUserId] extract_user_id response details", {
+      url: extractUrl,
       status: response.status,
       statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+      bodyLength: rawText?.length || 0,
       body: rawText,
     });
 
