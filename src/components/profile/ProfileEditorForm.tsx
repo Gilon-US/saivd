@@ -14,22 +14,38 @@ const BIO_MAX = 500;
 const DISPLAY_NAME_MIN = 2;
 const DISPLAY_NAME_MAX = 100;
 
+function getProfileDefaults(profile: { display_name?: string | null; photo?: string | null; bio?: string | null; twitter_url?: string | null; instagram_url?: string | null; facebook_url?: string | null; youtube_url?: string | null; tiktok_url?: string | null; website_url?: string | null } | null) {
+  return {
+    displayName: profile?.display_name ?? "",
+    photo: profile?.photo ?? "",
+    bio: profile?.bio ?? "",
+    twitterUrl: profile?.twitter_url ?? "",
+    instagramUrl: profile?.instagram_url ?? "",
+    facebookUrl: profile?.facebook_url ?? "",
+    youtubeUrl: profile?.youtube_url ?? "",
+    tiktokUrl: profile?.tiktok_url ?? "",
+    websiteUrl: profile?.website_url ?? "",
+  };
+}
+
 export function ProfileEditorForm() {
   const { user } = useAuth();
   const { profile, loading, error, updateProfile } = useProfile();
 
-  const [displayName, setDisplayName] = useState("");
-  const [photo, setPhoto] = useState("");
-  const [bio, setBio] = useState("");
-  const [twitterUrl, setTwitterUrl] = useState("");
-  const [instagramUrl, setInstagramUrl] = useState("");
-  const [facebookUrl, setFacebookUrl] = useState("");
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [tiktokUrl, setTiktokUrl] = useState("");
-  const [websiteUrl, setWebsiteUrl] = useState("");
+  const defaults = getProfileDefaults(profile);
+  const [displayName, setDisplayName] = useState(defaults.displayName);
+  const [photo, setPhoto] = useState(defaults.photo);
+  const [bio, setBio] = useState(defaults.bio);
+  const [twitterUrl, setTwitterUrl] = useState(defaults.twitterUrl);
+  const [instagramUrl, setInstagramUrl] = useState(defaults.instagramUrl);
+  const [facebookUrl, setFacebookUrl] = useState(defaults.facebookUrl);
+  const [youtubeUrl, setYoutubeUrl] = useState(defaults.youtubeUrl);
+  const [tiktokUrl, setTiktokUrl] = useState(defaults.tiktokUrl);
+  const [websiteUrl, setWebsiteUrl] = useState(defaults.websiteUrl);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Sync form state when profile loads or updates (e.g. after save or when navigating with profile already in context)
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.display_name ?? "");
