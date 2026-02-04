@@ -164,6 +164,18 @@ export async function GET() {
   }
 }
 
+// Optional URL validator: if present and non-empty, must be a valid URL
+function isValidUrlOrEmpty(value: unknown): boolean {
+  if (value == null || value === "") return true;
+  if (typeof value !== "string") return false;
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // PUT /api/profile
 export async function PUT(request: Request) {
   try {
@@ -177,29 +189,83 @@ export async function PUT(request: Request) {
       return NextResponse.json({success: false, error: "Authentication required"}, {status: 401});
     }
 
-    // Get and validate request body
     const body = await request.json();
-    const {display_name, bio} = body;
+    const {
+      display_name,
+      bio,
+      photo,
+      avatar_url,
+      twitter_url,
+      instagram_url,
+      facebook_url,
+      youtube_url,
+      tiktok_url,
+      website_url,
+    } = body;
 
-    // Simple validation
-    if (display_name && display_name.length < 2) {
-      return NextResponse.json({success: false, error: "Display name must be at least 2 characters"}, {status: 400});
+    if (display_name !== undefined) {
+      const trimmed = typeof display_name === "string" ? display_name.trim() : "";
+      if (trimmed.length < 2) {
+        return NextResponse.json(
+          {success: false, error: "Display name must be at least 2 characters"},
+          {status: 400}
+        );
+      }
+      if (trimmed.length > 100) {
+        return NextResponse.json(
+          {success: false, error: "Display name cannot exceed 100 characters"},
+          {status: 400}
+        );
+      }
     }
 
-    if (bio && bio.length > 500) {
-      return NextResponse.json({success: false, error: "Bio cannot exceed 500 characters"}, {status: 400});
+    if (bio !== undefined && bio != null && String(bio).length > 500) {
+      return NextResponse.json(
+        {success: false, error: "Bio cannot exceed 500 characters"},
+        {status: 400}
+      );
     }
 
-    // Update profile
+    const urlFields = [
+      {key: "photo", value: photo},
+      {key: "avatar_url", value: avatar_url},
+      {key: "twitter_url", value: twitter_url},
+      {key: "instagram_url", value: instagram_url},
+      {key: "facebook_url", value: facebook_url},
+      {key: "youtube_url", value: youtube_url},
+      {key: "tiktok_url", value: tiktok_url},
+      {key: "website_url", value: website_url},
+    ];
+    for (const {key, value} of urlFields) {
+      if (!isValidUrlOrEmpty(value)) {
+        return NextResponse.json(
+          {success: false, error: `${key.replace(/_/g, " ")} must be a valid URL or empty`},
+          {status: 400}
+        );
+      }
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (display_name !== undefined) updatePayload.display_name = String(display_name).trim();
+    if (bio !== undefined) updatePayload.bio = bio == null ? null : String(bio).trim() || null;
+    if (photo !== undefined) updatePayload.photo = photo == null ? null : String(photo).trim() || null;
+    if (avatar_url !== undefined) updatePayload.avatar_url = avatar_url == null ? null : String(avatar_url).trim() || null;
+    if (twitter_url !== undefined) updatePayload.twitter_url = twitter_url == null ? null : String(twitter_url).trim() || null;
+    if (instagram_url !== undefined) updatePayload.instagram_url = instagram_url == null ? null : String(instagram_url).trim() || null;
+    if (facebook_url !== undefined) updatePayload.facebook_url = facebook_url == null ? null : String(facebook_url).trim() || null;
+    if (youtube_url !== undefined) updatePayload.youtube_url = youtube_url == null ? null : String(youtube_url).trim() || null;
+    if (tiktok_url !== undefined) updatePayload.tiktok_url = tiktok_url == null ? null : String(tiktok_url).trim() || null;
+    if (website_url !== undefined) updatePayload.website_url = website_url == null ? null : String(website_url).trim() || null;
+
     const {data: profile, error} = await supabase
       .from("profiles")
-      .update({
-        display_name,
-        bio,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", user.id)
-      .select()
+      .select(
+        "id, email, display_name, avatar_url, photo, bio, numeric_user_id, twitter_url, instagram_url, facebook_url, youtube_url, tiktok_url, website_url, role, created_at, updated_at"
+      )
       .single();
 
     if (error) {
