@@ -31,11 +31,6 @@ function DashboardShell({children}: DashboardLayoutProps) {
                   className="px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
                   Profile
                 </Link>
-                <Link
-                  href="/dashboard/profile/edit"
-                  className="px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
-                  Edit profile
-                </Link>
                 {isAdmin && (
                   <Link
                     href="/dashboard/admin/users"

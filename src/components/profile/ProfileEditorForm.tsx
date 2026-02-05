@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useProfile } from "@/contexts/ProfileContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ function getProfileDefaults(profile: { display_name?: string | null; photo?: str
 }
 
 export function ProfileEditorForm() {
+  const router = useRouter();
   const { user } = useAuth();
   const { profile, loading, error, updateProfile } = useProfile();
 
@@ -107,6 +109,7 @@ export function ProfileEditorForm() {
         tiktok_url: tiktokUrl.trim() || null,
         website_url: websiteUrl.trim() || null,
       });
+      router.push("/dashboard/profile");
     } catch {
       setFormError("Failed to update profile");
     } finally {
