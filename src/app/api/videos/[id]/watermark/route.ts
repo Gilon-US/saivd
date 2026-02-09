@@ -175,6 +175,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     };
 
     console.log(`[Watermark] Sending request to external service - URL: ${watermarkServiceUrl}`);
+    console.log("[Watermark] Request body (for verification):", JSON.stringify(safeLogBody, null, 2));
     console.log("[Watermark] External service request details", {
       url: watermarkServiceUrl,
       body: safeLogBody,
