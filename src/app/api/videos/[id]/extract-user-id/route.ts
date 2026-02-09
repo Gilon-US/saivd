@@ -130,32 +130,32 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
       bucket: WASABI_BUCKET,
     };
 
-    console.log(`[ExtractUserId] Calling extract_user_id endpoint - URL: ${extractUrl}`);
-    console.log("[ExtractUserId] extract_user_id request details", {
+    const requestHeaders = {
+      "Content-Type": "application/json",
+    };
+
+    console.log("[ExtractUserId] Full request:", {
       url: extractUrl,
-      body: requestBody,
-      videoKey,
-      videoName,
       method: "POST",
+      headers: requestHeaders,
+      body: requestBody,
+      bodyRaw: JSON.stringify(requestBody),
     });
 
     const response = await fetch(extractUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: requestHeaders,
       body: JSON.stringify(requestBody),
     });
 
     const rawText = await response.text();
-    console.log(`[ExtractUserId] Received response from extract_user_id - URL: ${extractUrl}`);
-    console.log("[ExtractUserId] extract_user_id response details", {
+    console.log("[ExtractUserId] Full response:", {
       url: extractUrl,
       status: response.status,
       statusText: response.statusText,
       headers: Object.fromEntries(response.headers.entries()),
-      bodyLength: rawText?.length || 0,
       body: rawText,
+      bodyLength: rawText?.length ?? 0,
     });
 
     if (!response.ok) {
