@@ -281,12 +281,21 @@ export async function GET() {
       }
     }
 
-    // After all database updates are persisted, check if all jobs are completed
-    // If all jobs are completed, call clear_queue to avoid loading stale data
-    const allJobsCompleted = jobs.length > 0 && jobs.every((job) => job.status === "completed" || job.status === "success");
-    
+    // After all database updates are persisted, check if all jobs are completed.
+    // If so, call clear_queue so the same jobs are not returned on the next poll.
+    const allJobsCompleted =
+      jobs.length > 0 &&
+      jobs.every(
+        (job) =>
+          job.status === "completed" ||
+          job.status === "success" ||
+          job.status?.toLowerCase() === "completed" ||
+          job.status?.toLowerCase() === "success"
+      );
+
     if (allJobsCompleted) {
-      const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue/${numericUserIdForApi}`;
+      // Backend expects POST /clear_queue with body { user_id: number }, not a path parameter.
+      const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue`;
       try {
         console.log(`[Watermark] Calling clear_queue endpoint - URL: ${clearQueueUrl}`);
         console.log("[Watermark] clear_queue request details", {
@@ -303,6 +312,7 @@ export async function GET() {
           headers: {
             "Content-Type": "application/json",
           },
+          body: JSON.stringify({ user_id: numericUserIdForApi }),
         });
 
         const clearQueueResponseText = await clearQueueResponse.text();
