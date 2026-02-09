@@ -27,7 +27,7 @@ export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnal
 
   // Frame analysis hook – controlled explicitly by enableFrameAnalysis.
   // When enabled and videoId is provided, the hook will extract user ID
-  // from the video frames every 20 frames using the watermark service API.
+  // from the video frames every 10 frames using the watermark service API.
   // When disabled or videoId is not provided, the analysis function is used.
   const analysisFunction = useCallback<FrameAnalysisFunction>(() => {
     if (!enableFrameAnalysis) {

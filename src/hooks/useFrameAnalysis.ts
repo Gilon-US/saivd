@@ -125,12 +125,12 @@ export function useFrameAnalysis(
         videoTime: video.currentTime,
       };
 
-      // If we have a videoId, extract user ID every 20 frames
+      // If we have a videoId, extract user ID every 10 frames
       if (videoId && !isExtractingRef.current) {
         frameCountRef.current += 1;
         
-        // Extract user ID every 20 frames (check if we should extract on this frame)
-        if (frameCountRef.current - lastExtractionFrameRef.current >= 20) {
+        // Extract user ID every 10 frames (check if we should extract on this frame)
+        if (frameCountRef.current - lastExtractionFrameRef.current >= 10) {
           // Use the actual frame count as the frame index
           const frameIndex = frameCountRef.current;
           
