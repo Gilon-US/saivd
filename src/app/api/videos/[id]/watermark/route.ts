@@ -132,7 +132,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     // Derive an output key for the watermarked version (simple suffix before extension)
     const outputLocation = inputLocation.replace(/(\.[^./]+)$/, "-watermarked$1");
 
-    // Ensure we send profile's numeric_user_id (not user.id UUID) to external API
+    // Watermark API requires the profile's numeric_user_id (integer), never the auth user.id (UUID) or video.user_id.
     const numericUserIdForApi = Number(profile.numeric_user_id);
     if (!Number.isInteger(numericUserIdForApi)) {
       console.error("[Watermark] profile.numeric_user_id is not a valid integer", {
@@ -155,6 +155,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       input_location: inputLocation,
       output_location: outputLocation,
       client_key: rsaPrivate,
+      // Must be profile.numeric_user_id (integer), not user.id or video.user_id (UUID string).
       user_id: numericUserIdForApi,
       bucket: WASABI_BUCKET,
       async_request: true,
