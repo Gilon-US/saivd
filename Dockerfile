@@ -31,6 +31,8 @@ COPY . .
 # Disable Next.js telemetry during build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+# Required for Docker: next.config uses standalone only when this is set (Netlify leaves it unset)
+ENV USE_STANDALONE_OUTPUT=true
 
 # Build the application
 RUN npm run build
