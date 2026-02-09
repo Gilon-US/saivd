@@ -132,15 +132,38 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     // Derive an output key for the watermarked version (simple suffix before extension)
     const outputLocation = inputLocation.replace(/(\.[^./]+)$/, "-watermarked$1");
 
+    // Ensure we send profile's numeric_user_id (not user.id UUID) to external API
+    const numericUserIdForApi = Number(profile.numeric_user_id);
+    if (!Number.isInteger(numericUserIdForApi)) {
+      console.error("[Watermark] profile.numeric_user_id is not a valid integer", {
+        numeric_user_id: profile.numeric_user_id,
+        type: typeof profile.numeric_user_id,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "missing_profile_data",
+            message: "User profile has invalid numeric user ID",
+          },
+        },
+        {status: 400}
+      );
+    }
+
     const requestBody = {
       input_location: inputLocation,
       output_location: outputLocation,
       client_key: rsaPrivate,
-      user_id: profile.numeric_user_id,
+      user_id: numericUserIdForApi,
       bucket: WASABI_BUCKET,
       async_request: true,
       stream: true,
     };
+
+    console.log("[Watermark] Sending numeric_user_id to external service (last 4 digits)", {
+      numericUserIdLast4: String(numericUserIdForApi).slice(-4),
+    });
 
     // Call external watermark service (log payload with redacted keys)
     const safeLogBody = {
@@ -154,7 +177,8 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     console.log("[Watermark] External service request details", {
       url: watermarkServiceUrl,
       body: safeLogBody,
-      numericUserId: profile.numeric_user_id,
+      numericUserId: numericUserIdForApi,
+      numericUserIdLast4: String(numericUserIdForApi).slice(-4),
       method: "POST",
     });
 

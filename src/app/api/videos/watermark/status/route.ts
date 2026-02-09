@@ -68,18 +68,37 @@ export async function GET() {
       );
     }
 
+    // Use profile's numeric_user_id (not user.id UUID) for external watermark API
     const numericUserId = profile.numeric_user_id;
-    console.log("[Watermark] Successfully fetched numeric_user_id", {
+    const numericUserIdForApi = Number(numericUserId);
+    if (!Number.isInteger(numericUserIdForApi)) {
+      console.error("[Watermark] numeric_user_id is not a valid integer", {
+        numeric_user_id: numericUserId,
+        type: typeof numericUserId,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "user_profile_error",
+            message: "Invalid numeric user ID in profile",
+          },
+        },
+        {status: 500}
+      );
+    }
+    console.log("[Watermark] Successfully fetched numeric_user_id (sent to external API)", {
       userId: user.id,
-      numericUserId,
+      numericUserId: numericUserIdForApi,
+      numericUserIdLast4: String(numericUserIdForApi).slice(-4),
     });
 
-    const queueStatusUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/queue_status/${numericUserId}`;
+    const queueStatusUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/queue_status/${numericUserIdForApi}`;
     
     console.log(`[Watermark] Calling queue_status endpoint - URL: ${queueStatusUrl}`);
     console.log("[Watermark] queue_status request details", {
       url: queueStatusUrl,
-      numericUserId,
+      numericUserId: numericUserIdForApi,
       watermarkServiceUrl,
       method: "GET",
     });
@@ -92,7 +111,7 @@ export async function GET() {
     console.log(`[Watermark] Received queue_status response from URL: ${queueStatusUrl}`);
     console.log("[Watermark] queue_status response details", {
       url: queueStatusUrl,
-      numericUserId,
+      numericUserId: numericUserIdForApi,
       status: response.status,
       statusText: response.statusText,
       headers: Object.fromEntries(response.headers.entries()),
@@ -267,12 +286,12 @@ export async function GET() {
     const allJobsCompleted = jobs.length > 0 && jobs.every((job) => job.status === "completed" || job.status === "success");
     
     if (allJobsCompleted) {
-      const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue/${numericUserId}`;
+      const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue/${numericUserIdForApi}`;
       try {
         console.log(`[Watermark] Calling clear_queue endpoint - URL: ${clearQueueUrl}`);
         console.log("[Watermark] clear_queue request details", {
           url: clearQueueUrl,
-          numericUserId,
+          numericUserId: numericUserIdForApi,
           watermarkServiceUrl,
           method: "POST",
           allJobsCompleted,
@@ -292,7 +311,7 @@ export async function GET() {
           console.log(`[Watermark] Successfully cleared watermarking queue - URL: ${clearQueueUrl}`);
           console.log("[Watermark] clear_queue success details", {
             url: clearQueueUrl,
-            numericUserId,
+            numericUserId: numericUserIdForApi,
             status: clearQueueResponse.status,
             responseText: clearQueueResponseText,
           });
@@ -300,7 +319,7 @@ export async function GET() {
           console.warn(`[Watermark] Failed to clear watermarking queue - URL: ${clearQueueUrl}`);
           console.warn("[Watermark] clear_queue failure details", {
             url: clearQueueUrl,
-            numericUserId,
+            numericUserId: numericUserIdForApi,
             status: clearQueueResponse.status,
             statusText: clearQueueResponse.statusText,
             headers: Object.fromEntries(clearQueueResponse.headers.entries()),
@@ -312,7 +331,7 @@ export async function GET() {
         console.error(`[Watermark] Error calling clear_queue - URL: ${clearQueueUrl}`);
         console.error("[Watermark] clear_queue error details", {
           url: clearQueueUrl,
-          numericUserId,
+          numericUserId: numericUserIdForApi,
           error: clearQueueError instanceof Error ? clearQueueError.message : String(clearQueueError),
           errorStack: clearQueueError instanceof Error ? clearQueueError.stack : undefined,
         });
