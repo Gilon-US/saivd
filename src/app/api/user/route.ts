@@ -5,7 +5,7 @@ import { withAuth } from '@/lib/auth';
  * GET /api/user
  * Returns the current user's information
  */
-export const GET = withAuth(async (req: NextRequest, user) => {
+export const GET = withAuth(async (_req: NextRequest, user) => {
   return NextResponse.json({
     success: true,
     data: {

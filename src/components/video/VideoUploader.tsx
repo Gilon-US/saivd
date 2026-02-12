@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useVideoUpload, UploadResult, UploadPhase } from '@/hooks/useVideoUpload';
 import { v4 as uuidv4 } from 'uuid';
-import { UploadIcon, CheckCircleIcon, AlertCircleIcon, AlertTriangleIcon } from 'lucide-react';
+import { UploadIcon, CheckCircleIcon, AlertCircleIcon } from 'lucide-react';
 
 export type Video = {
   id: string;

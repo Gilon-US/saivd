@@ -82,7 +82,7 @@ describe('useFrameAnalysis', () => {
   });
 
   it('creates canvas with correct dimensions', async () => {
-    const { result } = renderHook(() => useFrameAnalysis(videoRef, true));
+    renderHook(() => useFrameAnalysis(videoRef, true));
     
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 20));

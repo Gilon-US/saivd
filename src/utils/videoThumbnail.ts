@@ -45,7 +45,7 @@ export function generateVideoThumbnail(
     let objectUrl: string | null = null;
 
     // Handle video loading errors
-    video.onerror = (e) => {
+    video.onerror = (_e) => {
       const error = video.error;
       const errorMsg = error 
         ? `Failed to load video file: ${error.message || `Error code ${error.code}`}`
@@ -68,7 +68,7 @@ export function generateVideoThumbnail(
         targetTime = Math.max(0.5, Math.min(targetTime, video.duration - 0.1));
 
         video.currentTime = targetTime;
-      } catch (err) {
+      } catch (_err) {
         if (objectUrl) URL.revokeObjectURL(objectUrl);
         reject(new Error('Failed to seek video'));
       }
@@ -153,7 +153,7 @@ export function generateVideoThumbnail(
             reject(new Error('Failed to generate thumbnail: ' + (err instanceof Error ? err.message : 'Unknown error')));
           }
         });
-      } catch (err) {
+      } catch (_err) {
         if (objectUrl) URL.revokeObjectURL(objectUrl);
         reject(new Error('Failed to capture frame'));
       }
@@ -173,7 +173,7 @@ export function generateVideoThumbnail(
       objectUrl = URL.createObjectURL(videoFile);
       video.src = objectUrl;
       video.load();
-    } catch (err) {
+    } catch (_err) {
       reject(new Error('Failed to create video object URL'));
     }
   });

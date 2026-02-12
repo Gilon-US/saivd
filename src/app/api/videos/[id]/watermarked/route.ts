@@ -16,7 +16,7 @@ import {extractKeyFromUrl} from "@/lib/wasabi-urls";
  * - data: Object containing success message
  * - error: Object containing error details if request failed
  */
-export async function DELETE(request: NextRequest, context: {params: Promise<{id: string}>}) {
+export async function DELETE(_request: NextRequest, context: {params: Promise<{id: string}>}) {
   try {
     const {id: videoId} = await context.params;
 

@@ -11,7 +11,7 @@ import {createClient} from "@/utils/supabase/server";
  * @param params - Route parameters containing userId
  * @returns JSON response with profile data or error
  */
-export async function GET(request: NextRequest, context: {params: Promise<{userId: string}>}) {
+export async function GET(_request: NextRequest, context: {params: Promise<{userId: string}>}) {
   try {
     const {userId} = await context.params;
 

@@ -14,7 +14,7 @@ import {extractKeyFromUrl} from "@/lib/wasabi-urls";
  * - data: Object containing video information
  * - error: Object containing error details if request failed
  */
-export async function GET(request: NextRequest, context: {params: Promise<{id: string}>}) {
+export async function GET(_request: NextRequest, context: {params: Promise<{id: string}>}) {
   try {
     const {id: videoId} = await context.params;
 
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
  * - data: Object containing success message
  * - error: Object containing error details if request failed
  */
-export async function DELETE(request: NextRequest, context: {params: Promise<{id: string}>}) {
+export async function DELETE(_request: NextRequest, context: {params: Promise<{id: string}>}) {
   try {
     const {id: videoId} = await context.params;
 

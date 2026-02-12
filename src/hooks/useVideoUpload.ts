@@ -58,7 +58,7 @@ export function useVideoUpload() {
   const uploadVideo = async (file: File): Promise<UploadResult> => {
     const uploadId = uuidv4();
     const abortController = new AbortController();
-    const startTime = Date.now();
+    const _startTime = Date.now();
     
     // Initialize upload state - show activity immediately
     setUploads((prev) => ({
