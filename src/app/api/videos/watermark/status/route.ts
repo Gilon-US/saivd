@@ -38,12 +38,6 @@ export async function GET() {
       );
     }
 
-    // Fetch user's numeric_user_id from profile
-    console.log("[Watermark] Fetching user's numeric_user_id", {
-      userId: user.id,
-      email: user.email,
-    });
-
     const {data: profile, error: profileError} = await supabase
       .from("profiles")
       .select("numeric_user_id")
@@ -87,37 +81,13 @@ export async function GET() {
         {status: 500}
       );
     }
-    console.log("[Watermark] Successfully fetched numeric_user_id (sent to external API)", {
-      userId: user.id,
-      numericUserId: numericUserIdForApi,
-      numericUserIdLast4: String(numericUserIdForApi).slice(-4),
-    });
 
     const queueStatusUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/queue_status/${numericUserIdForApi}`;
-    
-    console.log(`[Watermark] Calling queue_status endpoint - URL: ${queueStatusUrl}`);
-    console.log("[Watermark] queue_status request details", {
-      url: queueStatusUrl,
-      numericUserId: numericUserIdForApi,
-      watermarkServiceUrl,
-      method: "GET",
-    });
-
     const response = await fetch(queueStatusUrl, {
       method: "GET",
     });
 
     const rawText = await response.text();
-    console.log(`[Watermark] Received queue_status response from URL: ${queueStatusUrl}`);
-    console.log("[Watermark] queue_status response details", {
-      url: queueStatusUrl,
-      numericUserId: numericUserIdForApi,
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries()),
-      bodyLength: rawText?.length || 0,
-      body: rawText,
-    });
 
     if (!response.ok) {
       return NextResponse.json(
@@ -198,19 +168,8 @@ export async function GET() {
       );
 
     if (allJobsCompleted) {
-      // Backend expects POST /clear_queue with body { user_id: number }, not a path parameter.
       const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue`;
       try {
-        console.log(`[Watermark] Calling clear_queue endpoint - URL: ${clearQueueUrl}`);
-        console.log("[Watermark] clear_queue request details", {
-          url: clearQueueUrl,
-          numericUserId: numericUserIdForApi,
-          watermarkServiceUrl,
-          method: "POST",
-          allJobsCompleted,
-          jobsCount: jobs.length,
-        });
-
         const clearQueueResponse = await fetch(clearQueueUrl, {
           method: "POST",
           headers: {
@@ -218,38 +177,20 @@ export async function GET() {
           },
           body: JSON.stringify({ user_id: numericUserIdForApi }),
         });
-
         const clearQueueResponseText = await clearQueueResponse.text();
-        
-        if (clearQueueResponse.ok) {
-          console.log(`[Watermark] Successfully cleared watermarking queue - URL: ${clearQueueUrl}`);
-          console.log("[Watermark] clear_queue success details", {
-            url: clearQueueUrl,
-            numericUserId: numericUserIdForApi,
+
+        if (!clearQueueResponse.ok) {
+          console.warn("[Watermark] clear_queue failed", {
             status: clearQueueResponse.status,
-            responseText: clearQueueResponseText,
+            numericUserIdLast4: String(numericUserIdForApi).slice(-4),
+            response: clearQueueResponseText?.slice(0, 200),
           });
-        } else {
-          console.warn(`[Watermark] Failed to clear watermarking queue - URL: ${clearQueueUrl}`);
-          console.warn("[Watermark] clear_queue failure details", {
-            url: clearQueueUrl,
-            numericUserId: numericUserIdForApi,
-            status: clearQueueResponse.status,
-            statusText: clearQueueResponse.statusText,
-            headers: Object.fromEntries(clearQueueResponse.headers.entries()),
-            responseText: clearQueueResponseText,
-          });
-          // Don't fail the request if clear_queue fails - this is a cleanup operation
         }
       } catch (clearQueueError) {
-        console.error(`[Watermark] Error calling clear_queue - URL: ${clearQueueUrl}`);
-        console.error("[Watermark] clear_queue error details", {
-          url: clearQueueUrl,
-          numericUserId: numericUserIdForApi,
+        console.error("[Watermark] clear_queue error", {
+          numericUserIdLast4: String(numericUserIdForApi).slice(-4),
           error: clearQueueError instanceof Error ? clearQueueError.message : String(clearQueueError),
-          errorStack: clearQueueError instanceof Error ? clearQueueError.stack : undefined,
         });
-        // Don't fail the request if clear_queue fails - this is a cleanup operation
       }
     }
 
@@ -262,7 +203,7 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error("Unexpected error in GET /api/videos/watermark/status:", error);
+    console.error("[Watermark] Unexpected error in status route:", error);
     return NextResponse.json({success: false, error: {code: "server_error", message: "Server error"}}, {status: 500});
   }
 }

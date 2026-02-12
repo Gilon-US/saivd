@@ -64,7 +64,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       .single();
 
     if (videoError || !video) {
-      console.error("Watermark: video not found or not owned by user", videoError);
+      console.error("[Watermark] Video not found or not owned by user", { videoId, videoError });
       return NextResponse.json({success: false, error: {code: "not_found", message: "Video not found"}}, {status: 404});
     }
 
@@ -76,7 +76,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       .single();
 
     if (profileError || !profile || profile.numeric_user_id == null) {
-      console.error("Watermark: missing profile or numeric_user_id for user", profileError);
+      console.error("[Watermark] Missing profile or numeric_user_id", { userId: user.id, profileError });
       return NextResponse.json(
         {
           success: false,
@@ -93,7 +93,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
 
     // Lazily generate RSA keys if missing (e.g., profile was created only by DB trigger)
     if (!rsaPrivate) {
-      console.log("Watermark: profile missing RSA keys, generating new keypair for user:", user.id);
+      console.log("[Watermark] Generating RSA keys for profile", { userId: user.id });
 
       const {publicKey, privateKey} = generateKeyPairSync("rsa", {
         modulusLength: 2048,
@@ -111,7 +111,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
         .eq("id", user.id);
 
       if (updateError) {
-        console.error("Watermark: error backfilling RSA keys for profile", updateError);
+        console.error("[Watermark] Failed to persist RSA keys", { userId: user.id, updateError });
         return NextResponse.json(
           {
             success: false,
@@ -151,8 +151,11 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       );
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+    const callbackUrl =
+      process.env.WATERMARK_CALLBACK_URL || (appUrl ? `${appUrl}/api/webhooks/watermark-complete` : "");
     const callbackHmacSecret = process.env.WATERMARK_CALLBACK_HMAC_SECRET;
+    const hasCallback = !!(callbackUrl && callbackUrl.startsWith("http") && callbackHmacSecret);
 
     const requestBody: Record<string, unknown> = {
       input_location: inputLocation,
@@ -165,37 +168,14 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       stream: true,
     };
 
-    if (appUrl && callbackHmacSecret) {
-      requestBody.callback_url = `${appUrl.replace(/\/+$/, "")}/api/webhooks/watermark-complete`;
+    if (hasCallback) {
+      requestBody.callback_url = callbackUrl;
       requestBody.callback_hmac_secret = callbackHmacSecret;
-    } else if (appUrl || callbackHmacSecret) {
-      console.warn("[Watermark] Callback skipped: both NEXT_PUBLIC_APP_URL and WATERMARK_CALLBACK_HMAC_SECRET must be set");
+    } else if (callbackUrl || callbackHmacSecret) {
+      console.warn(
+        "[Watermark] Callback skipped: both WATERMARK_CALLBACK_URL (or NEXT_PUBLIC_APP_URL) and WATERMARK_CALLBACK_HMAC_SECRET must be set"
+      );
     }
-
-    console.log("[Watermark] Sending numeric_user_id to external service (last 4 digits)", {
-      numericUserIdLast4: String(numericUserIdForApi).slice(-4),
-    });
-
-    // Call external watermark service (log payload with redacted keys)
-    const safeLogBody = {
-      ...requestBody,
-      client_key: requestBody.client_key
-        ? `[REDACTED_CLIENT_KEY:${(requestBody.client_key as string).length}chars]`
-        : null,
-      callback_hmac_secret: requestBody.callback_hmac_secret
-        ? "[REDACTED]"
-        : undefined,
-    };
-
-    console.log(`[Watermark] Sending request to external service - URL: ${watermarkServiceUrl}`);
-    console.log("[Watermark] Request body (for verification):", JSON.stringify(safeLogBody, null, 2));
-    console.log("[Watermark] External service request details", {
-      url: watermarkServiceUrl,
-      body: safeLogBody,
-      numericUserId: numericUserIdForApi,
-      numericUserIdLast4: String(numericUserIdForApi).slice(-4),
-      method: "POST",
-    });
 
     const timeoutMsEnv = process.env.WATERMARK_TIMEOUT_MS;
     const timeoutMs =
@@ -234,15 +214,6 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     }
 
     const rawText = await response.text();
-    console.log(`[Watermark] Received response from external service - URL: ${watermarkServiceUrl}`);
-    console.log("[Watermark] External service response details", {
-      url: watermarkServiceUrl,
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries()),
-      bodyLength: rawText?.length || 0,
-      body: rawText,
-    });
 
     let payload: WatermarkAsyncResponse | null = null;
     try {
@@ -265,7 +236,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     // {"status":"processing","message":"Check output at s3://bucket/key once processing is complete.","path":"s3://bucket/key"}
     // Treat HTTP 200 + status === "processing" + non-empty path as a successful enqueue.
     if (!response.ok || !payload || payload.status !== "processing" || !payload.path) {
-      console.error("Watermark service error", {status: response.status, payload});
+      console.error("[Watermark] Service rejected or invalid response", { status: response.status, payload });
       return NextResponse.json(
         {
           success: false,
@@ -290,7 +261,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       .single();
 
     if (updateError || !updatedVideo) {
-      console.error("Error updating video status to processing", updateError);
+      console.error("[Watermark] Failed to update video status to processing", { videoId, updateError });
       return NextResponse.json(
         {
           success: false,
@@ -303,6 +274,13 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       );
     }
 
+    console.log("[Watermark] Job enqueued", {
+      videoId,
+      outputPath: payload.path,
+      callbackEnabled: hasCallback,
+      numericUserIdLast4: String(numericUserIdForApi).slice(-4),
+    });
+
     return NextResponse.json({
       success: true,
       data: {
@@ -311,7 +289,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       },
     });
   } catch (error) {
-    console.error("Unexpected error in POST /api/videos/[id]/watermark:", error);
+    console.error("[Watermark] Unexpected error in POST /api/videos/[id]/watermark:", error);
     return NextResponse.json({success: false, error: {code: "server_error", message: "Server error"}}, {status: 500});
   }
 }
