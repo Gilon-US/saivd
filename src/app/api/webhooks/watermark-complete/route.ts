@@ -1,0 +1,209 @@
+/**
+ * Watermark Completion Webhook
+ *
+ * Receives callbacks from the external watermarking service when jobs complete.
+ * Verifies HMAC signature, validates user and video, updates DB, and sends email.
+ * Public endpoint - no auth; validation via signature and payload.
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
+import { createServiceRoleClient } from "@/utils/supabase/service";
+import { normalizeWatermarkPath } from "@/app/api/videos/[id]/watermark/route";
+
+const SIGNATURE_HEADER = "x-signature";
+
+type CallbackPayload = {
+  timestamp?: string[];
+  jobID?: (number | string)[];
+  status?: string[];
+  message?: string[];
+  path?: string[];
+  user_id?: string[];
+};
+
+function verifySignature(
+  rawBody: Buffer,
+  signatureHeader: string | null,
+  secret: string
+): boolean {
+  if (!signatureHeader || !secret) return false;
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(rawBody)
+    .digest("hex");
+  const received = Buffer.from(signatureHeader, "hex");
+  const expectedBuf = Buffer.from(expected, "hex");
+  if (received.length !== expectedBuf.length) return false;
+  return crypto.timingSafeEqual(received, expectedBuf);
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const secret = process.env.WATERMARK_CALLBACK_HMAC_SECRET;
+    if (!secret) {
+      return NextResponse.json(
+        { error: "Webhook not configured" },
+        { status: 500 }
+      );
+    }
+
+    const arrayBuffer = await request.arrayBuffer();
+    const rawBody = Buffer.from(arrayBuffer);
+    const signature = request.headers.get(SIGNATURE_HEADER);
+
+    if (!verifySignature(rawBody, signature, secret)) {
+      return NextResponse.json(
+        { error: "Invalid signature" },
+        { status: 401 }
+      );
+    }
+
+    const body = JSON.parse(rawBody.toString("utf-8")) as CallbackPayload;
+    const status = body.status?.[0];
+    const pathValue = body.path?.[0];
+    const callbackUserId = body.user_id?.[0];
+
+    if (!callbackUserId) {
+      return NextResponse.json(
+        { error: "Missing user_id in callback" },
+        { status: 400 }
+      );
+    }
+
+    if (status !== "success") {
+      return NextResponse.json({ received: true });
+    }
+
+    if (!pathValue || pathValue === "Error") {
+      return NextResponse.json(
+        { error: "Invalid or missing path for success callback" },
+        { status: 400 }
+      );
+    }
+
+    const pathKey = normalizeWatermarkPath(pathValue);
+    const originalKey = pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
+
+    const supabase = createServiceRoleClient();
+
+    const numericUserId =
+      typeof callbackUserId === "string"
+        ? parseInt(callbackUserId, 10)
+        : callbackUserId;
+    if (!Number.isInteger(numericUserId)) {
+      return NextResponse.json(
+        { error: "Invalid user_id format" },
+        { status: 400 }
+      );
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("numeric_user_id", numericUserId)
+      .single();
+
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
+      );
+    }
+
+    const authUserId = profile.id;
+
+    const {
+      data: video,
+      error: videoError,
+    } = await supabase
+      .from("videos")
+      .select("id, user_id, filename, original_thumbnail_url, notification_sent_at")
+      .eq("user_id", authUserId)
+      .eq("original_url", originalKey)
+      .single();
+
+    if (videoError || !video) {
+      return NextResponse.json(
+        { error: "Video not found for this user and path" },
+        { status: 404 }
+      );
+    }
+
+    const processedThumbnailUrl = video.original_thumbnail_url ?? null;
+
+    const { error: updateError } = await supabase
+      .from("videos")
+      .update({
+        processed_url: pathKey,
+        processed_thumbnail_url: processedThumbnailUrl,
+        status: "processed",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", video.id)
+      .eq("user_id", authUserId);
+
+    if (updateError) {
+      console.error("[Watermark Webhook] Failed to update video", {
+        videoId: video.id,
+        updateError,
+      });
+      return NextResponse.json(
+        { error: "Failed to update video" },
+        { status: 500 }
+      );
+    }
+
+    if (!video.notification_sent_at && video.filename) {
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.admin.getUserById(authUserId);
+
+        if (!userError && user?.email) {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("display_name")
+            .eq("id", authUserId)
+            .single();
+
+          const { sendWatermarkCompleteEmail } = await import("@/lib/email");
+          await sendWatermarkCompleteEmail(
+            user.email,
+            video.filename,
+            profileData?.display_name ?? null
+          );
+
+          await supabase
+            .from("videos")
+            .update({
+              notification_sent_at: new Date().toISOString(),
+            })
+            .eq("id", video.id)
+            .eq("user_id", authUserId);
+
+          console.log("[Watermark Webhook] Sent completion email", {
+            videoId: video.id,
+            filename: video.filename,
+          });
+        }
+      } catch (emailError) {
+        console.error("[Watermark Webhook] Failed to send completion email", {
+          videoId: video.id,
+          filename: video.filename,
+          error:
+            emailError instanceof Error ? emailError.message : "Unknown error",
+        });
+      }
+    }
+
+    return NextResponse.json({ received: true });
+  } catch (error) {
+    console.error("[Watermark Webhook] Unexpected error", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}

@@ -168,16 +168,17 @@ export async function checkWatermarkingStatus(_jobId: string): Promise<Watermark
 }
 
 /**
- * Utility function to generate callback URL with token
- * 
- * @param token Security token for callback authentication
- * @returns Callback URL
+ * Utility function to generate watermark callback URL
+ *
+ * @deprecated The callback URL is now built in the watermark route using HMAC auth.
+ * Use POST /api/webhooks/watermark-complete (HMAC-signed) instead of the old token-based callback.
+ *
+ * @param _token Ignored - kept for backward compatibility. New webhook uses HMAC.
+ * @returns Callback URL for the new webhook endpoint
  */
-export function generateCallbackUrl(token: string): string {
-  if (!token) throw new Error('Token is required');
-  
+export function generateCallbackUrl(_token: string): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  return `${baseUrl}/api/callbacks/watermark?token=${encodeURIComponent(token)}`;
+  return `${baseUrl.replace(/\/+$/, '')}/api/webhooks/watermark-complete`;
 }
 
 /**

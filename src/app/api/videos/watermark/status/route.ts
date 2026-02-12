@@ -181,107 +181,11 @@ export async function GET() {
       });
     }
 
-    // Track if any videos were updated
-    let videosUpdated = 0;
+    // Video updates and emails are now handled by the webhook callback (POST /api/webhooks/watermark-complete).
+    // This route only returns job status for UI progress display.
+    const videosUpdated = 0;
 
-    // For any completed jobs with a concrete path, update the corresponding video
-    // Note: API returns "success" for completed jobs, not "completed"
-    for (const job of jobs) {
-      if ((job.status !== "completed" && job.status !== "success") || !job.pathKey) continue;
-
-      // Derive original key from the processed key by removing the -watermarked suffix
-      const originalKey = job.pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
-
-      try {
-        const {data: video, error: fetchError} = await supabase
-          .from("videos")
-          .select("id, user_id, filename, original_thumbnail_url, notification_sent_at")
-          .eq("user_id", user.id)
-          .eq("original_url", originalKey)
-          .single();
-
-        if (fetchError || !video) {
-          if (fetchError?.code !== "PGRST116") {
-            console.error("[Watermark] Could not find video for completed job", {jobId: job.jobId, fetchError});
-          }
-          continue;
-        }
-
-        const processedThumbnailUrl = video.original_thumbnail_url ?? null;
-
-        const {error: updateError} = await supabase
-          .from("videos")
-          .update({
-            processed_url: job.pathKey,
-            processed_thumbnail_url: processedThumbnailUrl,
-            status: "processed",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", video.id)
-          .eq("user_id", user.id);
-
-        if (updateError) {
-          console.error("[Watermark] Failed to update video for completed job", {jobId: job.jobId, updateError});
-        } else {
-          videosUpdated++;
-          console.log("[Watermark] Successfully updated video for completed job", {
-            jobId: job.jobId,
-            videoId: video.id,
-            processedUrl: job.pathKey,
-          });
-
-          // Send email notification if not already sent
-          if (!video.notification_sent_at && video.filename) {
-            try {
-              // Get user's display name from profile (optional)
-              const {data: profile} = await supabase
-                .from("profiles")
-                .select("display_name")
-                .eq("id", user.id)
-                .single();
-
-              // Import email function dynamically to avoid loading issues if env vars are missing
-              const {sendWatermarkCompleteEmail} = await import("@/lib/email");
-              
-              await sendWatermarkCompleteEmail(
-                user.email || '',
-                video.filename,
-                profile?.display_name || null
-              );
-
-              // Update notification_sent_at timestamp
-              await supabase
-                .from("videos")
-                .update({
-                  notification_sent_at: new Date().toISOString(),
-                })
-                .eq("id", video.id)
-                .eq("user_id", user.id);
-
-              console.log("[Watermark] Successfully sent completion email", {
-                videoId: video.id,
-                filename: video.filename,
-                userEmail: user.email,
-              });
-            } catch (emailError) {
-              console.error("[Watermark] Failed to send completion email", {
-                videoId: video.id,
-                filename: video.filename,
-                error: emailError instanceof Error ? emailError.message : 'Unknown error',
-              });
-              // Don't fail the video update - email is nice-to-have
-            }
-          }
-        }
-      } catch (e) {
-        console.error("[Watermark] Unexpected error while updating video for completed job", {
-          jobId: job.jobId,
-          error: e,
-        });
-      }
-    }
-
-    // After all database updates are persisted, check if all jobs are completed.
+    // Check if all jobs are completed.
     // If so, call clear_queue so the same jobs are not returned on the next poll.
     const allJobsCompleted =
       jobs.length > 0 &&

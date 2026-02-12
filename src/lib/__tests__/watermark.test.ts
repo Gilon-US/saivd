@@ -12,7 +12,9 @@ import axios from 'axios';
 import { backOff } from 'exponential-backoff';
 import { 
   requestWatermarking,
-  checkWatermarkingStatus
+  checkWatermarkingStatus,
+  generateCallbackUrl,
+  parseWatermarkingError,
 } from '../watermark';
 
 // Mock axios and exponential-backoff
@@ -207,27 +209,20 @@ describe('Watermarking Service Client', () => {
   });
   
   describe('generateCallbackUrl', () => {
-    it('should generate correct callback URL', () => {
-      const token = 'test-token';
-      const result = generateCallbackUrl(token);
-      expect(result).toBe('https://example.com/api/callbacks/watermark?token=test-token');
+    it('should generate correct callback URL for new webhook endpoint', () => {
+      const result = generateCallbackUrl('test-token');
+      expect(result).toBe('https://example.com/api/webhooks/watermark-complete');
     });
-    
-    it('should encode special characters in token', () => {
-      const token = 'test token&special=chars';
-      const result = generateCallbackUrl(token);
-      expect(result).toBe('https://example.com/api/callbacks/watermark?token=test%20token%26special%3Dchars');
+
+    it('should ignore token (deprecated param)', () => {
+      const result = generateCallbackUrl('any-token');
+      expect(result).toBe('https://example.com/api/webhooks/watermark-complete');
     });
-    
-    it('should throw error for missing token', () => {
-      expect(() => generateCallbackUrl('')).toThrow('Token is required');
-    });
-    
+
     it('should use default URL if environment variable is not set', () => {
       delete process.env.NEXT_PUBLIC_APP_URL;
-      const token = 'test-token';
-      const result = generateCallbackUrl(token);
-      expect(result).toBe('http://localhost:3000/api/callbacks/watermark?token=test-token');
+      const result = generateCallbackUrl('test-token');
+      expect(result).toBe('http://localhost:3000/api/webhooks/watermark-complete');
     });
   });
   

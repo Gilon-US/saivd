@@ -151,7 +151,10 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       );
     }
 
-    const requestBody = {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const callbackHmacSecret = process.env.WATERMARK_CALLBACK_HMAC_SECRET;
+
+    const requestBody: Record<string, unknown> = {
       input_location: inputLocation,
       output_location: outputLocation,
       client_key: rsaPrivate,
@@ -161,6 +164,13 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       async_request: true,
       stream: true,
     };
+
+    if (appUrl && callbackHmacSecret) {
+      requestBody.callback_url = `${appUrl.replace(/\/+$/, "")}/api/webhooks/watermark-complete`;
+      requestBody.callback_hmac_secret = callbackHmacSecret;
+    } else if (appUrl || callbackHmacSecret) {
+      console.warn("[Watermark] Callback skipped: both NEXT_PUBLIC_APP_URL and WATERMARK_CALLBACK_HMAC_SECRET must be set");
+    }
 
     console.log("[Watermark] Sending numeric_user_id to external service (last 4 digits)", {
       numericUserIdLast4: String(numericUserIdForApi).slice(-4),
@@ -172,6 +182,9 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       client_key: requestBody.client_key
         ? `[REDACTED_CLIENT_KEY:${(requestBody.client_key as string).length}chars]`
         : null,
+      callback_hmac_secret: requestBody.callback_hmac_secret
+        ? "[REDACTED]"
+        : undefined,
     };
 
     console.log(`[Watermark] Sending request to external service - URL: ${watermarkServiceUrl}`);
