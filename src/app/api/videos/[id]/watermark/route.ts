@@ -151,31 +151,54 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       );
     }
 
+    // Callback is required per CALLBACK_INTEGRATION_NEXTJS.md - async jobs use callback for completion.
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
     const callbackUrl =
       process.env.WATERMARK_CALLBACK_URL || (appUrl ? `${appUrl}/api/webhooks/watermark-complete` : "");
     const callbackHmacSecret = process.env.WATERMARK_CALLBACK_HMAC_SECRET;
-    const hasCallback = !!(callbackUrl && callbackUrl.startsWith("http") && callbackHmacSecret);
+
+    if (!callbackUrl || !callbackUrl.startsWith("http")) {
+      console.error("[Watermark] Callback URL not configured", {
+        hasWatermarkCallbackUrl: !!process.env.WATERMARK_CALLBACK_URL,
+        hasAppUrl: !!appUrl,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "config_error",
+            message:
+              "WATERMARK_CALLBACK_URL or NEXT_PUBLIC_APP_URL must be set to a public URL for callback delivery",
+          },
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!callbackHmacSecret) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "config_error",
+            message: "WATERMARK_CALLBACK_HMAC_SECRET is required for watermark callbacks",
+          },
+        },
+        { status: 500 }
+      );
+    }
 
     const requestBody: Record<string, unknown> = {
       input_location: inputLocation,
       output_location: outputLocation,
       client_key: rsaPrivate,
-      // Must be profile.numeric_user_id (integer), not user.id or video.user_id (UUID string).
       user_id: numericUserIdForApi,
       bucket: WASABI_BUCKET,
       async_request: true,
       stream: true,
+      callback_url: callbackUrl,
+      callback_hmac_secret: callbackHmacSecret,
     };
-
-    if (hasCallback) {
-      requestBody.callback_url = callbackUrl;
-      requestBody.callback_hmac_secret = callbackHmacSecret;
-    } else if (callbackUrl || callbackHmacSecret) {
-      console.warn(
-        "[Watermark] Callback skipped: both WATERMARK_CALLBACK_URL (or NEXT_PUBLIC_APP_URL) and WATERMARK_CALLBACK_HMAC_SECRET must be set"
-      );
-    }
 
     const timeoutMsEnv = process.env.WATERMARK_TIMEOUT_MS;
     const timeoutMs =
@@ -277,7 +300,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     console.log("[Watermark] Job enqueued", {
       videoId,
       outputPath: payload.path,
-      callbackEnabled: hasCallback,
+      callbackUrl,
       numericUserIdLast4: String(numericUserIdForApi).slice(-4),
     });
 

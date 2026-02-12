@@ -21,6 +21,8 @@ export type Video = {
   processed_thumbnail_url: string | null;
   status: "uploaded" | "processing" | "processed" | "failed";
   upload_date: string;
+  /** When set, the watermark completion callback was received and processed. */
+  callback_received_at?: string | null;
 };
 
 type VideoGridProps = {
@@ -586,17 +588,6 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       </div>
     );
   }
-
-  // Debug: Log video data to see what thumbnails are available
-  console.log(
-    "VideoGrid videos:",
-    videos.map((v) => ({
-      filename: v.filename,
-      hasPreviewThumbnail: !!v.preview_thumbnail_data,
-      originalThumbnailUrl: v.original_thumbnail_url,
-      status: v.status,
-    }))
-  );
 
   // Video pairs grid - responsive flex layout
   return (

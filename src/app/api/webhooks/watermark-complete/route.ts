@@ -153,13 +153,15 @@ export async function POST(request: NextRequest) {
 
     const processedThumbnailUrl = video.original_thumbnail_url ?? null;
 
+    const callbackReceivedAt = new Date().toISOString();
     const { error: updateError } = await supabase
       .from("videos")
       .update({
         processed_url: pathKey,
         processed_thumbnail_url: processedThumbnailUrl,
         status: "processed",
-        updated_at: new Date().toISOString(),
+        callback_received_at: callbackReceivedAt,
+        updated_at: callbackReceivedAt,
       })
       .eq("id", video.id)
       .eq("user_id", authUserId);

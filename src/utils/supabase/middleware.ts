@@ -64,7 +64,8 @@ export async function updateSession(request: NextRequest) {
     !pathname.startsWith("/api/videos/upload") && // Allow upload endpoint (handles its own auth)
     !pathname.startsWith("/api/callbacks") &&
     !pathname.startsWith("/api/profile") && // Public profile API
-    !pathname.startsWith("/api/users/"); // Public user QR API
+    !pathname.startsWith("/api/users/") && // Public user QR API
+    !pathname.startsWith("/api/webhooks/"); // Webhooks use HMAC/secret auth, no user session
 
   // Redirect if accessing protected route without authentication
   if (isProtectedRoute && !user) {

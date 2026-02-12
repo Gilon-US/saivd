@@ -151,8 +151,8 @@ export async function GET() {
       });
     }
 
-    // Video updates and emails are now handled by the webhook callback (POST /api/webhooks/watermark-complete).
-    // This route only returns job status for UI progress display.
+    // Video updates and emails are handled exclusively by the callback (POST /api/webhooks/watermark-complete).
+    // This route returns job status for UI progress display only.
     const videosUpdated = 0;
 
     // Check if all jobs are completed.
