@@ -412,7 +412,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
 
           // For processing jobs without pathKey we may match by jobId or by queue order
           const processingJobsWithoutPath = json.data.jobs.filter(
-            (j: { status: string | null; pathKey: string | null }) =>
+            (j: { status: string | null; pathKey: string | null; message?: string | null }) =>
               j.status === "processing" && !j.pathKey && j.message
           );
           const processingVideos = currentVideos
