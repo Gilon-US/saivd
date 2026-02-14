@@ -90,6 +90,7 @@ export async function GET() {
     const rawText = await response.text();
 
     if (!response.ok) {
+      console.log("[Watermark] External API queue_status non-OK", { status: response.status, rawBody: rawText?.slice(0, 300) });
       return NextResponse.json(
         {
           success: false,
@@ -107,6 +108,7 @@ export async function GET() {
       payload = rawText ? (JSON.parse(rawText) as QueueStatusResponse) : null;
     } catch (e) {
       console.error("[Watermark] Failed to parse JSON from queue_status", e);
+      console.log("[Watermark] External API queue_status raw response", { rawBody: rawText?.slice(0, 500) });
       return NextResponse.json(
         {
           success: false,
@@ -122,6 +124,14 @@ export async function GET() {
     if (!payload) {
       return NextResponse.json({success: true, data: {jobs: []}});
     }
+
+    // Log actual response from external API to confirm shape (e.g. jobID array)
+    console.log("[Watermark] External API queue_status response", {
+      status: response.status,
+      keys: Object.keys(payload),
+      jobID: payload.jobID,
+      length: payload.jobID?.length,
+    });
 
     const length = payload.jobID.length;
     const jobs = [] as {

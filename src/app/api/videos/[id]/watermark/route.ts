@@ -7,6 +7,9 @@ type WatermarkAsyncResponse = {
   status: string;
   message?: string;
   path?: string;
+  /** Optional job ID from the service (may be jobId string or jobID array); used to correlate with queue_status. */
+  jobId?: string;
+  jobID?: string[] | number[];
 };
 
 export function normalizeWatermarkPath(path: string): string {
@@ -243,6 +246,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       payload = rawText ? (JSON.parse(rawText) as WatermarkAsyncResponse) : null;
     } catch (e) {
       console.error("[Watermark] Failed to parse JSON from external service", e);
+      console.log("[Watermark] External API start response (raw)", { status: response.status, rawBody: rawText?.slice(0, 500) });
       return NextResponse.json(
         {
           success: false,
@@ -254,6 +258,9 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
         {status: 502}
       );
     }
+
+    // Log actual response from external API to confirm shape (e.g. jobId / jobID presence)
+    console.log("[Watermark] External API start response", { status: response.status, payload });
 
     // In async mode the service responds with e.g.
     // {"status":"processing","message":"Check output at s3://bucket/key once processing is complete.","path":"s3://bucket/key"}
@@ -297,9 +304,18 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       );
     }
 
+    // Normalize job ID from service (may be jobId string or jobID array)
+    const jobId =
+      payload.jobId != null
+        ? String(payload.jobId)
+        : Array.isArray(payload.jobID) && payload.jobID.length > 0
+          ? String(payload.jobID[0])
+          : undefined;
+
     console.log("[Watermark] Job enqueued", {
       videoId,
       outputPath: payload.path,
+      jobId: jobId ?? "(none)",
       callbackUrl,
       numericUserIdLast4: String(numericUserIdForApi).slice(-4),
     });
@@ -309,6 +325,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       data: {
         video: updatedVideo,
         message: payload.message ?? null,
+        jobId: jobId ?? null,
       },
     });
   } catch (error) {

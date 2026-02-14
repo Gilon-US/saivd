@@ -41,6 +41,8 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       string,
       {
         message: string | null;
+        /** Job ID from watermark service; used to correlate with queue_status for progress updates. */
+        jobId?: string | null;
       }
     >
   >({});
@@ -346,11 +348,13 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       }
 
       const initialMessage: string | null = data.data?.message ?? null;
+      const jobId = data.data?.jobId != null ? String(data.data.jobId) : null;
 
       setPendingJobs((prev) => ({
         ...prev,
         [video.id]: {
           message: initialMessage,
+          jobId,
         },
       }));
 
@@ -398,49 +402,57 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         // Get current videos from ref to avoid stale closure
         const currentVideos = videosRef.current;
 
-        // Update pendingJobs with messages from status polling
-        // Match jobs to videos by deriving original key from pathKey
+        // Update pendingJobs with messages from status polling.
+        // Match jobs to videos by: 1) pathKey (original key), 2) jobId (from start response / queue), 3) queue order fallback.
         setPendingJobs((prevPendingJobs) => {
           const updatedPendingJobs: typeof prevPendingJobs = {...prevPendingJobs};
           let hasUpdates = false;
 
+          const jobIdStr = (j: { jobId?: string | null }) => (j.jobId != null ? String(j.jobId) : null);
+
+          // For processing jobs without pathKey we may match by jobId or by queue order
+          const processingJobsWithoutPath = json.data.jobs.filter(
+            (j: { status: string | null; pathKey: string | null }) =>
+              j.status === "processing" && !j.pathKey && j.message
+          );
+          const processingVideos = currentVideos
+            .filter((v) => v.status === "processing")
+            .sort((a, b) => {
+              const aAt = (a as Video & { updated_at?: string }).updated_at ?? a.upload_date ?? a.id;
+              const bAt = (b as Video & { updated_at?: string }).updated_at ?? b.upload_date ?? b.id;
+              return aAt.localeCompare(bAt) || a.id.localeCompare(b.id);
+            });
+
           for (const job of json.data.jobs) {
-            // For processing or completed jobs, try to match to a video
-            if (job.status === "processing" || job.status === "success" || job.status === "completed") {
-              // If we have a pathKey, derive the original key to match the video
-              if (job.pathKey) {
-                const originalKey = job.pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
-                // Find the video that matches this original key
-                const matchingVideo = currentVideos.find((v) => v.original_url === originalKey);
-                if (matchingVideo && job.message) {
-                  updatedPendingJobs[matchingVideo.id] = {
-                    message: job.message,
-                  };
-                  hasUpdates = true;
-                }
-              } else if (job.status === "processing" && job.message) {
-                // For processing jobs without pathKey yet, match to processing videos
-                // If there's only one processing video, update it
-                // If multiple, update the one that doesn't have a message yet
-                const processingVideos = currentVideos.filter((v) => v.status === "processing");
-                if (processingVideos.length === 1) {
-                  // Only one processing video - safe to update
-                  updatedPendingJobs[processingVideos[0].id] = {
-                    message: job.message,
-                  };
-                  hasUpdates = true;
-                } else if (processingVideos.length > 1) {
-                  // Multiple processing videos - update the first one without a message
-                  // or the first one if all have messages (update with latest)
-                  const videoToUpdate = processingVideos.find((v) => !prevPendingJobs[v.id]) || processingVideos[0];
-                  if (videoToUpdate) {
-                    updatedPendingJobs[videoToUpdate.id] = {
-                      message: job.message,
-                    };
-                    hasUpdates = true;
-                  }
-                }
+            if (job.status !== "processing" && job.status !== "success" && job.status !== "completed") continue;
+
+            let matchingVideo: Video | undefined;
+
+            // 1) Match by pathKey (derive original key and find video)
+            if (job.pathKey) {
+              const originalKey = job.pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
+              matchingVideo = currentVideos.find((v) => v.original_url === originalKey);
+            }
+
+            // 2) Match by jobId (stored when we started the job or from a previous poll)
+            if (!matchingVideo && jobIdStr(job)) {
+              matchingVideo = currentVideos.find((v) => prevPendingJobs[v.id]?.jobId === String(job.jobId));
+            }
+
+            // 3) Fallback: match processing jobs without pathKey by queue order
+            if (!matchingVideo && job.status === "processing" && job.message) {
+              const jobIndex = processingJobsWithoutPath.indexOf(job);
+              if (jobIndex >= 0 && jobIndex < processingVideos.length) {
+                matchingVideo = processingVideos[jobIndex];
               }
+            }
+
+            if (matchingVideo) {
+              updatedPendingJobs[matchingVideo.id] = {
+                message: job.message ?? null,
+                jobId: jobIdStr(job) ?? prevPendingJobs[matchingVideo.id]?.jobId ?? undefined,
+              };
+              hasUpdates = true;
             }
           }
 
