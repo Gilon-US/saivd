@@ -154,23 +154,28 @@ export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnal
             </div>
           )}
 
-          {/* QR overlay – shown when we have a verified user ID or frame analysis returns a QR URL.
-              The image itself is served from the public profile QR route, which
-              ultimately reads the QR PNG from Wasabi. 
-              Uses responsive sizing for consistent display across all devices. */}
+          {/* QR / Logo flip overlay – flips between QR code (front) and logo (back) every 6s.
+              Shown when we have a verified user ID or frame analysis returns a QR URL. */}
           {qrUrl && isPlaybackAllowed && (
-            <div className="absolute top-2 left-2 sm:top-4 sm:left-4 pointer-events-none z-10">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
-                src={qrUrl} 
-                alt="Creator QR code" 
-                className="object-contain rounded-md shadow-lg bg-white/90 p-1" 
-                style={{
-                  aspectRatio: '1 / 1',
-                  width: 'clamp(48px, 12vw, 80px)',
-                  height: 'clamp(48px, 12vw, 80px)',
-                }}
-              />
+            <div className="absolute top-2 left-2 sm:top-4 sm:left-4 pointer-events-none z-20 qr-logo-flip-container">
+              <div className="qr-logo-flip-card">
+                <div className="qr-logo-flip-face qr-logo-flip-face-front">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={qrUrl}
+                    alt="Creator QR code"
+                    className="w-16 h-16 object-contain rounded-md shadow-md"
+                  />
+                </div>
+                <div className="qr-logo-flip-face qr-logo-flip-face-back">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/images/saivd-logo.png"
+                    alt="Brand logo"
+                    className="w-16 h-16 object-contain rounded-md shadow-md"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
