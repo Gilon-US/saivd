@@ -165,19 +165,17 @@ export async function GET() {
     // This route returns job status for UI progress display only.
     const videosUpdated = 0;
 
-    // Check if all jobs are completed.
+    // Check if all jobs are in a terminal state (success, completed, or failed).
     // If so, call clear_queue so the same jobs are not returned on the next poll.
-    const allJobsCompleted =
-      jobs.length > 0 &&
-      jobs.every(
-        (job) =>
-          job.status === "completed" ||
-          job.status === "success" ||
-          job.status?.toLowerCase() === "completed" ||
-          job.status?.toLowerCase() === "success"
-      );
+    const isTerminalStatus = (status: string | null) => {
+      if (status == null) return false;
+      const s = status.toLowerCase();
+      return s === "completed" || s === "success" || s === "failed";
+    };
+    const allJobsTerminal =
+      jobs.length > 0 && jobs.every((job) => isTerminalStatus(job.status));
 
-    if (allJobsCompleted) {
+    if (allJobsTerminal) {
       const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue`;
       try {
         const clearQueueResponse = await fetch(clearQueueUrl, {
