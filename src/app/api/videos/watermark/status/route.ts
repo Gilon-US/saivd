@@ -184,6 +184,7 @@ export async function GET() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Connection: "close",
           },
           body: JSON.stringify({ user_id: numericUserIdForApi }),
         });

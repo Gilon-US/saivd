@@ -43,6 +43,8 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         message: string | null;
         /** Job ID from watermark service; used to correlate with queue_status for progress updates. */
         jobId?: string | null;
+        /** True when queue_status reported this job as failed. */
+        failed?: boolean;
       }
     >
   >({});
@@ -410,10 +412,10 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
 
           const jobIdStr = (j: { jobId?: string | null }) => (j.jobId != null ? String(j.jobId) : null);
 
-          // For processing jobs without pathKey we may match by jobId or by queue order
-          const processingJobsWithoutPath = json.data.jobs.filter(
+          // Jobs without pathKey (processing or failed) we may match by jobId or by queue order
+          const processingOrFailedJobsWithoutPath = json.data.jobs.filter(
             (j: { status: string | null; pathKey: string | null; message?: string | null }) =>
-              j.status === "processing" && !j.pathKey && j.message
+              (j.status === "processing" || j.status === "failed") && !j.pathKey
           );
           const processingVideos = currentVideos
             .filter((v) => v.status === "processing")
@@ -424,7 +426,12 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
             });
 
           for (const job of json.data.jobs) {
-            if (job.status !== "processing" && job.status !== "success" && job.status !== "completed") continue;
+            const isHandledStatus =
+              job.status === "processing" ||
+              job.status === "success" ||
+              job.status === "completed" ||
+              job.status === "failed";
+            if (!isHandledStatus) continue;
 
             let matchingVideo: Video | undefined;
 
@@ -439,18 +446,21 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
               matchingVideo = currentVideos.find((v) => prevPendingJobs[v.id]?.jobId === String(job.jobId));
             }
 
-            // 3) Fallback: match processing jobs without pathKey by queue order
-            if (!matchingVideo && job.status === "processing" && job.message) {
-              const jobIndex = processingJobsWithoutPath.indexOf(job);
+            // 3) Fallback: match processing/failed jobs without pathKey by queue order
+            if (!matchingVideo && (job.status === "processing" || job.status === "failed")) {
+              const jobIndex = processingOrFailedJobsWithoutPath.indexOf(job);
               if (jobIndex >= 0 && jobIndex < processingVideos.length) {
                 matchingVideo = processingVideos[jobIndex];
               }
             }
 
             if (matchingVideo) {
+              const isFailed = job.status === "failed";
+              const isSuccess = job.status === "success" || job.status === "completed";
               updatedPendingJobs[matchingVideo.id] = {
                 message: job.message ?? null,
                 jobId: jobIdStr(job) ?? prevPendingJobs[matchingVideo.id]?.jobId ?? undefined,
+                failed: isFailed ? true : isSuccess ? false : prevPendingJobs[matchingVideo.id]?.failed,
               };
               hasUpdates = true;
             }
@@ -747,7 +757,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                           />
                         )}
                       </div>
-                    ) : video.status === "processing" ? (
+                    ) : video.status === "processing" && !pendingJobs[video.id]?.failed ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700 animate-pulse">
                         <LoadingSpinner size="sm" />
                         <span className="text-black dark:text-black text-xs mt-2 text-center px-2">
@@ -757,9 +767,17 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                           })()}
                         </span>
                       </div>
-                    ) : video.status === "failed" ? (
+                    ) : video.status === "failed" || pendingJobs[video.id]?.failed ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 dark:bg-red-900/20">
-                        <span className="text-red-500 text-xs text-center">Processing failed</span>
+                        <span className="text-red-500 text-xs text-center font-medium">Processing failed</span>
+                        {(() => {
+                          const failMessage = pendingJobs[video.id]?.message;
+                          return failMessage ? (
+                            <span className="text-red-600 dark:text-red-400 text-xs mt-1 text-center px-2 line-clamp-2">
+                              {failMessage.length > 64 ? `${failMessage.substring(0, 64)}...` : failMessage}
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700">

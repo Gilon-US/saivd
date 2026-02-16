@@ -132,6 +132,7 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
 
     const requestHeaders = {
       "Content-Type": "application/json",
+      Connection: "close",
     };
 
     console.log("[ExtractUserId] Full request:", {

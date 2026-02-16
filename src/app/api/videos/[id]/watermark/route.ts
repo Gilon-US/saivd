@@ -216,6 +216,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Connection: "close",
         },
         body: JSON.stringify(requestBody),
         signal: controller.signal,
