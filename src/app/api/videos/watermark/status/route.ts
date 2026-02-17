@@ -152,7 +152,9 @@ export async function GET() {
       const messageValue = payload.message[i] ?? null;
       const pathValue = payload.path[i] ?? null;
       const pathKey = pathValue && pathValue !== "None" ? normalizeWatermarkPath(pathValue) : null;
-      const videoIdValue = payload.videoId?.[i] ?? null;
+      const rawVideoId = payload.videoId?.[i] ?? null;
+      const videoIdValue =
+        rawVideoId != null ? (String(rawVideoId).trim() || null) : null;
 
       jobs.push({
         jobId,

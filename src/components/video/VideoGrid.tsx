@@ -433,26 +433,33 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
               job.status === "failed";
             if (!isHandledStatus) continue;
 
-            let matchingVideo: Video | undefined;
+            const raw = (job as { videoId?: string | number | null }).videoId;
+            const videoIdStr =
+              raw != null && String(raw).trim() !== "" ? String(raw).trim() : null;
 
-            // 0) Primary: match by videoId from queue status (when API returns it)
-            const jobVideoId = (job as { videoId?: string | null }).videoId;
-            if (jobVideoId && typeof jobVideoId === "string" && jobVideoId.trim() !== "") {
-              matchingVideo = currentVideos.find((v) => v.id === jobVideoId.trim());
+            const isFailed = job.status === "failed";
+            const isSuccess = job.status === "success" || job.status === "completed";
+
+            // Primary: update by video id key when API returns videoId (no need for video to be in current list)
+            if (videoIdStr) {
+              updatedPendingJobs[videoIdStr] = {
+                message: job.message ?? null,
+                jobId: jobIdStr(job) ?? prevPendingJobs[videoIdStr]?.jobId ?? undefined,
+                failed: isFailed ? true : isSuccess ? false : prevPendingJobs[videoIdStr]?.failed,
+              };
+              hasUpdates = true;
+              continue;
             }
 
-            // 1) Fallback: match by pathKey (derive original key and find video)
-            if (!matchingVideo && job.pathKey) {
+            // Fallback: resolve matchingVideo when no videoId
+            let matchingVideo: Video | undefined;
+            if (job.pathKey) {
               const originalKey = job.pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
               matchingVideo = currentVideos.find((v) => v.original_url === originalKey);
             }
-
-            // 2) Fallback: match by jobId (stored when we started the job or from a previous poll)
             if (!matchingVideo && jobIdStr(job)) {
               matchingVideo = currentVideos.find((v) => prevPendingJobs[v.id]?.jobId === String(job.jobId));
             }
-
-            // 3) Fallback: match processing/failed jobs without pathKey by queue order
             if (!matchingVideo && (job.status === "processing" || job.status === "failed")) {
               const jobIndex = processingOrFailedJobsWithoutPath.indexOf(job);
               if (jobIndex >= 0 && jobIndex < processingVideos.length) {
@@ -461,8 +468,6 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
             }
 
             if (matchingVideo) {
-              const isFailed = job.status === "failed";
-              const isSuccess = job.status === "success" || job.status === "completed";
               updatedPendingJobs[matchingVideo.id] = {
                 message: job.message ?? null,
                 jobId: jobIdStr(job) ?? prevPendingJobs[matchingVideo.id]?.jobId ?? undefined,
