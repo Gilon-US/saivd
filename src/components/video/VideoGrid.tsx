@@ -420,12 +420,10 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
           const jobIdStr = (j: { jobId?: string | null }) => (j.jobId != null ? String(j.jobId) : null);
 
           // Jobs without pathKey (processing or failed) we may match by jobId or by queue order
-          const processingOrFailedJobsWithoutPath = jobs.filter(
-            (j: { status: string | null; pathKey: string | null; message?: string | null }) => {
-              const s = (j.status ?? "").toLowerCase();
-              return (s === "processing" || s === "failed") && !j.pathKey;
-            }
-          );
+          const processingOrFailedJobsWithoutPath = jobs.filter((j) => {
+            const s = (j.status ?? "").toLowerCase();
+            return (s === "processing" || s === "failed") && !j.pathKey;
+          });
           const processingVideos = currentVideos
             .filter((v) => v.status === "processing")
             .sort((a, b) => {
