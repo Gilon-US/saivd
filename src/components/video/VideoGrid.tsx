@@ -387,6 +387,11 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     videosRef.current = videos;
   }, [videos]);
 
+  // Ref so the setState updater always reads the latest poll result (avoids stale closure)
+  const latestPollJobsRef = useRef<
+    { jobId?: string | null; status?: string | null; message?: string | null; pathKey?: string | null; videoId?: string | number | null }[]
+  >([]);
+
   useEffect(() => {
     let isCancelled = false;
     let intervalId: NodeJS.Timeout | null = null;
@@ -401,19 +406,21 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         const json = await response.json();
         if (!json.success || !json.data?.jobs || isCancelled) return;
 
-        // Get current videos from ref to avoid stale closure
-        const currentVideos = videosRef.current;
+        const jobs = json.data.jobs as typeof latestPollJobsRef.current;
+        latestPollJobsRef.current = jobs;
 
         // Update pendingJobs with messages from status polling.
-        // Match jobs to videos by: 1) pathKey (original key), 2) jobId (from start response / queue), 3) queue order fallback.
+        // Match jobs to videos by: 1) videoId (primary), 2) pathKey, 3) jobId, 4) queue order fallback.
         setPendingJobs((prevPendingJobs) => {
+          const currentVideos = videosRef.current;
+          const jobs = latestPollJobsRef.current;
           const updatedPendingJobs: typeof prevPendingJobs = {...prevPendingJobs};
           let hasUpdates = false;
 
           const jobIdStr = (j: { jobId?: string | null }) => (j.jobId != null ? String(j.jobId) : null);
 
           // Jobs without pathKey (processing or failed) we may match by jobId or by queue order
-          const processingOrFailedJobsWithoutPath = json.data.jobs.filter(
+          const processingOrFailedJobsWithoutPath = jobs.filter(
             (j: { status: string | null; pathKey: string | null; message?: string | null }) => {
               const s = (j.status ?? "").toLowerCase();
               return (s === "processing" || s === "failed") && !j.pathKey;
@@ -427,7 +434,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
               return aAt.localeCompare(bAt) || a.id.localeCompare(b.id);
             });
 
-          for (const job of json.data.jobs) {
+          for (const job of jobs) {
             const statusLower = (job.status ?? "").toLowerCase();
             const isHandledStatus =
               statusLower === "processing" ||
@@ -436,7 +443,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
               statusLower === "failed";
             if (!isHandledStatus) continue;
 
-            const raw = (job as { videoId?: string | number | null }).videoId;
+            const raw = job.videoId;
             const videoIdStr =
               raw != null && String(raw).trim() !== "" ? String(raw).trim() : null;
 
@@ -480,6 +487,8 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
             }
           }
 
+          // When we have job data, always return new state so React reliably re-renders
+          if (jobs.length > 0) return updatedPendingJobs;
           return hasUpdates ? updatedPendingJobs : prevPendingJobs;
         });
 
@@ -489,6 +498,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
 
         // Also check if any videos are currently in "processing" state
         // If so, refresh to check for updates even if no jobs are completed yet
+        const currentVideos = videosRef.current;
         const hasProcessingVideos = currentVideos.some((v) => v.status === "processing");
 
         // Refresh if:
@@ -771,7 +781,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                           />
                         )}
                       </div>
-                    ) : video.status === "processing" && !pendingJobs[video.id]?.failed ? (
+                    ) : (video.status === "processing" || pendingJobs[video.id]) && !pendingJobs[video.id]?.failed ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700 animate-pulse">
                         <LoadingSpinner size="sm" />
                         <span className="text-black dark:text-black text-xs mt-2 text-center px-2">
