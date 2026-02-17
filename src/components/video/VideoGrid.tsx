@@ -435,13 +435,19 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
 
             let matchingVideo: Video | undefined;
 
-            // 1) Match by pathKey (derive original key and find video)
-            if (job.pathKey) {
+            // 0) Primary: match by videoId from queue status (when API returns it)
+            const jobVideoId = (job as { videoId?: string | null }).videoId;
+            if (jobVideoId && typeof jobVideoId === "string" && jobVideoId.trim() !== "") {
+              matchingVideo = currentVideos.find((v) => v.id === jobVideoId.trim());
+            }
+
+            // 1) Fallback: match by pathKey (derive original key and find video)
+            if (!matchingVideo && job.pathKey) {
               const originalKey = job.pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
               matchingVideo = currentVideos.find((v) => v.original_url === originalKey);
             }
 
-            // 2) Match by jobId (stored when we started the job or from a previous poll)
+            // 2) Fallback: match by jobId (stored when we started the job or from a previous poll)
             if (!matchingVideo && jobIdStr(job)) {
               matchingVideo = currentVideos.find((v) => prevPendingJobs[v.id]?.jobId === String(job.jobId));
             }

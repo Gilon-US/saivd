@@ -20,6 +20,7 @@ type CallbackPayload = {
   message?: string[];
   path?: string[];
   user_id?: string[];
+  videoId?: string[];
 };
 
 function verifySignature(
@@ -98,7 +99,8 @@ export async function POST(request: NextRequest) {
     }
 
     const pathKey = normalizeWatermarkPath(pathValue);
-    const originalKey = pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
+    const callbackVideoId = body.videoId?.[0];
+    const useVideoIdLookup = typeof callbackVideoId === "string" && callbackVideoId.trim() !== "";
 
     const supabase = createServiceRoleClient();
 
@@ -129,21 +131,41 @@ export async function POST(request: NextRequest) {
 
     const authUserId = profile.id;
 
-    const {
-      data: video,
-      error: videoError,
-    } = await supabase
-      .from("videos")
-      .select("id, user_id, filename, original_thumbnail_url, notification_sent_at")
-      .eq("user_id", authUserId)
-      .eq("original_url", originalKey)
-      .single();
+    let video: { id: string; user_id: string; filename: string; original_thumbnail_url: string | null; notification_sent_at: string | null } | null = null;
+    let videoError: { message: string } | null = null;
+
+    if (useVideoIdLookup) {
+      const result = await supabase
+        .from("videos")
+        .select("id, user_id, filename, original_thumbnail_url, notification_sent_at")
+        .eq("id", callbackVideoId!.trim())
+        .eq("user_id", authUserId)
+        .single();
+      video = result.data;
+      videoError = result.error;
+      console.log("[Watermark Webhook] Resolved video by videoId", { videoId: callbackVideoId, found: !!video });
+    }
+
+    if (!video) {
+      const originalKey = pathKey.replace(/-watermarked(\.[^./]+)$/, "$1");
+      const result = await supabase
+        .from("videos")
+        .select("id, user_id, filename, original_thumbnail_url, notification_sent_at")
+        .eq("user_id", authUserId)
+        .eq("original_url", originalKey)
+        .single();
+      video = result.data;
+      videoError = result.error;
+      if (!useVideoIdLookup) {
+        console.log("[Watermark Webhook] Resolved video by original_url", { originalKey });
+      }
+    }
 
     if (videoError || !video) {
       console.warn("[Watermark Webhook] Video not found", {
         authUserId,
-        originalKey,
         numericUserId,
+        videoIdUsed: useVideoIdLookup ? callbackVideoId : undefined,
       });
       return NextResponse.json(
         { error: "Video not found for this user and path" },

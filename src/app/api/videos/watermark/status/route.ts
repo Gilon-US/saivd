@@ -8,6 +8,7 @@ type QueueStatusResponse = {
   status: string[];
   message: string[];
   path: string[];
+  videoId?: string[];
 };
 
 export async function GET() {
@@ -141,6 +142,7 @@ export async function GET() {
       message: string | null;
       path: string | null;
       pathKey: string | null;
+      videoId: string | null;
     }[];
 
     for (let i = 0; i < length; i++) {
@@ -150,6 +152,7 @@ export async function GET() {
       const messageValue = payload.message[i] ?? null;
       const pathValue = payload.path[i] ?? null;
       const pathKey = pathValue && pathValue !== "None" ? normalizeWatermarkPath(pathValue) : null;
+      const videoIdValue = payload.videoId?.[i] ?? null;
 
       jobs.push({
         jobId,
@@ -158,6 +161,7 @@ export async function GET() {
         message: messageValue,
         path: pathValue,
         pathKey,
+        videoId: videoIdValue,
       });
     }
 

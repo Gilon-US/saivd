@@ -24,9 +24,9 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
   try {
     const {id: videoId} = await context.params;
 
-    if (!videoId) {
+    if (!videoId || typeof videoId !== "string" || !videoId.trim()) {
       return NextResponse.json(
-        {success: false, error: {code: "validation_error", message: "Missing video ID"}},
+        {success: false, error: {code: "validation_error", message: "Video ID is required"}},
         {status: 400}
       );
     }
@@ -192,6 +192,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     }
 
     const requestBody: Record<string, unknown> = {
+      video_id: videoId.trim(),
       input_location: inputLocation,
       output_location: outputLocation,
       client_key: rsaPrivate,
@@ -262,6 +263,24 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
 
     // Log actual response from external API to confirm shape (e.g. jobId / jobID presence)
     console.log("[Watermark] External API start response", { status: response.status, payload });
+
+    if (response.status === 400) {
+      const detail = (payload as { detail?: string } | null)?.detail ?? rawText ?? "";
+      const isVideoIdRequired =
+        typeof detail === "string" && detail.toLowerCase().includes("video_id");
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: isVideoIdRequired ? "video_id_required" : "watermark_error",
+            message: isVideoIdRequired
+              ? "Video identifier is required for the watermarking service"
+              : typeof detail === "string" ? detail : "The watermarking service rejected the request",
+          },
+        },
+        { status: 400 }
+      );
+    }
 
     // In async mode the service responds with e.g.
     // {"status":"processing","message":"Check output at s3://bucket/key once processing is complete.","path":"s3://bucket/key"}
