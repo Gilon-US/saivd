@@ -414,8 +414,10 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
 
           // Jobs without pathKey (processing or failed) we may match by jobId or by queue order
           const processingOrFailedJobsWithoutPath = json.data.jobs.filter(
-            (j: { status: string | null; pathKey: string | null; message?: string | null }) =>
-              (j.status === "processing" || j.status === "failed") && !j.pathKey
+            (j: { status: string | null; pathKey: string | null; message?: string | null }) => {
+              const s = (j.status ?? "").toLowerCase();
+              return (s === "processing" || s === "failed") && !j.pathKey;
+            }
           );
           const processingVideos = currentVideos
             .filter((v) => v.status === "processing")
@@ -426,19 +428,20 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
             });
 
           for (const job of json.data.jobs) {
+            const statusLower = (job.status ?? "").toLowerCase();
             const isHandledStatus =
-              job.status === "processing" ||
-              job.status === "success" ||
-              job.status === "completed" ||
-              job.status === "failed";
+              statusLower === "processing" ||
+              statusLower === "success" ||
+              statusLower === "completed" ||
+              statusLower === "failed";
             if (!isHandledStatus) continue;
 
             const raw = (job as { videoId?: string | number | null }).videoId;
             const videoIdStr =
               raw != null && String(raw).trim() !== "" ? String(raw).trim() : null;
 
-            const isFailed = job.status === "failed";
-            const isSuccess = job.status === "success" || job.status === "completed";
+            const isFailed = statusLower === "failed";
+            const isSuccess = statusLower === "success" || statusLower === "completed";
 
             // Primary: update by video id key when API returns videoId (no need for video to be in current list)
             if (videoIdStr) {
@@ -460,7 +463,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
             if (!matchingVideo && jobIdStr(job)) {
               matchingVideo = currentVideos.find((v) => prevPendingJobs[v.id]?.jobId === String(job.jobId));
             }
-            if (!matchingVideo && (job.status === "processing" || job.status === "failed")) {
+            if (!matchingVideo && (statusLower === "processing" || statusLower === "failed")) {
               const jobIndex = processingOrFailedJobsWithoutPath.indexOf(job);
               if (jobIndex >= 0 && jobIndex < processingVideos.length) {
                 matchingVideo = processingVideos[jobIndex];
