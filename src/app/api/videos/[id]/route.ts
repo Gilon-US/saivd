@@ -3,6 +3,7 @@ import {createClient} from "@/utils/supabase/server";
 import {DeleteObjectCommand} from "@aws-sdk/client-s3";
 import {wasabiClient, WASABI_BUCKET} from "@/lib/wasabi";
 import {extractKeyFromUrl} from "@/lib/wasabi-urls";
+import {clearWatermarkQueueJobsForVideo} from "@/lib/watermark-queue";
 
 /**
  * GET /api/videos/[id]
@@ -153,6 +154,17 @@ export async function DELETE(_request: NextRequest, context: {params: Promise<{i
         {success: false, error: {code: "database_error", message: "Failed to delete video"}},
         {status: 500}
       );
+    }
+
+    // Clear any watermark queue jobs for this video (best-effort, do not fail response)
+    const {data: profile} = await supabase
+      .from("profiles")
+      .select("numeric_user_id")
+      .eq("id", user.id)
+      .single();
+    const numericUserId = profile?.numeric_user_id != null ? Number(profile.numeric_user_id) : NaN;
+    if (Number.isInteger(numericUserId)) {
+      await clearWatermarkQueueJobsForVideo(numericUserId, videoId);
     }
 
     return NextResponse.json({

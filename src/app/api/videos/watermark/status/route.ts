@@ -167,6 +167,13 @@ export async function GET() {
       });
     }
 
+    // Fetch user's video IDs to detect orphan jobs (jobs whose videoId no longer exists).
+    const {data: userVideos} = await supabase
+      .from("videos")
+      .select("id")
+      .eq("user_id", user.id);
+    const existingVideoIds = new Set<string>((userVideos ?? []).map((r) => r.id));
+
     // Deduplicate by videoId: one job per video so the UI shows a single state.
     // Priority: processing > failed > success/completed; within same status keep latest by timestamp.
     type JobItem = (typeof jobs)[number];
@@ -211,10 +218,16 @@ export async function GET() {
       return s === "completed" || s === "success" || s === "failed";
     };
 
-    // Clear terminal jobs from the queue so it does not grow unbounded.
-    // Use job_ids to clear only terminal jobs (success/completed/failed); leave processing jobs.
+    // Clear terminal jobs and orphan jobs (jobs whose videoId no longer exists for this user).
     const terminalJobIds = jobs.filter((j) => isTerminalStatus(j.status)).map((j) => j.jobId);
-    if (terminalJobIds.length > 0) {
+    const orphanJobIds = jobs
+      .filter((j) => {
+        const vid = j.videoId != null ? String(j.videoId).trim() : "";
+        return vid !== "" && !existingVideoIds.has(vid);
+      })
+      .map((j) => j.jobId);
+    const jobIdsToClear = [...new Set([...terminalJobIds, ...orphanJobIds])];
+    if (jobIdsToClear.length > 0) {
       const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue`;
       try {
         const clearQueueResponse = await fetch(clearQueueUrl, {
@@ -225,7 +238,7 @@ export async function GET() {
           },
           body: JSON.stringify({
             user_id: numericUserIdForApi,
-            job_ids: terminalJobIds,
+            job_ids: jobIdsToClear,
           }),
         });
         const clearQueueResponseText = await clearQueueResponse.text();
@@ -234,7 +247,7 @@ export async function GET() {
           console.warn("[Watermark] clear_queue failed", {
             status: clearQueueResponse.status,
             numericUserIdLast4: String(numericUserIdForApi).slice(-4),
-            terminalCount: terminalJobIds.length,
+            count: jobIdsToClear.length,
             response: clearQueueResponseText?.slice(0, 200),
           });
         }
