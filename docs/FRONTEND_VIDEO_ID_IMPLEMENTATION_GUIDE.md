@@ -130,6 +130,23 @@ useEffect(() => {
 }, [userId]);
 ```
 
+### 4.3 Clearing specific jobs
+
+To remove only certain jobs from the queue (e.g. when the user cancels a single video), call `POST /clear_queue` with `user_id` and `job_ids`:
+
+```ts
+await fetch(`${WATERMARK_API_URL}/clear_queue`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    user_id: userId,
+    job_ids: [jobId1, jobId2],  // only these job IDs for this user are removed
+  }),
+});
+```
+
+If you omit `job_ids` or pass an empty array, all jobs for that user are cleared (same as before).
+
 ---
 
 ## 5. Using videoId in Callbacks

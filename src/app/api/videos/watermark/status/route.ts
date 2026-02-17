@@ -167,21 +167,54 @@ export async function GET() {
       });
     }
 
+    // Deduplicate by videoId: one job per video so the UI shows a single state.
+    // Priority: processing > failed > success/completed; within same status keep latest by timestamp.
+    type JobItem = (typeof jobs)[number];
+    const statusRank = (status: string | null): number => {
+      if (status == null) return 4;
+      const s = status.toLowerCase();
+      if (s === "processing") return 1;
+      if (s === "failed") return 2;
+      if (s === "success" || s === "completed") return 3;
+      return 4;
+    };
+    const jobsWithVideoId = jobs.filter((j) => j.videoId != null && String(j.videoId).trim() !== "");
+    const jobsWithoutVideoId = jobs.filter((j) => !j.videoId || String(j.videoId).trim() === "");
+    const videoIdToJob = new Map<string, JobItem>();
+    for (const job of jobsWithVideoId) {
+      const vid = String(job.videoId).trim();
+      const existing = videoIdToJob.get(vid);
+      if (!existing) {
+        videoIdToJob.set(vid, job);
+        continue;
+      }
+      const existingRank = statusRank(existing.status);
+      const jobRank = statusRank(job.status);
+      if (jobRank < existingRank) {
+        videoIdToJob.set(vid, job);
+        continue;
+      }
+      if (jobRank > existingRank) continue;
+      const tsExisting = existing.timestamp ?? "";
+      const tsJob = job.timestamp ?? "";
+      if (tsJob > tsExisting) videoIdToJob.set(vid, job);
+    }
+    const deduplicatedJobs: JobItem[] = [...jobsWithoutVideoId, ...Array.from(videoIdToJob.values())];
+
     // Video updates and emails are handled exclusively by the callback (POST /api/webhooks/watermark-complete).
     // This route returns job status for UI progress display only.
     const videosUpdated = 0;
 
-    // Check if all jobs are in a terminal state (success, completed, or failed).
-    // If so, call clear_queue so the same jobs are not returned on the next poll.
     const isTerminalStatus = (status: string | null) => {
       if (status == null) return false;
       const s = status.toLowerCase();
       return s === "completed" || s === "success" || s === "failed";
     };
-    const allJobsTerminal =
-      jobs.length > 0 && jobs.every((job) => isTerminalStatus(job.status));
 
-    if (allJobsTerminal) {
+    // Clear terminal jobs from the queue so it does not grow unbounded.
+    // Use job_ids to clear only terminal jobs (success/completed/failed); leave processing jobs.
+    const terminalJobIds = jobs.filter((j) => isTerminalStatus(j.status)).map((j) => j.jobId);
+    if (terminalJobIds.length > 0) {
       const clearQueueUrl = `${watermarkServiceUrl.replace(/\/+$/, "")}/clear_queue`;
       try {
         const clearQueueResponse = await fetch(clearQueueUrl, {
@@ -190,7 +223,10 @@ export async function GET() {
             "Content-Type": "application/json",
             Connection: "close",
           },
-          body: JSON.stringify({ user_id: numericUserIdForApi }),
+          body: JSON.stringify({
+            user_id: numericUserIdForApi,
+            job_ids: terminalJobIds,
+          }),
         });
         const clearQueueResponseText = await clearQueueResponse.text();
 
@@ -198,6 +234,7 @@ export async function GET() {
           console.warn("[Watermark] clear_queue failed", {
             status: clearQueueResponse.status,
             numericUserIdLast4: String(numericUserIdForApi).slice(-4),
+            terminalCount: terminalJobIds.length,
             response: clearQueueResponseText?.slice(0, 200),
           });
         }
@@ -212,9 +249,9 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       data: {
-        jobs,
+        jobs: deduplicatedJobs,
         videosUpdated,
-        hasCompletedJobs: jobs.some((j) => j.status === "completed" || j.status === "success"),
+        hasCompletedJobs: deduplicatedJobs.some((j) => j.status === "completed" || j.status === "success"),
       },
     });
   } catch (error) {
