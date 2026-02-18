@@ -8,14 +8,16 @@ import {clearWatermarkQueueJobsForVideo} from "@/lib/watermark-queue";
 /**
  * DELETE /api/videos/[id]/watermarked
  *
- * Deletes only the watermarked (processed) video file for the authenticated user.
- * This does NOT delete the original video or the video record itself.
- * Only removes the processed_url reference from the database.
+ * Deletes the watermarked (processed) video file and any dedicated processed
+ * thumbnail from Wasabi/S3, and clears all related fields in the database so
+ * the video is back to "uploaded" state. Re-watermarking will perform a full
+ * job (no use of cached or existing DB data for the watermarked asset).
  *
- * Response:
- * - success: Boolean indicating if the request was successful
- * - data: Object containing success message
- * - error: Object containing error details if request failed
+ * - Deletes the processed video file from Wasabi (key from processed_url).
+ * - If processed_thumbnail_url points to a different object than the original
+ *   thumbnail, deletes that object from Wasabi.
+ * - Sets processed_url, processed_thumbnail_url to null and status to "uploaded".
+ * - Clears queue jobs for this video.
  */
 export async function DELETE(_request: NextRequest, context: {params: Promise<{id: string}>}) {
   try {
@@ -69,7 +71,7 @@ export async function DELETE(_request: NextRequest, context: {params: Promise<{i
       );
     }
 
-    // Delete processed (watermarked) file from Wasabi
+    // Delete processed (watermarked) video file from Wasabi/S3
     try {
       const deleteProcessedCommand = new DeleteObjectCommand({
         Bucket: WASABI_BUCKET,
@@ -82,7 +84,31 @@ export async function DELETE(_request: NextRequest, context: {params: Promise<{i
       // The file might already be deleted or not exist
     }
 
-    // Update video record: remove processed_url and update status
+    // Delete processed thumbnail from Wasabi if it is a separate object (different key from original)
+    const processedThumbnailUrl = (video as { processed_thumbnail_url?: string | null }).processed_thumbnail_url;
+    const originalThumbnailUrl = (video as { original_thumbnail_url?: string | null }).original_thumbnail_url;
+    if (processedThumbnailUrl && typeof processedThumbnailUrl === "string") {
+      const processedThumbKey = processedThumbnailUrl.startsWith("http")
+        ? extractKeyFromUrl(processedThumbnailUrl)
+        : processedThumbnailUrl;
+      const originalThumbKey =
+        originalThumbnailUrl && typeof originalThumbnailUrl === "string"
+          ? originalThumbnailUrl.startsWith("http")
+            ? extractKeyFromUrl(originalThumbnailUrl)
+            : originalThumbnailUrl
+          : null;
+      if (processedThumbKey && processedThumbKey !== originalThumbKey) {
+        try {
+          await wasabiClient.send(
+            new DeleteObjectCommand({ Bucket: WASABI_BUCKET, Key: processedThumbKey })
+          );
+        } catch (thumbError) {
+          console.error("Error deleting processed thumbnail from Wasabi:", thumbError);
+        }
+      }
+    }
+
+    // Update video record: remove processed_url, processed_thumbnail_url and reset status
     const {error: updateError} = await supabase
       .from("videos")
       .update({
