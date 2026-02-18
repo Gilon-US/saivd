@@ -246,6 +246,14 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         variant: "success",
       });
 
+      // Clear this video from pending jobs so the card shows empty state, not "Completed"
+      const deletedVideoId = deleteWatermarkedDialog.video.id;
+      setPendingJobs((prev) => {
+        const next = {...prev};
+        delete next[deletedVideoId];
+        return next;
+      });
+
       // Close dialog and refresh the grid
       setDeleteWatermarkedDialog({
         isOpen: false,
