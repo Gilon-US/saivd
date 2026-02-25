@@ -56,14 +56,10 @@ export function useFrameAnalysis(
   videoId?: string
 ) {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
-  const [extractedUserId, setExtractedUserId] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const skipPixelReadRef = useRef(false);
-  const frameCountRef = useRef(0);
-  const lastExtractionFrameRef = useRef(-1);
-  const isExtractingRef = useRef(false);
 
   useEffect(() => {
     // Initialize canvas for frame capture
@@ -125,43 +121,8 @@ export function useFrameAnalysis(
         videoTime: video.currentTime,
       };
 
-      // If we have a videoId, extract user ID every 10 frames
-      if (videoId && !isExtractingRef.current) {
-        frameCountRef.current += 1;
-        
-        // Extract user ID every 10 frames (check if we should extract on this frame)
-        if (frameCountRef.current - lastExtractionFrameRef.current >= 10) {
-          // Use the actual frame count as the frame index
-          const frameIndex = frameCountRef.current;
-          
-          isExtractingRef.current = true;
-          lastExtractionFrameRef.current = frameCountRef.current;
-          
-          // Call API to extract user ID (don't await - fire and forget to avoid blocking)
-          fetch(`/api/videos/${videoId}/extract-user-id?frame_index=${frameIndex}`)
-            .then(async (response) => {
-              if (!response.ok) {
-                console.warn("[FrameAnalysis] Failed to extract user ID", response.status);
-                return;
-              }
-              const data = await response.json();
-              if (data.success && data.data?.user_id) {
-                setExtractedUserId(data.data.user_id);
-                console.log("[FrameAnalysis] Extracted user ID:", data.data.user_id);
-              }
-            })
-            .catch((error) => {
-              console.error("[FrameAnalysis] Error extracting user ID:", error);
-            })
-            .finally(() => {
-              isExtractingRef.current = false;
-            });
-        }
-      }
-
-      // Note: QR URL is set in a separate useEffect that watches extractedUserId
-      // If we have a videoId, we're using user ID extraction, so don't use analysis function
-      // Only use analysis function when videoId is not provided (fallback mode)
+      // When videoId is provided, QR URL and verification come from parent (verifiedUserId via useWatermarkVerification).
+      // Only run analysis function when videoId is not provided.
       if (!videoId) {
         // Call analysis function and update overlay QR URL (only when not using user ID extraction)
         try {
@@ -172,7 +133,6 @@ export function useFrameAnalysis(
           setQrUrl(null);
         }
       }
-      // If videoId is provided, the QR URL will be set by the useEffect that watches extractedUserId
 
       // Schedule next frame analysis
       if (isPlaying) {
@@ -194,59 +154,12 @@ export function useFrameAnalysis(
     };
   }, [videoRef, isPlaying, analysisFunction, videoId]);
 
-  // Reset frame count when video stops (but keep extractedUserId and QR URL)
-  // When video starts playing again, restore QR URL if we have extractedUserId
+  // Reset QR URL when video ID changes (when videoId is provided, parent supplies verifiedUserId for overlay)
   useEffect(() => {
-    if (!isPlaying) {
-      // Only reset frame counters, don't clear QR URL or extractedUserId
-      // This allows QR code to persist when video is paused or ends
-      frameCountRef.current = 0;
-      lastExtractionFrameRef.current = -1;
-      isExtractingRef.current = false;
-    } else {
-      // When video starts playing, immediately restore QR URL if we already have extractedUserId
-      // This ensures QR code appears immediately on replay without waiting for frame extraction
-      if (videoId && extractedUserId) {
-        const qrUrlFromUserId = `/profile/${extractedUserId}/qr`;
-        setQrUrl((currentQrUrl) => {
-          // Only update if QR URL is not already set (avoid unnecessary updates)
-          if (currentQrUrl !== qrUrlFromUserId) {
-            console.log("[FrameAnalysis] Restoring QR URL on video replay:", qrUrlFromUserId);
-            return qrUrlFromUserId;
-          }
-          return currentQrUrl;
-        });
-      }
-    }
-  }, [isPlaying, videoId, extractedUserId]);
-
-  // Reset extracted user ID and QR URL when video ID changes
-  useEffect(() => {
-    setExtractedUserId(null);
-    setQrUrl(null);
-    frameCountRef.current = 0;
-    lastExtractionFrameRef.current = -1;
-    isExtractingRef.current = false;
-  }, [videoId]);
-
-  // Update QR URL when extractedUserId changes or when video starts playing again
-  // This ensures QR URL is restored when replaying if we already have extractedUserId
-  useEffect(() => {
-    if (videoId && extractedUserId) {
-      // Always set QR URL when we have both videoId and extractedUserId
-      // This ensures it's restored when video is replayed
-      const qrUrlFromUserId = `/profile/${extractedUserId}/qr`;
-      setQrUrl(qrUrlFromUserId);
-      console.log("[FrameAnalysis] Setting QR URL from extracted user ID:", qrUrlFromUserId, {
-        isPlaying,
-        videoId,
-        extractedUserId,
-      });
-    } else if (!videoId) {
-      // Clear QR URL if videoId is removed
+    if (videoId) {
       setQrUrl(null);
     }
-  }, [videoId, extractedUserId, isPlaying]);
+  }, [videoId]);
 
   return {qrUrl, showOverlay: qrUrl !== null};
 }

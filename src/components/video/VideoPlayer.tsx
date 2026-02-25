@@ -3,6 +3,7 @@
 import {useEffect, useRef, useState, useCallback} from "react";
 import {X, Play, Pause, Volume2, VolumeX, Maximize} from "lucide-react";
 import {useFrameAnalysis, type FrameAnalysisFunction} from "@/hooks/useFrameAnalysis";
+import {useWatermarkVerification} from "@/hooks/useWatermarkVerification";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
 
 interface VideoPlayerProps {
@@ -13,9 +14,19 @@ interface VideoPlayerProps {
   enableFrameAnalysis: boolean;
   verificationStatus?: "verifying" | "verified" | "failed" | null;
   verifiedUserId?: string | null;
+  onVerificationComplete?: (status: "verified" | "failed", userId: string | null) => void;
 }
 
-export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnalysis, verificationStatus, verifiedUserId}: VideoPlayerProps) {
+export function VideoPlayer({
+  videoUrl,
+  videoId,
+  onClose,
+  isOpen,
+  enableFrameAnalysis,
+  verificationStatus,
+  verifiedUserId,
+  onVerificationComplete,
+}: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -25,16 +36,17 @@ export function VideoPlayer({videoUrl, videoId, onClose, isOpen, enableFrameAnal
   // Prevent playback until verification passes (for watermarked videos)
   const isPlaybackAllowed = verificationStatus === null || verificationStatus === "verified";
 
-  // Frame analysis hook – controlled explicitly by enableFrameAnalysis.
-  // When enabled and videoId is provided, the hook will extract user ID
-  // from the video frames every 10 frames using the watermark service API.
-  // When disabled or videoId is not provided, the analysis function is used.
+  // Frontend watermark verification: decode frame 0, fetch public key, verify; then verify frames 10, 20, ...
+  const verificationEnabled =
+    Boolean(enableFrameAnalysis && verificationStatus === "verifying" && videoUrl) && isOpen;
+  useWatermarkVerification(videoRef, videoUrl ?? null, {
+    enabled: verificationEnabled,
+    onVerificationComplete,
+  });
+
+  // Frame analysis hook – when videoId is provided, QR URL comes from verifiedUserId (parent state).
   const analysisFunction = useCallback<FrameAnalysisFunction>(() => {
-    if (!enableFrameAnalysis) {
-      return null;
-    }
-    // If videoId is provided, user ID extraction is handled by useFrameAnalysis hook
-    // This function is only used as a fallback when videoId is not available
+    if (!enableFrameAnalysis) return null;
     return null;
   }, [enableFrameAnalysis]);
   const {qrUrl: frameAnalysisQrUrl} = useFrameAnalysis(videoRef, isPlaying, analysisFunction, enableFrameAnalysis && videoId ? videoId : undefined);

@@ -93,7 +93,6 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
   });
 
   const [isOpeningVideo, setIsOpeningVideo] = useState<string | null>(null);
-  const verificationAbortControllerRef = useRef<AbortController | null>(null);
 
   const handleVideoClick = async (video: Video, variant: "original" | "watermarked" = "original") => {
     try {
@@ -108,9 +107,8 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         throw new Error(data.error?.message || "Failed to generate playback URL");
       }
 
-      // For watermarked videos, verify authenticity before allowing playback
+      // For watermarked videos, open player in "verifying" state; frontend verification runs in VideoPlayer
       if (variant === "watermarked") {
-        // Set initial state to verifying
         setVideoPlayer({
           isOpen: true,
           videoUrl: data.data.playbackUrl,
@@ -119,44 +117,6 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
           verificationStatus: "verifying",
           verifiedUserId: null,
         });
-
-        // Create AbortController for this request
-        verificationAbortControllerRef.current = new AbortController();
-
-        // Immediately verify by extracting user ID from frame 0
-        try {
-          const verifyResponse = await fetch(`/api/videos/${video.id}/extract-user-id?frame_index=0`, {
-            signal: verificationAbortControllerRef.current.signal,
-          });
-          const verifyData = await verifyResponse.json();
-
-          if (verifyResponse.ok && verifyData.success && verifyData.data?.user_id) {
-            // Verification successful - allow playback and store user ID for QR code
-            setVideoPlayer((prev) => ({
-              ...prev,
-              verificationStatus: "verified",
-              verifiedUserId: verifyData.data.user_id,
-            }));
-          } else {
-            // Verification failed - no valid user ID
-            setVideoPlayer((prev) => ({
-              ...prev,
-              verificationStatus: "failed",
-            }));
-          }
-        } catch (verifyError) {
-          // Handle abort separately (user closed player)
-          if (verifyError instanceof Error && verifyError.name === "AbortError") {
-            console.log("[VideoGrid] Verification request aborted");
-            return;
-          }
-          // Other errors - verification failed
-          console.error("[VideoGrid] Verification error:", verifyError);
-          setVideoPlayer((prev) => ({
-            ...prev,
-            verificationStatus: "failed",
-          }));
-        }
       } else {
             // Original videos don't need verification
             setVideoPlayer({
@@ -182,12 +142,6 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
   };
 
   const handleClosePlayer = () => {
-    // Cancel any pending verification request
-    if (verificationAbortControllerRef.current) {
-      verificationAbortControllerRef.current.abort();
-      verificationAbortControllerRef.current = null;
-    }
-
     setVideoPlayer({
       isOpen: false,
       videoUrl: null,
@@ -850,13 +804,20 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       {/* Video player */}
       {videoPlayer.videoUrl && (
         <VideoPlayer
-          videoUrl={videoPlayer.videoUrl}
+          videoUrl={videoPlayer.videoUrl ?? ""}
           videoId={videoPlayer.videoId}
           onClose={handleClosePlayer}
           isOpen={videoPlayer.isOpen}
           enableFrameAnalysis={videoPlayer.enableFrameAnalysis}
           verificationStatus={videoPlayer.verificationStatus}
           verifiedUserId={videoPlayer.verifiedUserId}
+          onVerificationComplete={(status, userId) => {
+            setVideoPlayer((prev) => ({
+              ...prev,
+              verificationStatus: status,
+              verifiedUserId: userId,
+            }));
+          }}
         />
       )}
     </div>

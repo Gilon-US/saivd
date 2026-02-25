@@ -13,9 +13,14 @@ jest.mock('lucide-react', () => ({
 }));
 
 // Mock useFrameAnalysis hook
-const mockUseFrameAnalysis = jest.fn(() => ({ showOverlay: false }));
+const mockUseFrameAnalysis = jest.fn(() => ({ qrUrl: null, showOverlay: false }));
 jest.mock('@/hooks/useFrameAnalysis', () => ({
   useFrameAnalysis: mockUseFrameAnalysis,
+}));
+
+// Mock useWatermarkVerification hook (frontend decode + RSA verify)
+jest.mock('@/hooks/useWatermarkVerification', () => ({
+  useWatermarkVerification: jest.fn(),
 }));
 
 describe('VideoPlayer', () => {
