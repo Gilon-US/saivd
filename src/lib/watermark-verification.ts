@@ -3,15 +3,9 @@
  * Decodes numeric_user_id from frame 0 and verifies frames 0, 10, 20, ... using the creator's public RSA key.
  */
 
-const DEBUG_DECODE =
-  typeof process !== "undefined" &&
-  typeof process.env !== "undefined" &&
-  process.env.NODE_ENV !== "production";
-
-function debugLog(...args: unknown[]) {
-  if (DEBUG_DECODE && typeof console !== "undefined" && console.log) {
-    console.log("[WatermarkDecode]", ...args);
-  }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function debugLog(...args: any[]) {
+  console.debug("[WatermarkDecode]", ...args);
 }
 
 export const PATCH_SIZE = 16;

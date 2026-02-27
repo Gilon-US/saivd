@@ -34,11 +34,9 @@ export function useWatermarkVerification(
   const callbackFiredRef = useRef(false);
   const verifiedFrameIndicesRef = useRef<Set<number>>(new Set());
 
-  const debugLog = (...args: unknown[]) => {
-    if (process.env.NODE_ENV !== "production") {
-      // eslint-disable-next-line no-console
-      console.log("[WatermarkVerification]", ...args);
-    }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const debugLog = (...args: any[]) => {
+    console.debug("[WatermarkVerify]", ...args);
   };
 
   // Capture a single frame from the video to ImageData. Returns null if canvas is tainted (cross-origin).
