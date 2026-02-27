@@ -321,71 +321,58 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
     return null;
   }
 
-  // --- Diagnostic dump: show raw patch matrix and multiple interpretations ---
-  debugLog("DIAGNOSTIC: raw patch matrix (first 5 rows × first 10 cols):",
-    givenFrame.slice(0, 5).map((r, i) => `row${i}: [${r.slice(0, 10).join(", ")}]`));
-
-  // Interpretation A: column sums (sum vertically per column)
+  // --- Diagnostic: try multiple decode interpretations and report which one yields a valid user ID ---
   const colSums = getRightSideColumnSums(givenFrame, rightEndIndex);
-  debugLog("DIAGNOSTIC A - column sums (vertical):", {
-    first14: colSums.slice(0, 14),
-    length: colSums.length,
-  });
 
-  // Interpretation B: row sums (sum horizontally per row) — spec literal formula
+  // Print first 70 column sums as a readable string (not a collapsed Array)
+  debugLog("DIAGNOSTIC: column sums first 70 =", colSums.slice(0, 70).join(", "));
+
+  // Print first 10 raw patch values per row for first 3 rows
+  for (let r = 0; r < Math.min(3, patchRows); r++) {
+    debugLog(`DIAGNOSTIC: patchMatrix row ${r} first 10 =`, givenFrame[r].slice(0, 10).join(", "));
+  }
+
+  // Try each transformation and attempt to decode a valid 9-digit user ID
+  const transforms: {name: string; values: number[]}[] = [
+    {name: "A: colSums raw", values: colSums},
+    {name: "B: colSums % 10", values: colSums.map(v => v % 10)},
+    {name: "C: colSums % patchRows (" + patchRows + ")", values: colSums.map(v => v % patchRows)},
+    {name: "D: colSums % 256", values: colSums.map(v => v % 256)},
+    {name: "E: colSums % PATCH_SIZE (16)", values: colSums.map(v => v % PATCH_SIZE)},
+    {name: "F: row0 raw", values: givenFrame[0].slice(0, rightEndIndex)},
+    {name: "G: row0 % 10", values: givenFrame[0].slice(0, rightEndIndex).map(v => v % 10)},
+  ];
+
+  // Also try row sums (spec literal formula) if we have >= 63 rows
   const rowSums: number[] = [];
   for (let row = 0; row < patchRows; row++) {
     let s = 0;
     for (let col = 0; col < rightEndIndex; col++) s += givenFrame[row][col];
     rowSums.push(s);
   }
-  debugLog("DIAGNOSTIC B - row sums (horizontal):", {
-    first14: rowSums.slice(0, 14),
-    length: rowSums.length,
-  });
-
-  // Interpretation C: individual patch values from row 0
-  const row0 = givenFrame[0].slice(0, Math.min(70, rightEndIndex));
-  debugLog("DIAGNOSTIC C - row 0 individual patch values:", {
-    first14: row0.slice(0, 14),
-    min: Math.min(...row0),
-    max: Math.max(...row0),
-  });
-
-  // Interpretation D: individual patch values mod 10 from row 0
-  debugLog("DIAGNOSTIC D - row 0 patch values % 10:", {
-    first14: row0.slice(0, 14).map(v => v % 10),
-  });
-
-  // Interpretation E: column sums mod patchRows
-  debugLog("DIAGNOSTIC E - column sums % patchRows:", {
-    first14: colSums.slice(0, 14).map(v => v % patchRows),
-  });
-
-  // Interpretation F: column-major individual patch values (first 70 cells)
-  const colMajor: number[] = [];
-  for (let col = 0; col < rightEndIndex && colMajor.length < 70; col++) {
-    for (let row = 0; row < patchRows && colMajor.length < 70; row++) {
-      colMajor.push(givenFrame[row][col]);
-    }
+  if (rowSums.length >= USER_ID_DIGITS * REPS) {
+    transforms.push({name: "H: rowSums raw", values: rowSums});
+    transforms.push({name: "I: rowSums % 10", values: rowSums.map(v => v % 10)});
   }
-  debugLog("DIAGNOSTIC F - column-major patch values:", {
-    first14: colMajor.slice(0, 14),
-    min: Math.min(...colMajor.slice(0, 70)),
-    max: Math.max(...colMajor.slice(0, 70)),
-  });
 
-  // Interpretation G: row-major individual patch values (first 70 cells)
-  const rowMajor: number[] = [];
-  for (let row = 0; row < patchRows && rowMajor.length < 70; row++) {
-    for (let col = 0; col < rightEndIndex && rowMajor.length < 70; col++) {
-      rowMajor.push(givenFrame[row][col]);
+  for (const t of transforms) {
+    if (t.values.length < USER_ID_DIGITS * REPS) {
+      debugLog(`DECODE TRY ${t.name}: SKIP (only ${t.values.length} values, need ${USER_ID_DIGITS * REPS})`);
+      continue;
     }
+    const first70 = t.values.slice(0, 70);
+    const digits: (number | null)[] = [];
+    let valid = true;
+    for (let d = 0; d < USER_ID_DIGITS; d++) {
+      const group = t.values.slice(d * REPS, (d + 1) * REPS);
+      const m = getMode(group);
+      digits.push(m);
+      if (m === null || m < 0 || m > 9) valid = false;
+    }
+    const userId = valid ? digits.join("") : null;
+    debugLog(`DECODE TRY ${t.name}: first14=[${first70.slice(0, 14).join(",")}] digits=[${digits.join(",")}] userId=${userId}`);
   }
-  debugLog("DIAGNOSTIC G - row-major patch values:", {
-    first14: rowMajor.slice(0, 14),
-  });
-  // --- End diagnostic dump ---
+  // --- End diagnostic ---
 
   const rightSide = colSums;
   debugLog("decodeNumericUserIdFromFrame: rightSide", {
