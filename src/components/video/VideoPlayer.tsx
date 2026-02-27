@@ -147,6 +147,7 @@ export function VideoPlayer({
           <video
             ref={videoRef}
             src={videoUrl}
+            crossOrigin="anonymous"
             className="w-full aspect-video"
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}

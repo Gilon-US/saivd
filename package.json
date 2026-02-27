@@ -22,7 +22,8 @@
     "docker:prod:shell": "./scripts/docker-prod.sh shell",
     "docker:prod:rebuild": "./scripts/docker-prod.sh rebuild",
     "docker:prod:health": "./scripts/docker-prod.sh health",
-    "docker:prod:backup": "./scripts/docker-prod.sh backup"
+    "docker:prod:backup": "./scripts/docker-prod.sh backup",
+    "setup:cors": "npx tsx scripts/setup-wasabi-cors.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.893.0",
