@@ -39,7 +39,7 @@ export function VideoPlayer({
   // Frontend watermark verification: decode frame 0, fetch public key, verify; then verify frames 10, 20, ...
   const verificationEnabled =
     Boolean(enableFrameAnalysis && verificationStatus === "verifying" && videoUrl) && isOpen;
-  console.debug("[VideoPlayer] Render with verification state", {
+  console.log("[VideoPlayer] Render with verification state", {
     verificationEnabled,
     enableFrameAnalysis,
     verificationStatus,

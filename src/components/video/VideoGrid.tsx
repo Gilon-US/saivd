@@ -109,7 +109,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
 
       // For watermarked videos, open player in "verifying" state; frontend verification runs in VideoPlayer
       if (variant === "watermarked") {
-        console.debug("[VideoGrid] Opened watermarked video for playback – verification will run in VideoPlayer", {
+        console.log("[VideoGrid] Opened watermarked video for playback – verification will run in VideoPlayer", {
           videoId: video.id,
           playbackUrl: data.data.playbackUrl?.slice(0, 60),
           enableFrameAnalysis: true,
@@ -818,7 +818,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
           verificationStatus={videoPlayer.verificationStatus}
           verifiedUserId={videoPlayer.verifiedUserId}
           onVerificationComplete={(status, userId) => {
-            console.debug("[VideoGrid] Verification result received from VideoPlayer", {status, userId});
+            console.log("[VideoGrid] Verification result received from VideoPlayer", {status, userId});
             setVideoPlayer((prev) => ({
               ...prev,
               verificationStatus: status,

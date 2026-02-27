@@ -36,7 +36,7 @@ export function useWatermarkVerification(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const debugLog = (...args: any[]) => {
-    console.debug("[WatermarkVerify]", ...args);
+    console.log("[WatermarkVerify]", ...args);
   };
 
   // Capture a single frame from the video to ImageData. Returns null if canvas is tainted (cross-origin).

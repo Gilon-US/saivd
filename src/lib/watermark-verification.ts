@@ -5,7 +5,7 @@
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function debugLog(...args: any[]) {
-  console.debug("[WatermarkDecode]", ...args);
+  console.log("[WatermarkDecode]", ...args);
 }
 
 export const PATCH_SIZE = 16;
