@@ -57,8 +57,18 @@ export function useWatermarkVerification(
     if (!ctx) return null;
     try {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      return ctx.getImageData(0, 0, canvas.width, canvas.height);
-    } catch {
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      debugLog("Frame captured successfully", {
+        width: imageData.width,
+        height: imageData.height,
+        dataLength: imageData.data.length,
+      });
+      return imageData;
+    } catch (err) {
+      debugLog("Frame capture failed (likely cross-origin video or CORS – canvas tainted)", {
+        error: err instanceof Error ? err.message : String(err),
+        videoSrc: video.src?.slice(0, 80),
+      });
       return null;
     }
   }, [videoRef]);
@@ -79,7 +89,9 @@ export function useWatermarkVerification(
     const runVerification = async () => {
       const imageData = captureFrameToImageData();
       if (!imageData) {
-        debugLog("Failed to read frame (cross-origin or not ready)");
+        debugLog(
+          "Playback decode failed: could not read frame. Video may be cross-origin (presigned URL) without CORS – canvas is tainted and getImageData() is blocked. Ensure the video URL is served with Access-Control-Allow-Origin or use same-origin proxy."
+        );
         setStatus("failed");
         if (!callbackFiredRef.current && onVerificationComplete) {
           callbackFiredRef.current = true;
@@ -161,10 +173,12 @@ export function useWatermarkVerification(
     };
 
     const onSeeked = () => {
+      debugLog("Video seeked to frame 0, starting playback decode");
       runVerification();
     };
 
     if (video.readyState >= 2) {
+      debugLog("Video already has data (readyState >= 2), seeking to 0 for frame 0");
       video.currentTime = 0;
       const t = setTimeout(() => {
         onSeeked();
@@ -172,6 +186,10 @@ export function useWatermarkVerification(
       return () => clearTimeout(t);
     }
 
+    debugLog("Waiting for video loadeddata then seeked to frame 0", {
+      readyState: video.readyState,
+      videoUrl: videoUrl?.slice(0, 60),
+    });
     video.addEventListener("loadeddata", onCanReadFrame, {once: true});
     video.addEventListener("seeked", onSeeked, {once: true});
     video.currentTime = 0;

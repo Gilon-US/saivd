@@ -3,6 +3,17 @@
  * Decodes numeric_user_id from frame 0 and verifies frames 0, 10, 20, ... using the creator's public RSA key.
  */
 
+const DEBUG_DECODE =
+  typeof process !== "undefined" &&
+  typeof process.env !== "undefined" &&
+  process.env.NODE_ENV !== "production";
+
+function debugLog(...args: unknown[]) {
+  if (DEBUG_DECODE && typeof console !== "undefined" && console.log) {
+    console.log("[WatermarkDecode]", ...args);
+  }
+}
+
 export const PATCH_SIZE = 16;
 export const FACTOR = 1;
 export const MAX_MESSAGE_LENGTH = 100;
@@ -29,7 +40,14 @@ export function cropToMultipleOf16(
 ): {luma: Uint8Array; width: number; height: number} {
   const w = imageData.width - (imageData.width % PATCH_SIZE);
   const h = imageData.height - (imageData.height % PATCH_SIZE);
+  debugLog("cropToMultipleOf16", {
+    inputWidth: imageData.width,
+    inputHeight: imageData.height,
+    croppedWidth: w,
+    croppedHeight: h,
+  });
   if (w <= 0 || h <= 0) {
+    debugLog("cropToMultipleOf16: dimensions too small, returning empty");
     return {luma: new Uint8Array(0), width: 0, height: 0};
   }
   const luma = imageDataToLuma(imageData);
@@ -101,17 +119,39 @@ export function getRightSideColumnSums(
  */
 export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | null {
   const need = USER_ID_DIGITS * REPS; // 63
-  if (rightSide.length < need) return null;
+  debugLog("decodeNumericUserIdFromRightSide", {
+    rightSideLength: rightSide.length,
+    need,
+    first70: rightSide.slice(0, 70),
+  });
+  if (rightSide.length < need) {
+    debugLog("decodeNumericUserIdFromRightSide: rightSide.length < 63", {
+      rightSideLength: rightSide.length,
+      need,
+    });
+    return null;
+  }
   const digits: number[] = [];
   for (let d = 0; d < USER_ID_DIGITS; d++) {
     const group = rightSide.slice(d * REPS, (d + 1) * REPS);
     const mode = getMode(group);
-    if (mode === null || mode < 0 || mode > 9) return null;
+    if (mode === null || mode < 0 || mode > 9) {
+      debugLog("decodeNumericUserIdFromRightSide: invalid mode for digit", {
+        digitIndex: d,
+        mode,
+        group,
+      });
+      return null;
+    }
     digits.push(mode);
   }
   const str = digits.join("");
   const parsed = parseInt(str, 10);
-  if (Number.isNaN(parsed) || str.length !== USER_ID_DIGITS) return null;
+  if (Number.isNaN(parsed) || str.length !== USER_ID_DIGITS) {
+    debugLog("decodeNumericUserIdFromRightSide: parse failed", {str, parsed, digits});
+    return null;
+  }
+  debugLog("decodeNumericUserIdFromRightSide: success", {numericUserId: parsed, digits});
   return parsed;
 }
 
@@ -236,6 +276,14 @@ export async function decodeAndVerifyFrame(
   const numericUserId = decodeNumericUserIdFromRightSide(rightSide);
   const signatureBytes = getLeftSideSignature(luma, width, height, rightEndIndex);
   const verified = await verifyFrame(publicKey, rightSide, signatureBytes);
+  debugLog("decodeAndVerifyFrame result", {
+    verified,
+    numericUserId,
+    rightSideLength: rightSide.length,
+  });
+  if (!verified) {
+    debugLog("RSA verification failed for this frame (signature or message mismatch)");
+  }
   return {verified, numericUserId};
 }
 
@@ -243,14 +291,35 @@ export async function decodeAndVerifyFrame(
  * Decode numeric_user_id from frame 0 only (no key required). Use this to then fetch the public key.
  */
 export function decodeNumericUserIdFromFrame(imageData: ImageData): number | null {
+  debugLog("decodeNumericUserIdFromFrame: start", {
+    width: imageData.width,
+    height: imageData.height,
+  });
   const {luma, width, height} = cropToMultipleOf16(imageData);
-  if (width < PATCH_SIZE || height < PATCH_SIZE) return null;
+  if (width < PATCH_SIZE || height < PATCH_SIZE) {
+    debugLog("decodeNumericUserIdFromFrame: cropped dimensions too small", {
+      width,
+      height,
+      PATCH_SIZE,
+    });
+    return null;
+  }
   const givenFrame = buildPatchMatrix(luma, width, height);
   const patchRows = givenFrame.length;
-  const patchCols = givenFrame[0].length;
+  const patchCols = givenFrame[0]?.length ?? 0;
   const rightEndIndex = getRightEndIndex(patchRows, patchCols);
-  if (rightEndIndex <= 0) return null;
+  debugLog("decodeNumericUserIdFromFrame: patch layout", {
+    patchRows,
+    patchCols,
+    rightEndIndex,
+    groupsPerColumn: Math.floor(patchRows / 5),
+  });
+  if (rightEndIndex <= 0) {
+    debugLog("decodeNumericUserIdFromFrame: rightEndIndex <= 0", {rightEndIndex});
+    return null;
+  }
   const rightSide = getRightSideColumnSums(givenFrame, rightEndIndex);
+  debugLog("decodeNumericUserIdFromFrame: rightSide length", {length: rightSide.length});
   return decodeNumericUserIdFromRightSide(rightSide);
 }
 
