@@ -15,15 +15,26 @@ export const SIGNATURE_LENGTH = 256;
 export const USER_ID_DIGITS = 9;
 export const REPS = 7;
 
-/** Extract luma (Y) from RGBA ImageData; single value per pixel. */
+/**
+ * Extract luma (Y) from RGBA ImageData as **limited-range BT.709** values (16-235).
+ *
+ * The backend watermark service reads the raw Y plane from the video file, which stores
+ * limited-range values.  The browser's video decoder converts limited-range YUV → full-range
+ * RGB for canvas display.  We must reverse that to recover the original Y values.
+ *
+ * BT.709 limited-range formula:  Y = 16 + (219/255) × (0.2126·R + 0.7152·G + 0.0722·B)
+ */
 function imageDataToLuma(data: ImageData): Uint8Array {
   const {width, height, data: rgba} = data;
   const luma = new Uint8Array(width * height);
+  const scale = 219 / 255; // ≈ 0.8588
   for (let i = 0; i < width * height; i++) {
     const r = rgba[i * 4];
     const g = rgba[i * 4 + 1];
     const b = rgba[i * 4 + 2];
-    luma[i] = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+    const yFull = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const yLimited = 16 + scale * yFull;
+    luma[i] = Math.max(0, Math.min(255, Math.round(yLimited)));
   }
   return luma;
 }
