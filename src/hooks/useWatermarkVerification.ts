@@ -34,10 +34,22 @@ export function useWatermarkVerification(
   const callbackFiredRef = useRef(false);
   const verifiedFrameIndicesRef = useRef<Set<number>>(new Set());
 
+  const debugLog = (...args: unknown[]) => {
+    if (process.env.NODE_ENV !== "production") {
+      // eslint-disable-next-line no-console
+      console.log("[WatermarkVerification]", ...args);
+    }
+  };
+
   // Capture a single frame from the video to ImageData. Returns null if canvas is tainted (cross-origin).
   const captureFrameToImageData = useCallback((): ImageData | null => {
     const video = videoRef.current;
     if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
+    debugLog("Capturing frame for analysis", {
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight,
+      currentTime: video.currentTime,
+    });
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -53,6 +65,7 @@ export function useWatermarkVerification(
 
   // Run verification on frame 0: decode userId → fetch key → verify.
   useEffect(() => {
+    debugLog("Effect start", {enabled, hasVideoUrl: !!videoUrl, hasVideoRef: !!videoRef.current});
     if (!enabled || !videoUrl || !videoRef.current) {
       setStatus("idle");
       setVerifiedUserId(null);
@@ -66,7 +79,7 @@ export function useWatermarkVerification(
     const runVerification = async () => {
       const imageData = captureFrameToImageData();
       if (!imageData) {
-        console.warn("[WatermarkVerification] Could not read frame (cross-origin or not ready)");
+        debugLog("Failed to read frame (cross-origin or not ready)");
         setStatus("failed");
         if (!callbackFiredRef.current && onVerificationComplete) {
           callbackFiredRef.current = true;
@@ -78,10 +91,12 @@ export function useWatermarkVerification(
       let numericUserId: number | null = null;
       try {
         numericUserId = decodeNumericUserIdFromFrame(imageData);
+        debugLog("Decoded numericUserId from frame 0", {numericUserId});
       } catch (e) {
-        console.warn("[WatermarkVerification] Decode error", e);
+        debugLog("Decode error", e);
       }
       if (numericUserId === null || numericUserId <= 0) {
+        debugLog("numericUserId invalid after decode", {numericUserId});
         setStatus("failed");
         if (!callbackFiredRef.current && onVerificationComplete) {
           callbackFiredRef.current = true;
@@ -92,9 +107,11 @@ export function useWatermarkVerification(
 
       let pem: string;
       try {
+        debugLog("Fetching public key PEM", {numericUserId});
         pem = await fetchPublicKeyPem(numericUserId);
+        debugLog("Fetched public key PEM length", {length: pem.length});
       } catch (e) {
-        console.warn("[WatermarkVerification] Fetch public key error", e);
+        debugLog("Fetch public key error", e);
         setStatus("failed");
         if (!callbackFiredRef.current && onVerificationComplete) {
           callbackFiredRef.current = true;
@@ -106,8 +123,9 @@ export function useWatermarkVerification(
       let key: CryptoKey;
       try {
         key = await importPublicKeyFromPem(pem);
+        debugLog("Imported public key");
       } catch (e) {
-        console.warn("[WatermarkVerification] Import key error", e);
+        debugLog("Import key error", e);
         setStatus("failed");
         if (!callbackFiredRef.current && onVerificationComplete) {
           callbackFiredRef.current = true;
@@ -118,6 +136,7 @@ export function useWatermarkVerification(
       publicKeyRef.current = key;
 
       const result = await decodeAndVerifyFrame(key, imageData);
+      debugLog("Frame 0 verification result", {verified: result.verified, numericUserId: result.numericUserId});
       if (!result.verified) {
         setStatus("failed");
         if (!callbackFiredRef.current && onVerificationComplete) {
@@ -130,6 +149,7 @@ export function useWatermarkVerification(
       verifiedFrameIndicesRef.current = new Set([0]);
       setVerifiedUserId(String(numericUserId));
       setStatus("verified");
+      debugLog("Verification succeeded for frame 0", {numericUserId});
       if (!callbackFiredRef.current && onVerificationComplete) {
         callbackFiredRef.current = true;
         onVerificationComplete("verified", String(numericUserId));
@@ -178,10 +198,12 @@ export function useWatermarkVerification(
       const result = await decodeAndVerifyFrame(publicKeyRef.current, imageData);
       if (cancelled) return;
       if (!result.verified) {
+        debugLog("Verification failed for subsequent frame", {frameIndex});
         setStatus("failed");
         setVerifiedUserId(null);
         if (onVerificationComplete) onVerificationComplete("failed", null);
       } else {
+        debugLog("Verification succeeded for subsequent frame", {frameIndex});
         verifiedFrameIndicesRef.current.add(frameIndex);
       }
     };
