@@ -105,28 +105,29 @@ describe("watermark-verification", () => {
   });
 
   describe("getRightEndIndex", () => {
-    it("returns patchCols - numLeftColumns for typical dimensions", () => {
-      const patchRows = 100; // e.g. 1600 height
-      const patchCols = 120;
-      const idx = getRightEndIndex(patchRows, patchCols);
-      const groupsPerColumn = Math.floor(patchRows / 5); // 20
-      const numLeftColumns = Math.ceil(SIGNATURE_LENGTH / groupsPerColumn); // ceil(256/20)=13
-      expect(idx).toBe(patchCols - numLeftColumns);
+    it("returns patchCols - numLeftColumns using pixel height", () => {
+      const pixelHeight = 704; // 44 patch rows
+      const patchCols = 80;
+      const idx = getRightEndIndex(pixelHeight, patchCols);
+      const groupsPerColumn = Math.floor(pixelHeight / 5); // 140
+      const numLeftColumns = Math.ceil(SIGNATURE_LENGTH / groupsPerColumn); // ceil(256/140)=2
+      expect(idx).toBe(patchCols - numLeftColumns); // 78
     });
 
-    it("returns 0 when patchRows too small for 5-pixel groups", () => {
+    it("returns 0 when pixel height too small for 5-pixel groups", () => {
       expect(getRightEndIndex(2, 50)).toBe(0);
     });
   });
 
   describe("getRightSideColumnSums", () => {
-    it("sums each row across right columns with factor 1", () => {
+    it("sums each column vertically across all rows", () => {
       const givenFrame = [
         [1, 2, 3],
         [4, 5, 6],
       ];
       const rightSide = getRightSideColumnSums(givenFrame, 2);
-      expect(rightSide).toEqual([1 + 2, 4 + 5]);
+      // col 0: 1+4=5, col 1: 2+5=7
+      expect(rightSide).toEqual([5, 7]);
     });
   });
 

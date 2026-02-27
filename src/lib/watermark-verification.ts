@@ -80,17 +80,20 @@ export function buildPatchMatrix(luma: Uint8Array, width: number, height: number
 
 /**
  * Compute right_end_index (patch column index; right region is columns 0..right_end_index-1).
+ * `pixelHeight` is the full frame height in pixels (after crop to multiple of 16), NOT the patch row count.
+ * Spec: groups_per_column = H // 5  (pixel-level 5-row groups for left-side signature).
  */
-export function getRightEndIndex(patchRows: number, patchCols: number): number {
-  const groupsPerColumn = Math.floor(patchRows / 5);
+export function getRightEndIndex(pixelHeight: number, patchCols: number): number {
+  const groupsPerColumn = Math.floor(pixelHeight / 5);
   if (groupsPerColumn <= 0) return 0;
   const numLeftColumns = Math.ceil(SIGNATURE_LENGTH / groupsPerColumn);
+  debugLog("getRightEndIndex", {pixelHeight, patchCols, groupsPerColumn, numLeftColumns, rightEndIndex: Math.max(0, patchCols - numLeftColumns)});
   return Math.max(0, patchCols - numLeftColumns);
 }
 
 /**
- * Right side column sums: for each row, sum patch values in columns 0..right_end_index-1. Factor=1.
- * Result length = patchRows (one value per row).
+ * Right side column sums: for each column 0..rightEndIndex-1, sum all patch rows vertically.
+ * Backend: `create_column_sums(..., factor=1)`.  Result length = rightEndIndex (one value per column).
  */
 export function getRightSideColumnSums(
   givenFrame: number[][],
@@ -98,9 +101,9 @@ export function getRightSideColumnSums(
 ): number[] {
   const patchRows = givenFrame.length;
   const rightSide: number[] = [];
-  for (let row = 0; row < patchRows; row++) {
+  for (let col = 0; col < rightEndIndex; col++) {
     let sum = 0;
-    for (let col = 0; col < rightEndIndex && col < givenFrame[row].length; col++) {
+    for (let row = 0; row < patchRows; row++) {
       sum += givenFrame[row][col] * FACTOR;
     }
     rightSide.push(sum);
@@ -119,21 +122,24 @@ export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | 
     first70: rightSide.slice(0, 70),
   });
   if (rightSide.length < need) {
-    debugLog("decodeNumericUserIdFromRightSide: rightSide.length < 63", {
+    debugLog("decodeNumericUserIdFromRightSide: rightSide.length < need", {
       rightSideLength: rightSide.length,
       need,
     });
     return null;
   }
   const digits: number[] = [];
+  const groupDetails: {digitIndex: number; group: number[]; mode: number | null}[] = [];
   for (let d = 0; d < USER_ID_DIGITS; d++) {
     const group = rightSide.slice(d * REPS, (d + 1) * REPS);
     const mode = getMode(group);
+    groupDetails.push({digitIndex: d, group, mode});
     if (mode === null || mode < 0 || mode > 9) {
       debugLog("decodeNumericUserIdFromRightSide: invalid mode for digit", {
         digitIndex: d,
         mode,
         group,
+        allGroupsSoFar: groupDetails,
       });
       return null;
     }
@@ -141,6 +147,7 @@ export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | 
   }
   const str = digits.join("");
   const parsed = parseInt(str, 10);
+  debugLog("decodeNumericUserIdFromRightSide: decoded groups", groupDetails);
   if (Number.isNaN(parsed) || str.length !== USER_ID_DIGITS) {
     debugLog("decodeNumericUserIdFromRightSide: parse failed", {str, parsed, digits});
     return null;
@@ -261,14 +268,14 @@ export async function decodeAndVerifyFrame(
     return {verified: false, numericUserId: null};
   }
   const givenFrame = buildPatchMatrix(luma, width, height);
-  const patchRows = givenFrame.length;
   const patchCols = givenFrame[0].length;
-  const rightEndIndex = getRightEndIndex(patchRows, patchCols);
+  const rightEndIndex = getRightEndIndex(height, patchCols);
   if (rightEndIndex <= 0) return {verified: false, numericUserId: null};
 
   const rightSide = getRightSideColumnSums(givenFrame, rightEndIndex);
   const numericUserId = decodeNumericUserIdFromRightSide(rightSide);
   const signatureBytes = getLeftSideSignature(luma, width, height, rightEndIndex);
+  debugLog("decodeAndVerifyFrame: signature first 16 bytes", Array.from(signatureBytes.slice(0, 16)));
   const verified = await verifyFrame(publicKey, rightSide, signatureBytes);
   debugLog("decodeAndVerifyFrame result", {
     verified,
@@ -301,19 +308,25 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
   const givenFrame = buildPatchMatrix(luma, width, height);
   const patchRows = givenFrame.length;
   const patchCols = givenFrame[0]?.length ?? 0;
-  const rightEndIndex = getRightEndIndex(patchRows, patchCols);
+  const rightEndIndex = getRightEndIndex(height, patchCols);
   debugLog("decodeNumericUserIdFromFrame: patch layout", {
     patchRows,
     patchCols,
     rightEndIndex,
-    groupsPerColumn: Math.floor(patchRows / 5),
+    pixelHeight: height,
+    groupsPerColumn: Math.floor(height / 5),
   });
   if (rightEndIndex <= 0) {
     debugLog("decodeNumericUserIdFromFrame: rightEndIndex <= 0", {rightEndIndex});
     return null;
   }
   const rightSide = getRightSideColumnSums(givenFrame, rightEndIndex);
-  debugLog("decodeNumericUserIdFromFrame: rightSide length", {length: rightSide.length});
+  debugLog("decodeNumericUserIdFromFrame: rightSide", {
+    length: rightSide.length,
+    first70: rightSide.slice(0, 70),
+    min: Math.min(...rightSide.slice(0, 70)),
+    max: Math.max(...rightSide.slice(0, 70)),
+  });
   return decodeNumericUserIdFromRightSide(rightSide);
 }
 
