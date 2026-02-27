@@ -47,7 +47,7 @@ import {
   cropToMultipleOf16,
   buildPatchMatrix,
   getRightEndIndex,
-  getRightSideColumnSums,
+  getRightSideRowSums,
   decodeNumericUserIdFromRightSide,
   getLeftSideSignature,
   buildMessageBytes,
@@ -119,21 +119,33 @@ describe("watermark-verification", () => {
     });
   });
 
-  describe("getRightSideColumnSums", () => {
-    it("sums each column vertically across all rows", () => {
+  describe("getRightSideRowSums", () => {
+    it("sums each row horizontally then applies modulo rightEndIndex", () => {
       const givenFrame = [
         [1, 2, 3],
         [4, 5, 6],
       ];
-      const rightSide = getRightSideColumnSums(givenFrame, 2);
-      // col 0: 1+4=5, col 1: 2+5=7
-      expect(rightSide).toEqual([5, 7]);
+      // rightEndIndex=2: sum cols 0..1 per row, then % 2
+      const rightSide = getRightSideRowSums(givenFrame, 2);
+      // row 0: (1+2) % 2 = 1, row 1: (4+5) % 2 = 1
+      expect(rightSide).toEqual([1, 1]);
+    });
+
+    it("correctly applies modulo with larger values", () => {
+      const givenFrame = [
+        [50, 30, 99],
+        [10, 20, 99],
+      ];
+      // rightEndIndex=3: sum all 3 cols per row, then % 3
+      const rightSide = getRightSideRowSums(givenFrame, 3);
+      // row 0: (50+30+99) % 3 = 179 % 3 = 2
+      // row 1: (10+20+99) % 3 = 129 % 3 = 0
+      expect(rightSide).toEqual([2, 0]);
     });
   });
 
   describe("decodeNumericUserIdFromRightSide", () => {
-    it("decodes 9 digits from first 63 values (groups of 7, mode)", () => {
-      // Encode 123456789: each digit repeated 7 times
+    it("decodes 9 digits from 63 values (groups of 7, mode)", () => {
       const rightSide: number[] = [];
       for (const d of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
         for (let r = 0; r < REPS; r++) rightSide.push(d);
@@ -143,12 +155,24 @@ describe("watermark-verification", () => {
       expect(id).toBe(123456789);
     });
 
-    it("returns null when fewer than 63 values", () => {
+    it("decodes fewer digits for shorter frames (e.g. 44 rows → 6 digits)", () => {
+      // 44 values, trimmed to 42 → 6 groups → 6 digits
+      const rightSide: number[] = [];
+      for (const d of [5, 3, 0, 0, 0, 0]) {
+        for (let r = 0; r < REPS; r++) rightSide.push(d);
+      }
+      rightSide.push(9); rightSide.push(9); // 2 extra (trimmed)
+      const id = decodeNumericUserIdFromRightSide(rightSide);
+      // "530000" → rstrip('0') → "53"
+      expect(id).toBe(53);
+    });
+
+    it("returns null when no usable groups (< 7 values)", () => {
       expect(decodeNumericUserIdFromRightSide([1, 2, 3])).toBeNull();
     });
 
-    it("returns null when mode yields invalid digit", () => {
-      const rightSide = new Array(63).fill(255); // non-digit
+    it("returns null when mode yields invalid digit (> 9)", () => {
+      const rightSide = new Array(63).fill(255);
       expect(decodeNumericUserIdFromRightSide(rightSide)).toBeNull();
     });
   });

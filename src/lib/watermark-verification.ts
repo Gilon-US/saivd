@@ -92,45 +92,55 @@ export function getRightEndIndex(pixelHeight: number, patchCols: number): number
 }
 
 /**
- * Right side column sums: for each column 0..rightEndIndex-1, sum all patch rows vertically.
- * Backend: `create_column_sums(..., factor=1)`.  Result length = rightEndIndex (one value per column).
+ * Backend: `create_column_sums(given_frame, ..., factor=1)`
+ * np.sum(given_frame[start:end], axis=1) // factor  →  row sums (one per row)
+ * Then: (row_sums + additions) % MAX_VAL
+ * With private_key=None, additions=0.  MAX_VAL = right_end_index (given_frame.shape[1] after slicing).
+ *
+ * Result length = patchRows (one value per row), each in range [0, rightEndIndex).
  */
-export function getRightSideColumnSums(
+export function getRightSideRowSums(
   givenFrame: number[][],
   rightEndIndex: number
 ): number[] {
   const patchRows = givenFrame.length;
   const rightSide: number[] = [];
-  for (let col = 0; col < rightEndIndex; col++) {
+  for (let row = 0; row < patchRows; row++) {
     let sum = 0;
-    for (let row = 0; row < patchRows; row++) {
-      sum += givenFrame[row][col] * FACTOR;
+    for (let col = 0; col < rightEndIndex && col < givenFrame[row].length; col++) {
+      sum += givenFrame[row][col];
     }
-    rightSide.push(sum);
+    const value = Math.floor(sum / FACTOR) % rightEndIndex;
+    rightSide.push(value);
   }
   return rightSide;
 }
 
 /**
- * Decode numeric_user_id from first 63 values of right_side: groups of 7, mode per group, 9 digits.
+ * Decode numeric_user_id from right_side values.
+ * Backend trims to a multiple of REPS (7), reshapes to (-1, 7), takes mode per group.
+ * For 1080p (67 patch rows): 63 usable → 9 digits.
+ * For 704p  (44 patch rows): 42 usable → 6 digits.
+ * Backend then takes first 9 digits and rstrip('0').
  */
 export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | null {
-  const need = USER_ID_DIGITS * REPS; // 63
+  const usable = rightSide.length - (rightSide.length % REPS);
+  const numGroups = Math.floor(usable / REPS);
   debugLog("decodeNumericUserIdFromRightSide", {
     rightSideLength: rightSide.length,
-    need,
-    first70: rightSide.slice(0, 70),
+    usable,
+    numGroups,
+    maxDigits: Math.min(numGroups, USER_ID_DIGITS),
+    first50: rightSide.slice(0, 50).join(","),
   });
-  if (rightSide.length < need) {
-    debugLog("decodeNumericUserIdFromRightSide: rightSide.length < need", {
-      rightSideLength: rightSide.length,
-      need,
-    });
+  if (numGroups === 0) {
+    debugLog("decodeNumericUserIdFromRightSide: no usable groups");
     return null;
   }
+  const maxDigits = Math.min(numGroups, USER_ID_DIGITS);
   const digits: number[] = [];
   const groupDetails: {digitIndex: number; group: number[]; mode: number | null}[] = [];
-  for (let d = 0; d < USER_ID_DIGITS; d++) {
+  for (let d = 0; d < maxDigits; d++) {
     const group = rightSide.slice(d * REPS, (d + 1) * REPS);
     const mode = getMode(group);
     groupDetails.push({digitIndex: d, group, mode});
@@ -145,14 +155,20 @@ export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | 
     }
     digits.push(mode);
   }
-  const str = digits.join("");
-  const parsed = parseInt(str, 10);
+  // Backend: ''.join(str(d) for d in digits[:9]).rstrip('0')
+  let str = digits.join("");
+  str = str.replace(/0+$/, "");
   debugLog("decodeNumericUserIdFromRightSide: decoded groups", groupDetails);
-  if (Number.isNaN(parsed) || str.length !== USER_ID_DIGITS) {
+  if (!str || str.length === 0) {
+    debugLog("decodeNumericUserIdFromRightSide: all zeros after rstrip");
+    return null;
+  }
+  const parsed = parseInt(str, 10);
+  if (Number.isNaN(parsed)) {
     debugLog("decodeNumericUserIdFromRightSide: parse failed", {str, parsed, digits});
     return null;
   }
-  debugLog("decodeNumericUserIdFromRightSide: success", {numericUserId: parsed, digits});
+  debugLog("decodeNumericUserIdFromRightSide: success", {numericUserId: parsed, digits, str});
   return parsed;
 }
 
@@ -272,7 +288,7 @@ export async function decodeAndVerifyFrame(
   const rightEndIndex = getRightEndIndex(height, patchCols);
   if (rightEndIndex <= 0) return {verified: false, numericUserId: null};
 
-  const rightSide = getRightSideColumnSums(givenFrame, rightEndIndex);
+  const rightSide = getRightSideRowSums(givenFrame, rightEndIndex);
   const numericUserId = decodeNumericUserIdFromRightSide(rightSide);
   const signatureBytes = getLeftSideSignature(luma, width, height, rightEndIndex);
   debugLog("decodeAndVerifyFrame: signature first 16 bytes", Array.from(signatureBytes.slice(0, 16)));
@@ -321,65 +337,11 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
     return null;
   }
 
-  // --- Diagnostic: try multiple decode interpretations and report which one yields a valid user ID ---
-  const colSums = getRightSideColumnSums(givenFrame, rightEndIndex);
-
-  // Print first 70 column sums as a readable string (not a collapsed Array)
-  debugLog("DIAGNOSTIC: column sums first 70 =", colSums.slice(0, 70).join(", "));
-
-  // Print first 10 raw patch values per row for first 3 rows
-  for (let r = 0; r < Math.min(3, patchRows); r++) {
-    debugLog(`DIAGNOSTIC: patchMatrix row ${r} first 10 =`, givenFrame[r].slice(0, 10).join(", "));
-  }
-
-  // Try each transformation and attempt to decode a valid 9-digit user ID
-  const transforms: {name: string; values: number[]}[] = [
-    {name: "A: colSums raw", values: colSums},
-    {name: "B: colSums % 10", values: colSums.map(v => v % 10)},
-    {name: "C: colSums % patchRows (" + patchRows + ")", values: colSums.map(v => v % patchRows)},
-    {name: "D: colSums % 256", values: colSums.map(v => v % 256)},
-    {name: "E: colSums % PATCH_SIZE (16)", values: colSums.map(v => v % PATCH_SIZE)},
-    {name: "F: row0 raw", values: givenFrame[0].slice(0, rightEndIndex)},
-    {name: "G: row0 % 10", values: givenFrame[0].slice(0, rightEndIndex).map(v => v % 10)},
-  ];
-
-  // Also try row sums (spec literal formula) if we have >= 63 rows
-  const rowSums: number[] = [];
-  for (let row = 0; row < patchRows; row++) {
-    let s = 0;
-    for (let col = 0; col < rightEndIndex; col++) s += givenFrame[row][col];
-    rowSums.push(s);
-  }
-  if (rowSums.length >= USER_ID_DIGITS * REPS) {
-    transforms.push({name: "H: rowSums raw", values: rowSums});
-    transforms.push({name: "I: rowSums % 10", values: rowSums.map(v => v % 10)});
-  }
-
-  for (const t of transforms) {
-    if (t.values.length < USER_ID_DIGITS * REPS) {
-      debugLog(`DECODE TRY ${t.name}: SKIP (only ${t.values.length} values, need ${USER_ID_DIGITS * REPS})`);
-      continue;
-    }
-    const first70 = t.values.slice(0, 70);
-    const digits: (number | null)[] = [];
-    let valid = true;
-    for (let d = 0; d < USER_ID_DIGITS; d++) {
-      const group = t.values.slice(d * REPS, (d + 1) * REPS);
-      const m = getMode(group);
-      digits.push(m);
-      if (m === null || m < 0 || m > 9) valid = false;
-    }
-    const userId = valid ? digits.join("") : null;
-    debugLog(`DECODE TRY ${t.name}: first14=[${first70.slice(0, 14).join(",")}] digits=[${digits.join(",")}] userId=${userId}`);
-  }
-  // --- End diagnostic ---
-
-  const rightSide = colSums;
-  debugLog("decodeNumericUserIdFromFrame: rightSide", {
+  const rightSide = getRightSideRowSums(givenFrame, rightEndIndex);
+  debugLog("decodeNumericUserIdFromFrame: rightSide (row sums % rightEndIndex)", {
     length: rightSide.length,
-    first70: rightSide.slice(0, 70),
-    min: Math.min(...rightSide.slice(0, 70)),
-    max: Math.max(...rightSide.slice(0, 70)),
+    values: rightSide.join(","),
+    rightEndIndex,
   });
   return decodeNumericUserIdFromRightSide(rightSide);
 }
