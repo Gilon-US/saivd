@@ -320,7 +320,74 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
     debugLog("decodeNumericUserIdFromFrame: rightEndIndex <= 0", {rightEndIndex});
     return null;
   }
-  const rightSide = getRightSideColumnSums(givenFrame, rightEndIndex);
+
+  // --- Diagnostic dump: show raw patch matrix and multiple interpretations ---
+  debugLog("DIAGNOSTIC: raw patch matrix (first 5 rows × first 10 cols):",
+    givenFrame.slice(0, 5).map((r, i) => `row${i}: [${r.slice(0, 10).join(", ")}]`));
+
+  // Interpretation A: column sums (sum vertically per column)
+  const colSums = getRightSideColumnSums(givenFrame, rightEndIndex);
+  debugLog("DIAGNOSTIC A - column sums (vertical):", {
+    first14: colSums.slice(0, 14),
+    length: colSums.length,
+  });
+
+  // Interpretation B: row sums (sum horizontally per row) — spec literal formula
+  const rowSums: number[] = [];
+  for (let row = 0; row < patchRows; row++) {
+    let s = 0;
+    for (let col = 0; col < rightEndIndex; col++) s += givenFrame[row][col];
+    rowSums.push(s);
+  }
+  debugLog("DIAGNOSTIC B - row sums (horizontal):", {
+    first14: rowSums.slice(0, 14),
+    length: rowSums.length,
+  });
+
+  // Interpretation C: individual patch values from row 0
+  const row0 = givenFrame[0].slice(0, Math.min(70, rightEndIndex));
+  debugLog("DIAGNOSTIC C - row 0 individual patch values:", {
+    first14: row0.slice(0, 14),
+    min: Math.min(...row0),
+    max: Math.max(...row0),
+  });
+
+  // Interpretation D: individual patch values mod 10 from row 0
+  debugLog("DIAGNOSTIC D - row 0 patch values % 10:", {
+    first14: row0.slice(0, 14).map(v => v % 10),
+  });
+
+  // Interpretation E: column sums mod patchRows
+  debugLog("DIAGNOSTIC E - column sums % patchRows:", {
+    first14: colSums.slice(0, 14).map(v => v % patchRows),
+  });
+
+  // Interpretation F: column-major individual patch values (first 70 cells)
+  const colMajor: number[] = [];
+  for (let col = 0; col < rightEndIndex && colMajor.length < 70; col++) {
+    for (let row = 0; row < patchRows && colMajor.length < 70; row++) {
+      colMajor.push(givenFrame[row][col]);
+    }
+  }
+  debugLog("DIAGNOSTIC F - column-major patch values:", {
+    first14: colMajor.slice(0, 14),
+    min: Math.min(...colMajor.slice(0, 70)),
+    max: Math.max(...colMajor.slice(0, 70)),
+  });
+
+  // Interpretation G: row-major individual patch values (first 70 cells)
+  const rowMajor: number[] = [];
+  for (let row = 0; row < patchRows && rowMajor.length < 70; row++) {
+    for (let col = 0; col < rightEndIndex && rowMajor.length < 70; col++) {
+      rowMajor.push(givenFrame[row][col]);
+    }
+  }
+  debugLog("DIAGNOSTIC G - row-major patch values:", {
+    first14: rowMajor.slice(0, 14),
+  });
+  // --- End diagnostic dump ---
+
+  const rightSide = colSums;
   debugLog("decodeNumericUserIdFromFrame: rightSide", {
     length: rightSide.length,
     first70: rightSide.slice(0, 70),
