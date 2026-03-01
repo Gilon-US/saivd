@@ -74,6 +74,7 @@ src/
 - Prefer `cn()` from `@/lib/utils` for className merging.
 - Use **named exports** for components and hooks; default exports for page components.
 - Prefix unused variables with `_` to satisfy `@typescript-eslint/no-unused-vars` (e.g. `_req`, `_token`).
+- **Verify the build after every change:** run `npm run build` to confirm the production build succeeds before considering the change complete.
 
 ### Don't
 
@@ -192,7 +193,7 @@ See `.env.local.example` and README for full list.
 1. Create a feature branch from `main`.
 2. Follow existing code style (TypeScript strict, Shadcn patterns).
 3. Add tests for new behavior.
-4. Run `npm run lint` and `npm test` before committing.
+4. Run `npm run lint`, `npm test`, and `npm run build` before committing to confirm the build succeeds.
 5. Update README if adding config or features.
 6. The project uses **BMad methodology**; `.cursor/rules/bmad/` and `.bmad-core/` contain agent definitions. Use `@dev` or `@bmad-master` when working within BMad workflows.
 

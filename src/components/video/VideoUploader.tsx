@@ -8,7 +8,6 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useVideoUpload, UploadResult, UploadPhase } from '@/hooks/useVideoUpload';
-import { v4 as uuidv4 } from 'uuid';
 import { UploadIcon, CheckCircleIcon, AlertCircleIcon } from 'lucide-react';
 
 export type Video = {
@@ -39,10 +38,16 @@ export function VideoUploader({
   const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [uploadId, setUploadId] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  
-  const { uploadVideo, cancelUpload, uploads } = useVideoUpload();
+
+  const { uploadVideo, cancelUpload, clearUpload, uploads } = useVideoUpload();
+
+  // Derive active upload from hook state (in-progress first, then error, then complete)
+  const currentUpload =
+    Object.values(uploads).find((u) => u.uploading) ??
+    Object.values(uploads).find((u) => u.phase === 'error') ??
+    Object.values(uploads).find((u) => u.phase === 'complete') ??
+    null;
+  const uploading = currentUpload?.uploading ?? false;
   
   // Check if selected video filename already exists
   const hasDuplicateFilename = selectedVideo 
@@ -70,25 +75,20 @@ export function VideoUploader({
     const videoFile = files.length > 0 ? files[0] : null;
     setSelectedVideo(videoFile);
     setError(null);
-    setUploadId(null);
   };
-  
+
   const handleUpload = async () => {
-    if (!selectedVideo || isUploading || hasDuplicateFilename) return;
-    
-    const id = uuidv4();
-    setUploadId(id);
-    setIsUploading(true);
+    if (!selectedVideo || uploading || hasDuplicateFilename) return;
+
     setError(null);
-    
+
     try {
       const result = await uploadVideo(selectedVideo);
-      
+
       if (onUploadComplete) {
         onUploadComplete(result);
       }
     } catch (err: unknown) {
-      // Only set error if it's not an abort error (user cancelled)
       if (err instanceof Error && err.name !== 'AbortError') {
         setError(err.message || 'An error occurred during upload');
       } else if (typeof err === 'object' && err !== null && 'message' in err) {
@@ -96,23 +96,21 @@ export function VideoUploader({
       } else {
         setError('An unknown error occurred during upload');
       }
-    } finally {
-      setIsUploading(false);
-      setUploadId(null);
     }
   };
-  
+
   const handleCancel = () => {
-    if (uploadId) {
-      cancelUpload(uploadId);
-      setUploadId(null);
-      setIsUploading(false);
+    if (currentUpload?.uploading && currentUpload.id) {
+      cancelUpload(currentUpload.id);
     }
   };
-  
-  const currentUpload = uploadId ? uploads[uploadId] : null;
-  // Use local isUploading state OR check currentUpload if available
-  const uploading = isUploading || (currentUpload?.uploading ?? false);
+
+  const handleDismissError = () => {
+    if (currentUpload?.phase === 'error' && currentUpload.id) {
+      clearUpload(currentUpload.id);
+      setError(null);
+    }
+  };
   
   // Helper function to format file size
   const formatFileSize = (bytes: number): string => {
@@ -215,7 +213,7 @@ export function VideoUploader({
         </div>
       )}
       
-      {uploading && currentUpload && (
+      {currentUpload && (
         <Card>
           <CardContent className="p-6">
             <div className="space-y-4">
@@ -237,6 +235,13 @@ export function VideoUploader({
                   </p>
                 </div>
               </div>
+
+              {/* Error message in card when phase is error */}
+              {currentUpload.phase === 'error' && currentUpload.error && (
+                <p className="text-sm text-destructive">
+                  {currentUpload.error.message}
+                </p>
+              )}
               
               {/* Progress bar - show for uploading phase or when progress > 0 */}
               {(currentUpload.phase === 'uploading' || currentUpload.progress > 0) && (
@@ -279,11 +284,20 @@ export function VideoUploader({
                 </div>
               )}
               
-              {/* Cancel button - only show if not complete or error */}
+              {/* Cancel button - only show if in progress */}
               {currentUpload.phase !== 'complete' && currentUpload.phase !== 'error' && (
                 <div className="flex justify-end pt-2">
                   <Button variant="outline" size="sm" onClick={handleCancel}>
                     Cancel Upload
+                  </Button>
+                </div>
+              )}
+
+              {/* Try again when failed - dismiss card and keep file selected */}
+              {currentUpload.phase === 'error' && (
+                <div className="flex justify-end pt-2">
+                  <Button variant="outline" size="sm" onClick={handleDismissError}>
+                    Try again
                   </Button>
                 </div>
               )}

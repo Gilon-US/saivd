@@ -43,6 +43,32 @@ export type UploadResult = {
 };
 
 /**
+ * Normalize upload failures to user-friendly messages for toast and UI.
+ */
+function normalizeUploadError(error: unknown): string {
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') {
+      return error.message;
+    }
+    const msg = error.message;
+    if (error.name === 'TypeError' || /fetch|network|failed to fetch/i.test(msg)) {
+      return 'Network error. Please check your connection and try again.';
+    }
+    if (/upload failed with status 5\d{2}/i.test(msg)) {
+      return 'Server error. Please try again later.';
+    }
+    if (msg === 'Network error during upload') {
+      return 'Network error. Please check your connection and try again.';
+    }
+    return msg;
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return 'An error occurred during upload.';
+}
+
+/**
  * Hook for managing video uploads with progress tracking
  */
 export function useVideoUpload() {
@@ -259,38 +285,32 @@ export function useVideoUpload() {
       if (error instanceof Error && error.name === 'AbortError') {
         return Promise.reject(error);
       }
-      
-      // Update state with error
+
+      const friendlyMessage = normalizeUploadError(error);
+
+      // Update state with error (store normalized message for UI)
       setUploads((prev) => {
         if (!prev[uploadId]) return prev;
-        
+
         return {
           ...prev,
           [uploadId]: {
             ...prev[uploadId],
             uploading: false,
             phase: 'error',
-            error: error instanceof Error ? error : new Error(
-            typeof error === 'object' && error !== null && 'message' in error
-              ? String((error as { message: unknown }).message)
-              : 'Unknown error'
-          ),
+            error: new Error(friendlyMessage),
           },
         };
       });
-      
+
       // Show error toast
       toast({
         title: 'Upload failed',
-        description: error instanceof Error
-          ? error.message
-          : typeof error === 'object' && error !== null && 'message' in error
-            ? String((error as { message: unknown }).message)
-            : 'An error occurred during upload.',
+        description: friendlyMessage,
         variant: 'error',
       });
-      
-      return Promise.reject(error);
+
+      return Promise.reject(new Error(friendlyMessage));
     }
   };
   
