@@ -129,30 +129,32 @@ export function getRightSideRowSums(
 
 /**
  * Decode numeric_user_id from right_side values.
- * Backend trims to a multiple of REPS (7), reshapes to (-1, 7), takes mode per group.
- * For 1080p (67 patch rows): 63 usable → 9 digits.
- * For 704p  (44 patch rows): 42 usable → 6 digits.
- * Backend then takes first 9 digits and rstrip('0').
+ * Backend encodes a fixed 9-digit decimal string (left-padded with zeros).
+ * Use dynamic repsUsed to match backend; decode exactly 9 digits; do not strip trailing zeros.
+ * See docs/FRONTEND_USER_ID_DECODE_UPDATE.md.
  */
 export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | null {
-  const usable = rightSide.length - (rightSide.length % REPS);
-  const numGroups = Math.floor(usable / REPS);
-  debugLog("decodeNumericUserIdFromRightSide", {
-    rightSideLength: rightSide.length,
-    usable,
-    numGroups,
-    maxDigits: Math.min(numGroups, USER_ID_DIGITS),
-    first50: rightSide.slice(0, 50).join(","),
-  });
-  if (numGroups === 0) {
-    debugLog("decodeNumericUserIdFromRightSide: no usable groups");
+  const repsUsed = Math.min(REPS, Math.floor(rightSide.length / USER_ID_DIGITS));
+  if (repsUsed < 1) {
+    debugLog("decodeNumericUserIdFromRightSide: insufficient data", {
+      rightSideLength: rightSide.length,
+      repsUsed,
+    });
     return null;
   }
-  const maxDigits = Math.min(numGroups, USER_ID_DIGITS);
+  const nVals = USER_ID_DIGITS * repsUsed;
+  const prefix = rightSide.slice(0, nVals);
+  debugLog("decodeNumericUserIdFromRightSide", {
+    rightSideLength: rightSide.length,
+    repsUsed,
+    nVals,
+    first50: rightSide.slice(0, 50).join(","),
+  });
+
   const digits: number[] = [];
   const groupDetails: {digitIndex: number; group: number[]; mode: number | null}[] = [];
-  for (let d = 0; d < maxDigits; d++) {
-    const group = rightSide.slice(d * REPS, (d + 1) * REPS);
+  for (let d = 0; d < USER_ID_DIGITS; d++) {
+    const group = prefix.slice(d * repsUsed, (d + 1) * repsUsed);
     const mode = getMode(group);
     groupDetails.push({digitIndex: d, group, mode});
     if (mode === null || mode < 0 || mode > 9) {
@@ -166,20 +168,16 @@ export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | 
     }
     digits.push(mode);
   }
-  // Backend: ''.join(str(d) for d in digits[:9]).rstrip('0')
-  let str = digits.join("");
-  str = str.replace(/0+$/, "");
+
+  // Concatenate exactly 9 digits; do not strip trailing zeros (backend fixed 9-digit encoding).
+  const digitStr = digits.join("");
   debugLog("decodeNumericUserIdFromRightSide: decoded groups", groupDetails);
-  if (!str || str.length === 0) {
-    debugLog("decodeNumericUserIdFromRightSide: all zeros after rstrip");
-    return null;
-  }
-  const parsed = parseInt(str, 10);
+  const parsed = parseInt(digitStr, 10);
   if (Number.isNaN(parsed)) {
-    debugLog("decodeNumericUserIdFromRightSide: parse failed", {str, parsed, digits});
+    debugLog("decodeNumericUserIdFromRightSide: parse failed", {digitStr, parsed, digits});
     return null;
   }
-  debugLog("decodeNumericUserIdFromRightSide: success", {numericUserId: parsed, digits, str});
+  debugLog("decodeNumericUserIdFromRightSide: success", {numericUserId: parsed, digits, digitStr});
   return parsed;
 }
 
