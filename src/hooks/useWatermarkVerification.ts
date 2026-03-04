@@ -72,6 +72,7 @@ export function useWatermarkVerification(
   }, [videoRef]);
 
   // Run verification on frame 0: decode userId → fetch key → verify.
+  // Decode assumes the backend does not use the RSA key for the right side on frame 0 (per WATERMARK_DATA_AND_DECODING_GUIDE).
   useEffect(() => {
     debugLog("Effect start", {enabled, hasVideoUrl: !!videoUrl, hasVideoRef: !!videoRef.current});
     if (!enabled || !videoUrl || !videoRef.current) {

@@ -1,6 +1,9 @@
 /**
- * Client-side watermark verification (decode + RSA verify) per FRONTEND_WATERMARK_VERIFICATION_SPEC.md.
- * Decodes numeric_user_id from frame 0 and verifies frames 0, 10, 20, ... using the creator's public RSA key.
+ * Client-side watermark verification (decode + RSA verify) per docs/WATERMARK_DATA_AND_DECODING_GUIDE.md.
+ * The guide was generated from the actual backend implementation and is the source of truth.
+ * Decodes numeric_user_id from frame 0 (no key); the backend does not use the RSA key for the right
+ * side on frame 0, so the user ID can be extracted without a key. Verifies frames 0, 10, 20, ...
+ * using the creator's public RSA key.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,9 +21,9 @@ export const REPS = 7;
 /**
  * Extract luma (Y) from RGBA ImageData using limited-range BT.709.
  *
- * Backend operates on the raw Y plane in limited-range BT.709 (Y ≈ 16–235).
- * Canvas RGB is full-range; we convert back to limited-range Y so patch
- * means match the backend. See FRONTEND_WATERMARK_VERIFICATION_IMPLEMENTATION_GUIDE.md §3.2.
+ * The guide §4 uses simplified full-range BT.709 (Y = 0.2126*R + 0.7152*G + 0.0722*B).
+ * This code uses limited-range (16 + scale*yFull, scale = 219/255) to align with typical
+ * backend Y (e.g. 16–235) so patch means match. See WATERMARK_DATA_AND_DECODING_GUIDE.md.
  */
 function imageDataToLuma(data: ImageData): Uint8Array {
   const {width, height, data: rgba} = data;
@@ -101,10 +104,11 @@ export function getRightEndIndex(pixelHeight: number, patchCols: number): number
 }
 
 /**
- * Backend: create_column_sums does row sums then (sums + additions) % MAX_VAL,
- * with MAX_VAL = right_end_index (number of patch columns in right region).
- * We replicate that so extracted values are in [0, rightEndIndex); the embedded
- * user-id pattern is digits 0-9, so decoding expects values in that range.
+ * Right-side row sums per guide §4 (factor 1, no division). The guide describes
+ * rightSide[row] = sum(patch_matrix[row, 0 : right_end_index]). The backend
+ * create_column_sums applies % MAX_VAL (MAX_VAL = right_end_index); we apply
+ * % rightEndIndex so extracted values are in [0, rightEndIndex) and match the
+ * embedded pattern (digits 0-9 for user ID).
  */
 export function getRightSideRowSums(
   givenFrame: number[][],
@@ -194,7 +198,8 @@ function getMode(arr: number[]): number | null {
 }
 
 /**
- * Left side (signature): pixel region from left_start_col to end. Column-major 5-pixel groups, 256 values, clamp 0-255.
+ * Left side (signature) per guide §5: pixel columns from right_end_index*16 to end.
+ * Column-major 5-pixel groups, 256 slot sums, each value one signature byte (0-255).
  */
 export function getLeftSideSignature(
   luma: Uint8Array,
@@ -225,12 +230,13 @@ export function getLeftSideSignature(
 
 /**
  * Build message string from first 100 right_side values (code point = value), then UTF-8 encode.
+ * Per guide §5: message = right_side.slice(0, 100).map(v => String.fromCharCode(v)).join('')
  */
 export function buildMessageBytes(rightSide: number[]): Uint8Array {
   const len = Math.min(MAX_MESSAGE_LENGTH, rightSide.length);
   const chars: string[] = [];
   for (let i = 0; i < len; i++) {
-    chars.push(String.fromCodePoint(rightSide[i]));
+    chars.push(String.fromCharCode(rightSide[i]));
   }
   const str = chars.join("");
   return new TextEncoder().encode(str);
