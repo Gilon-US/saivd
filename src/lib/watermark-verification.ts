@@ -394,6 +394,47 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
               }
             : null,
           allDigitModes: digitGroups.map((g) => ({ d: g.digitIndex, mode: g.mode })),
+          exactNineGroups: digitGroups.map((g) => ({
+            digitIndex: g.digitIndex,
+            groupValues: g.group,
+            mode: g.mode,
+          })),
+        },
+        null,
+        2
+      )
+    );
+  } else {
+    const repsUsed = Math.min(REPS, Math.floor(rightSide.length / USER_ID_DIGITS));
+    const nVals = USER_ID_DIGITS * repsUsed;
+    const prefix = rightSide.slice(0, nVals);
+    const digitGroups: { digitIndex: number; group: number[]; mode: number | null }[] = [];
+    for (let d = 0; d < USER_ID_DIGITS; d++) {
+      const group = prefix.slice(d * repsUsed, (d + 1) * repsUsed);
+      digitGroups.push({ digitIndex: d, group, mode: getMode(group) });
+    }
+    const decodedDigitStr = digitGroups
+      .map((g) => (g.mode !== null && g.mode >= 0 && g.mode <= 9 ? String(g.mode) : "?"))
+      .join("");
+    console.log(
+      "[WatermarkDecode] BACKEND_DIAGNOSTIC success (copy for backend if decoded ID is wrong):",
+      JSON.stringify(
+        {
+          decodedNumericUserId: result,
+          decodedDigitStr,
+          videoDimensions: { width: imageData.width, height: imageData.height },
+          cropped: { width, height },
+          patchLayout: { patchRows, patchCols, rightEndIndex },
+          rightSideSummary: {
+            length: rightSide.length,
+            repsUsed,
+            firstNValues: rightSide.slice(0, nVals),
+          },
+          exactNineGroups: digitGroups.map((g) => ({
+            digitIndex: g.digitIndex,
+            groupValues: g.group,
+            mode: g.mode,
+          })),
         },
         null,
         2
