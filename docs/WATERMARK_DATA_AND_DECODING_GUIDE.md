@@ -59,8 +59,8 @@ Important: the backend uses **local_private_key=None** when embedding. So the ri
 
 So:
 
-- **Decode user ID (no key):** Use **frame 0** (or any watermarked frame; frame 0 is the usual choice).
-- **Verify with public key:** Use **frame 0** and, if desired, **frames 10, 20, …** (same process: build message from first 100 right_side values, extract 256-byte signature from left, verify with public key).
+- **Decode user ID (no key):** Use **frame 0 only**. The backend embeds the unencrypted user ID (plain right side) only on frame 0 so the player (and third-party players) can extract the user ID and fetch the RSA public key via API. Frames 10, 20, … have the right side encrypted, so user ID cannot be extracted from them without the private key.
+- **Verify with public key:** Use **frame 0 and every tenth frame (10, 20, 30, …)**. Once the public key is obtained, the frontend verifies each watermarked frame using the RSA key (build message from right side, extract signature from left, verify). Only the **user ID extraction** is keyless and only on frame 0; all other frame verifications use the RSA key.
 
 ---
 

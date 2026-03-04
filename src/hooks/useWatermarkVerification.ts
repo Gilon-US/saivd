@@ -18,9 +18,11 @@ type UseWatermarkVerificationOptions = {
 };
 
 /**
- * Captures frame 0 from the video, decodes numeric_user_id, fetches public key, verifies frame 0.
- * Optionally verifies frames 10, 20, ... during playback; if any fail, reports failed.
- * Requires video to be same-origin or CORS-enabled so canvas getImageData is allowed.
+ * Frame 0 is the only frame with right-side data that can be read without the RSA key. We extract
+ * the user ID from frame 0 (no key) so the player — including third-party players — can fetch the
+ * RSA public key via API. Once we have the public key, we verify every tenth frame (0, 10, 20, …)
+ * using the RSA key; only user ID extraction is keyless and only on frame 0. Requires video to be
+ * same-origin or CORS-enabled so canvas getImageData is allowed.
  */
 export function useWatermarkVerification(
   videoRef: React.RefObject<HTMLVideoElement | null>,
@@ -71,8 +73,8 @@ export function useWatermarkVerification(
     }
   }, [videoRef]);
 
-  // Run verification on frame 0: decode userId → fetch key → verify.
-  // Decode assumes the backend does not use the RSA key for the right side on frame 0 (per WATERMARK_DATA_AND_DECODING_GUIDE).
+  // Frame 0: decode user ID (no key) → fetch public key → RSA verify frame 0.
+  // Only frame 0 has right side readable without the key (so we can get user ID and fetch key).
   useEffect(() => {
     debugLog("Effect start", {enabled, hasVideoUrl: !!videoUrl, hasVideoRef: !!videoRef.current});
     if (!enabled || !videoUrl || !videoRef.current) {
@@ -138,7 +140,7 @@ export function useWatermarkVerification(
       }
       publicKeyRef.current = key;
 
-      // Attempt RSA signature verification as a secondary check (informational only).
+      // RSA verify frame 0 (frame 0 has plain right side so message/signature verify works).
       if (key) {
         try {
           const result = await decodeAndVerifyFrame(key, imageData);
@@ -148,7 +150,7 @@ export function useWatermarkVerification(
           });
           if (!result.verified) {
             debugLog(
-              "RSA verification did not pass for frame 0 — this may be expected if the encoder did not embed a signature on frame 0. User ID decode succeeded, so playback is allowed."
+              "RSA verification did not pass for frame 0 (informational). User ID decode succeeded, so playback is allowed."
             );
           }
         } catch (e) {
@@ -156,7 +158,6 @@ export function useWatermarkVerification(
         }
       }
 
-      // Mark as verified based on successful user ID decode + public key existence.
       verifiedFrameIndicesRef.current = new Set([0]);
       setVerifiedUserId(String(numericUserId));
       setStatus("verified");
@@ -199,7 +200,8 @@ export function useWatermarkVerification(
     };
   }, [enabled, videoUrl, onVerificationComplete, captureFrameToImageData, videoRef]);
 
-  // Optional: verify frames 10, 20, ... during playback using requestVideoFrameCallback (or time-based fallback).
+  // Verify every tenth frame (10, 20, ...) using the RSA public key. Only frame 0 is keyless for
+  // user ID extraction; all other frame verifications use the key.
   useEffect(() => {
     if (status !== "verified" || !videoRef.current || !publicKeyRef.current) return;
 
@@ -252,7 +254,6 @@ export function useWatermarkVerification(
       };
     }
 
-    // Fallback: time-based sampling (assume ~30fps). Check every 0.5s if we're near frame 10, 20, ...
     const fps = 30;
     const interval = setInterval(() => {
       if (cancelled || !videoRef.current || video.paused || video.ended) return;
@@ -266,7 +267,7 @@ export function useWatermarkVerification(
       cancelled = true;
       clearInterval(interval);
     };
-  }, [status, onVerificationComplete, captureFrameToImageData, videoRef]);
+  }, [status, captureFrameToImageData, videoRef]);
 
   return {status, verifiedUserId};
 }
