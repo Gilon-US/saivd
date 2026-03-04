@@ -99,10 +99,10 @@ export function getRightEndIndex(pixelHeight: number, patchCols: number): number
 }
 
 /**
- * Backend: `create_column_sums(given_frame, ..., factor=1)`
- * np.sum(given_frame[start:end], axis=1) // factor  →  row sums (one per row).
- * For the frontend we use factor=1 and do not apply modulo; this matches
- * the spec in FRONTEND_WATERMARK_VERIFICATION_FIX.md for rightSide.
+ * Backend: create_column_sums does row sums then (sums + additions) % MAX_VAL,
+ * with MAX_VAL = right_end_index (number of patch columns in right region).
+ * We replicate that so extracted values are in [0, rightEndIndex); the embedded
+ * user-id pattern is digits 0-9, so decoding expects values in that range.
  */
 export function getRightSideRowSums(
   givenFrame: number[][],
@@ -115,7 +115,7 @@ export function getRightSideRowSums(
     for (let col = 0; col < rightEndIndex && col < givenFrame[row].length; col++) {
       sum += givenFrame[row][col];
     }
-    rightSide.push(sum);
+    rightSide.push(sum % rightEndIndex);
   }
   return rightSide;
 }
