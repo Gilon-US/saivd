@@ -16,25 +16,21 @@ export const USER_ID_DIGITS = 9;
 export const REPS = 7;
 
 /**
- * Extract luma (Y) from RGBA ImageData as **limited-range BT.709** values (16-235).
+ * Extract luma (Y) from RGBA ImageData using BT.709 on RGB.
  *
- * The backend watermark service reads the raw Y plane from the video file, which stores
- * limited-range values.  The browser's video decoder converts limited-range YUV → full-range
- * RGB for canvas display.  We must reverse that to recover the original Y values.
- *
- * BT.709 limited-range formula:  Y = 16 + (219/255) × (0.2126·R + 0.7152·G + 0.0722·B)
+ * Backend watermarking operates on the Y channel; canvas gives RGB.
+ * We approximate backend Y with standard BT.709:
+ *   Y = round(0.2126 * R + 0.7152 * G + 0.0722 * B)
  */
 function imageDataToLuma(data: ImageData): Uint8Array {
   const {width, height, data: rgba} = data;
   const luma = new Uint8Array(width * height);
-  const scale = 219 / 255; // ≈ 0.8588
   for (let i = 0; i < width * height; i++) {
     const r = rgba[i * 4];
     const g = rgba[i * 4 + 1];
     const b = rgba[i * 4 + 2];
-    const yFull = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    const yLimited = 16 + scale * yFull;
-    luma[i] = Math.max(0, Math.min(255, Math.round(yLimited)));
+    const y = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+    luma[i] = y < 0 ? 0 : y > 255 ? 255 : y;
   }
   return luma;
 }
@@ -104,11 +100,9 @@ export function getRightEndIndex(pixelHeight: number, patchCols: number): number
 
 /**
  * Backend: `create_column_sums(given_frame, ..., factor=1)`
- * np.sum(given_frame[start:end], axis=1) // factor  →  row sums (one per row)
- * Then: (row_sums + additions) % MAX_VAL
- * With private_key=None, additions=0.  MAX_VAL = right_end_index (given_frame.shape[1] after slicing).
- *
- * Result length = patchRows (one value per row), each in range [0, rightEndIndex).
+ * np.sum(given_frame[start:end], axis=1) // factor  →  row sums (one per row).
+ * For the frontend we use factor=1 and do not apply modulo; this matches
+ * the spec in FRONTEND_WATERMARK_VERIFICATION_FIX.md for rightSide.
  */
 export function getRightSideRowSums(
   givenFrame: number[][],
@@ -121,8 +115,7 @@ export function getRightSideRowSums(
     for (let col = 0; col < rightEndIndex && col < givenFrame[row].length; col++) {
       sum += givenFrame[row][col];
     }
-    const value = Math.floor(sum / FACTOR) % rightEndIndex;
-    rightSide.push(value);
+    rightSide.push(sum);
   }
   return rightSide;
 }

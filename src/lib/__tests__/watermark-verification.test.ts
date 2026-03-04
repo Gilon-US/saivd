@@ -120,27 +120,27 @@ describe("watermark-verification", () => {
   });
 
   describe("getRightSideRowSums", () => {
-    it("sums each row horizontally then applies modulo rightEndIndex", () => {
+    it("sums each row horizontally over [0, rightEndIndex) columns", () => {
       const givenFrame = [
         [1, 2, 3],
         [4, 5, 6],
       ];
-      // rightEndIndex=2: sum cols 0..1 per row, then % 2
+      // rightEndIndex=2: sum cols 0..1 per row
       const rightSide = getRightSideRowSums(givenFrame, 2);
-      // row 0: (1+2) % 2 = 1, row 1: (4+5) % 2 = 1
-      expect(rightSide).toEqual([1, 1]);
+      // row 0: (1+2) = 3, row 1: (4+5) = 9
+      expect(rightSide).toEqual([3, 9]);
     });
 
-    it("correctly applies modulo with larger values", () => {
+    it("handles larger values without applying modulo", () => {
       const givenFrame = [
         [50, 30, 99],
         [10, 20, 99],
       ];
-      // rightEndIndex=3: sum all 3 cols per row, then % 3
+      // rightEndIndex=3: sum all 3 cols per row
       const rightSide = getRightSideRowSums(givenFrame, 3);
-      // row 0: (50+30+99) % 3 = 179 % 3 = 2
-      // row 1: (10+20+99) % 3 = 129 % 3 = 0
-      expect(rightSide).toEqual([2, 0]);
+      // row 0: (50+30+99) = 179
+      // row 1: (10+20+99) = 129
+      expect(rightSide).toEqual([179, 129]);
     });
   });
 
