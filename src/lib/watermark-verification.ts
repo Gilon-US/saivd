@@ -353,7 +353,54 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
     values: rightSide.join(","),
     rightEndIndex,
   });
-  return decodeNumericUserIdFromRightSide(rightSide);
+  const result = decodeNumericUserIdFromRightSide(rightSide);
+  if (result === null) {
+    const repsUsed = Math.min(REPS, Math.floor(rightSide.length / USER_ID_DIGITS));
+    const nVals = USER_ID_DIGITS * repsUsed;
+    const prefix = rightSide.slice(0, nVals);
+    const first45 = rightSide.slice(0, 45);
+    const countIn09 = first45.filter((v) => v >= 0 && v <= 9).length;
+    const digitGroups: { digitIndex: number; group: number[]; mode: number | null }[] = [];
+    for (let d = 0; d < USER_ID_DIGITS; d++) {
+      const group = prefix.slice(d * repsUsed, (d + 1) * repsUsed);
+      digitGroups.push({ digitIndex: d, group, mode: getMode(group) });
+    }
+    const failedDigit = digitGroups.find((g) => g.mode === null || g.mode < 0 || g.mode > 9);
+    console.log(
+      "[WatermarkDecode] BACKEND_DIAGNOSTIC (copy for backend):",
+      JSON.stringify(
+        {
+          hint: "If first45Values contain numbers > 9, frame 0 right side was embedded with RSA key; backend should use local_private_key=None for right side on frame 0.",
+          videoDimensions: { width: imageData.width, height: imageData.height },
+          cropped: { width, height },
+          patchLayout: {
+            patchRows,
+            patchCols,
+            rightEndIndex,
+            groupsPerColumn: Math.floor(height / 5),
+          },
+          rightSideSummary: {
+            length: rightSide.length,
+            repsUsed,
+            first45Values: first45,
+            countIn0to9: countIn09,
+            maxFirst45: first45.length ? Math.max(...first45) : null,
+          },
+          failedDigit: failedDigit
+            ? {
+                digitIndex: failedDigit.digitIndex,
+                mode: failedDigit.mode,
+                groupValues: failedDigit.group,
+              }
+            : null,
+          allDigitModes: digitGroups.map((g) => ({ d: g.digitIndex, mode: g.mode })),
+        },
+        null,
+        2
+      )
+    );
+  }
+  return result;
 }
 
 /**

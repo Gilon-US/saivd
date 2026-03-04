@@ -110,6 +110,11 @@ export function useWatermarkVerification(
       }
       if (numericUserId === null || numericUserId <= 0) {
         debugLog("numericUserId invalid after decode", {numericUserId});
+        console.log(
+          "[WatermarkVerify] Frame 0 decode failed. Look for [WatermarkDecode] BACKEND_DIAGNOSTIC in the console to copy for backend (videoUrl snippet:",
+          videoUrl?.slice(-80),
+          ")"
+        );
         setStatus("failed");
         if (!callbackFiredRef.current && onVerificationComplete) {
           callbackFiredRef.current = true;
