@@ -48,28 +48,20 @@ export async function captureFrame0YFromUrl(
   let demuxer: import("web-demuxer").WebDemuxer | null = null;
 
   try {
+    // Fetch video in main thread and pass a File to the demuxer. Passing a URL string
+    // to demuxer.load() can cause "get_av_stream is not a function" in the worker
+    // because the worker expects a File-like source with arrayBuffer/stream, not a URL.
+    const response = await fetch(videoUrl, { mode: "cors" });
+    if (!response.ok) {
+      console.warn("[WebCodecs] fetch failed:", response.status, response.statusText);
+      return null;
+    }
+    const blob = await response.blob();
+    const file = new File([blob], "video.mp4", { type: blob.type || "video/mp4" });
+
     const { WebDemuxer } = await import("web-demuxer");
     demuxer = new WebDemuxer({ wasmFilePath: getWasmAbsoluteUrl() });
-
-    // Prefer URL so the demuxer fetches internally. Loading a File can trigger
-    // "get_av_stream is not a function" in the worker. If URL load fails (e.g. CORS
-    // in worker), fall back to fetch + blob URL (same-origin so worker can read it).
-    try {
-      await demuxer.load(videoUrl);
-    } catch {
-      const response = await fetch(videoUrl, { mode: "cors" });
-      if (!response.ok) {
-        console.warn("[WebCodecs] fetch failed:", response.status, response.statusText);
-        return null;
-      }
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      try {
-        await demuxer.load(objectUrl);
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
-    }
+    await demuxer.load(file);
 
     const config = await demuxer.getDecoderConfig("video");
     if (!config) return null;
