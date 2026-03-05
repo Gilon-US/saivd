@@ -1,8 +1,13 @@
 /**
- * Client-side watermark verification aligned with backend checklist (canvas, crop, BT.601 luma,
+ * Client-side watermark verification aligned with backend checklist (canvas, crop, BT.709 luma,
  * 16×16 patch matrix, rightEndIndex, row sum % rightEndIndex, 9-digit decode from frame 0).
  * Decodes numeric_user_id from frame 0 (no key); verifies frames 0, 10, 20, ... with RSA.
  * See docs/WATERMARK_DATA_AND_DECODING_GUIDE.md and backend "Frontend watermark verification – detailed checklist".
+ *
+ * Pipeline audit (no intentional miscalculations): canvas 1:1 with video dimensions; crop to mult 16;
+ * luma from RGB (BT.709 limited); patch = integer round of 16×16 mean via (sum+128)>>8; rightSide =
+ * rowSum % rightEndIndex (integer sum, no overflow at 76*255); decode = mode of 9 groups. Any
+ * mismatch with backend is from Y derivation path (we derive Y from canvas RGB; backend uses codec Y).
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,11 +23,16 @@ export const USER_ID_DIGITS = 9;
 export const REPS = 7;
 
 /**
- * Extract luma (Y) from RGBA ImageData using BT.601 with limited range (backend checklist §2).
+ * Extract luma (Y) from RGBA ImageData using BT.709 with limited range (backend checklist §2).
  *
- * Checklist: BT.601 first (0.299*R + 0.587*G + 0.114*B); optional limited range if values don't match.
- * Backend uses Y from decoded video (typically 16–235). We use limited range: Y_full then
- * Y_limited = round(16 + (219/255)*Y_full), clamp [0, 255]. Single channel only for patches/row sums.
+ * Backend decoded video Y typically matches BT.709 (0.2126*R + 0.7152*G + 0.0722*B) in limited range 16–235.
+ * We use: Y_full then Y_limited = round(16 + (219/255)*Y_full), clamp [0, 255]. Single channel only.
+ *
+ * Note: Canvas getImageData() returns RGB in the canvas color space (default sRGB). The browser
+ * converts video (YUV from codec) to RGB when drawing; we then derive Y from that RGB. So our Y
+ * can differ slightly from the backend’s raw Y plane if the browser’s YUV→RGB differs from the
+ * inverse of our RGB→Y. Pipeline math (indexing, sums, modulo) is exact; any mismatch is from
+ * this derivation path, not from JS arithmetic errors.
  */
 function imageDataToLuma(data: ImageData): Uint8Array {
   const {width, height, data: rgba} = data;
@@ -32,7 +42,7 @@ function imageDataToLuma(data: ImageData): Uint8Array {
     const r = rgba[i * 4];
     const g = rgba[i * 4 + 1];
     const b = rgba[i * 4 + 2];
-    const yFull = 0.299 * r + 0.587 * g + 0.114 * b;
+    const yFull = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     const yLimited = 16 + scale * yFull;
     const rounded = Math.round(yLimited);
     luma[i] = rounded < 0 ? 0 : rounded > 255 ? 255 : rounded;
@@ -70,8 +80,49 @@ export function cropToMultipleOf16(
 }
 
 /**
+ * Crop raw luma (Y) to multiples of 16. Use when Y comes from a non-canvas source (e.g. WebCodecs I420 plane).
+ */
+export function cropLumaToMultipleOf16(
+  luma: Uint8Array,
+  width: number,
+  height: number
+): {luma: Uint8Array; width: number; height: number} {
+  const w = width - (width % PATCH_SIZE);
+  const h = height - (height % PATCH_SIZE);
+  if (w <= 0 || h <= 0) return {luma: new Uint8Array(0), width: 0, height: 0};
+  const cropped = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      cropped[y * w + x] = luma[y * width + x];
+    }
+  }
+  return {luma: cropped, width: w, height: h};
+}
+
+/**
+ * Decode numeric user ID from raw luma (Y) only. Use when Y is already available (e.g. Y plane from
+ * WebCodecs I420 VideoFrame). Same pipeline as decodeNumericUserIdFromFrame but skips RGB→Y.
+ * See docs/WATERMARK_VERIFICATION_CAPTURE_OPTIONS.md.
+ */
+export function decodeNumericUserIdFromLuma(
+  luma: Uint8Array,
+  width: number,
+  height: number
+): number | null {
+  const {luma: cropped, width: w, height: h} = cropLumaToMultipleOf16(luma, width, height);
+  if (w < PATCH_SIZE || h < PATCH_SIZE) return null;
+  const givenFrame = buildPatchMatrix(cropped, w, h);
+  const patchCols = givenFrame[0]?.length ?? 0;
+  const rightEndIndex = getRightEndIndex(h, patchCols);
+  if (rightEndIndex <= 0) return null;
+  const rightSide = getRightSideRowSums(givenFrame, rightEndIndex);
+  return decodeNumericUserIdFromRightSide(rightSide);
+}
+
+/**
  * Patch matrix per backend checklist §3: block layout r*16..r*16+15, c*16..c*16+15;
- * patchRows = cropH/16, patchCols = cropW/16; mean of 256 Y values per block, Math.round(mean).
+ * patchRows = cropH/16, patchCols = cropW/16. Mean of 256 Y values per block using integer
+ * rounding to avoid float precision issues: (sum + 128) >> 8 === Math.round(sum/256).
  */
 export function buildPatchMatrix(luma: Uint8Array, width: number, height: number): number[][] {
   const rows = Math.floor(height / PATCH_SIZE);
@@ -86,8 +137,7 @@ export function buildPatchMatrix(luma: Uint8Array, width: number, height: number
           sum += luma[(py * PATCH_SIZE + dy) * width + (px * PATCH_SIZE + dx)];
         }
       }
-      const mean = sum / (PATCH_SIZE * PATCH_SIZE);
-      row.push(Math.round(mean));
+      row.push((sum + 128) >> 8);
     }
     matrix.push(row);
   }
@@ -109,6 +159,7 @@ export function getRightEndIndex(pixelHeight: number, patchCols: number): number
 /**
  * Right-side row sums per backend checklist §4: rowSum[r] = sum of patch row r, cols 0..rightEndIndex-1;
  * factor 1 (no division); rightSide[r] = rowSum[r] % rightEndIndex. Integer addition only.
+ * Row sum is at most rightEndIndex*255 (e.g. 76*255=19380), so no overflow; JS % keeps result in [0, rightEndIndex-1].
  */
 export function getRightSideRowSums(
   givenFrame: number[][],
@@ -313,6 +364,29 @@ export async function decodeAndVerifyFrame(
 }
 
 /**
+ * Same as decodeAndVerifyFrame but from raw luma (e.g. Y plane from WebCodecs I420).
+ * Use for accurate verification when Y comes from the codec.
+ */
+export async function decodeAndVerifyFrameFromLuma(
+  publicKey: CryptoKey,
+  luma: Uint8Array,
+  width: number,
+  height: number
+): Promise<{verified: boolean; numericUserId: number | null}> {
+  const {luma: cropped, width: w, height: h} = cropLumaToMultipleOf16(luma, width, height);
+  if (w < PATCH_SIZE || h < PATCH_SIZE) return {verified: false, numericUserId: null};
+  const givenFrame = buildPatchMatrix(cropped, w, h);
+  const patchCols = givenFrame[0].length;
+  const rightEndIndex = getRightEndIndex(h, patchCols);
+  if (rightEndIndex <= 0) return {verified: false, numericUserId: null};
+  const rightSide = getRightSideRowSums(givenFrame, rightEndIndex);
+  const numericUserId = decodeNumericUserIdFromRightSide(rightSide);
+  const signatureBytes = getLeftSideSignature(cropped, w, h, rightEndIndex);
+  const verified = await verifyFrame(publicKey, rightSide, signatureBytes);
+  return {verified, numericUserId};
+}
+
+/**
  * Decode numeric_user_id from frame 0 only (no key required). Use this to then fetch the public key.
  */
 export function decodeNumericUserIdFromFrame(imageData: ImageData): number | null {
@@ -409,7 +483,7 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
           hint: "If first45Values contain numbers > 9, luma/patch pipeline may not match backend. Per backend checklist: use BT.601 (0.299*R+0.587*G+0.114*B) round+clamp [0,255]; or try BT.709 or limited range 16–235. Canvas = video.videoWidth×video.videoHeight, 1:1 draw; crop to mult 16; rightSide = rowSum % rightEndIndex.",
           videoDimensions: { width: imageData.width, height: imageData.height },
           cropped: { width, height },
-          lumaStats: { min: lumaMin, max: lumaMax, mean: lumaMean != null ? Math.round(lumaMean * 10) / 10 : null, formula: "BT.601_limited_range" },
+          lumaStats: { min: lumaMin, max: lumaMax, mean: lumaMean != null ? Math.round(lumaMean * 10) / 10 : null, formula: "BT.709_limited_range" },
           patchMatrixStats: { min: patchMin, max: patchMax, mean: patchMean != null ? Math.round(patchMean * 10) / 10 : null },
           patchMatrixSampleFirst5Rows12Cols: patchSample,
           rawRowSumsFirst12,

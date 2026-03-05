@@ -3,10 +3,13 @@
 import {useEffect, useRef, useState, useCallback} from "react";
 import {
   decodeNumericUserIdFromFrame,
+  decodeNumericUserIdFromLuma,
   decodeAndVerifyFrame,
+  decodeAndVerifyFrameFromLuma,
   fetchPublicKeyPem,
   importPublicKeyFromPem,
 } from "@/lib/watermark-verification";
+import { captureFrame0YFromUrl } from "@/lib/webcodecs-capture";
 
 export type WatermarkVerificationStatus = "idle" | "verifying" | "verified" | "failed";
 
@@ -50,11 +53,11 @@ export function useWatermarkVerification(
       videoHeight: video.videoHeight,
       currentTime: video.currentTime,
     });
-    // Backend checklist §1: canvas size = video intrinsic size; draw at 1:1 (one canvas pixel = one video pixel).
+    // Backend checklist §1: canvas size = video intrinsic size; draw at 1:1 so no scaling or subpixel interpolation.
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
     try {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -89,26 +92,47 @@ export function useWatermarkVerification(
     setStatus("verifying");
 
     const runVerification = async () => {
-      const imageData = captureFrameToImageData();
-      if (!imageData) {
-        debugLog(
-          "Playback decode failed: could not read frame. Video may be cross-origin (presigned URL) without CORS – canvas is tainted and getImageData() is blocked. Ensure the video URL is served with Access-Control-Allow-Origin or use same-origin proxy."
-        );
-        setStatus("failed");
-        if (!callbackFiredRef.current && onVerificationComplete) {
-          callbackFiredRef.current = true;
-          onVerificationComplete("failed", null);
-        }
-        return;
+      let numericUserId: number | null = null;
+      let imageData: ImageData | null = null;
+      let webCodecsY: { yPlane: Uint8Array; width: number; height: number } | null = null;
+
+      try {
+        webCodecsY = await captureFrame0YFromUrl(videoUrl);
+      } catch (e) {
+        debugLog("WebCodecs capture failed, falling back to canvas", e);
       }
 
-      let numericUserId: number | null = null;
-      try {
-        numericUserId = decodeNumericUserIdFromFrame(imageData);
-        debugLog("Decoded numericUserId from frame 0", {numericUserId});
-      } catch (e) {
-        debugLog("Decode error", e);
+      if (webCodecsY) {
+        debugLog("Using WebCodecs Y plane for frame 0 (accurate extraction)");
+        numericUserId = decodeNumericUserIdFromLuma(
+          webCodecsY.yPlane,
+          webCodecsY.width,
+          webCodecsY.height
+        );
+        debugLog("Decoded numericUserId from frame 0 (WebCodecs)", {numericUserId});
       }
+
+      if (numericUserId === null || numericUserId <= 0) {
+        imageData = captureFrameToImageData();
+        if (!imageData) {
+          debugLog(
+            "Playback decode failed: could not read frame. Video may be cross-origin (presigned URL) without CORS – canvas is tainted and getImageData() is blocked. Ensure the video URL is served with Access-Control-Allow-Origin or use same-origin proxy."
+          );
+          setStatus("failed");
+          if (!callbackFiredRef.current && onVerificationComplete) {
+            callbackFiredRef.current = true;
+            onVerificationComplete("failed", null);
+          }
+          return;
+        }
+        try {
+          numericUserId = decodeNumericUserIdFromFrame(imageData);
+          debugLog("Decoded numericUserId from frame 0 (canvas fallback)", {numericUserId});
+        } catch (e) {
+          debugLog("Decode error", e);
+        }
+      }
+
       if (numericUserId === null || numericUserId <= 0) {
         debugLog("numericUserId invalid after decode", {numericUserId});
         console.log(
@@ -124,8 +148,6 @@ export function useWatermarkVerification(
         return;
       }
 
-      // User ID decoded successfully — this is the primary verification.
-      // Fetch the public key and attempt RSA verification as a secondary (non-blocking) check.
       let pem: string | null = null;
       try {
         debugLog("Fetching public key PEM", {numericUserId});
@@ -146,18 +168,25 @@ export function useWatermarkVerification(
       }
       publicKeyRef.current = key;
 
-      // RSA verify frame 0 (frame 0 has plain right side so message/signature verify works).
       if (key) {
         try {
-          const result = await decodeAndVerifyFrame(key, imageData);
-          debugLog("Frame 0 RSA verification result (informational)", {
-            verified: result.verified,
-            numericUserId: result.numericUserId,
-          });
-          if (!result.verified) {
-            debugLog(
-              "RSA verification did not pass for frame 0 (informational). User ID decode succeeded, so playback is allowed."
+          if (webCodecsY) {
+            const result = await decodeAndVerifyFrameFromLuma(
+              key,
+              webCodecsY.yPlane,
+              webCodecsY.width,
+              webCodecsY.height
             );
+            debugLog("Frame 0 RSA verification result (WebCodecs)", {
+              verified: result.verified,
+              numericUserId: result.numericUserId,
+            });
+          } else if (imageData) {
+            const result = await decodeAndVerifyFrame(key, imageData);
+            debugLog("Frame 0 RSA verification result (canvas)", {
+              verified: result.verified,
+              numericUserId: result.numericUserId,
+            });
           }
         } catch (e) {
           debugLog("RSA verification threw (non-blocking)", e);
