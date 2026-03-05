@@ -229,6 +229,9 @@ export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | 
   return parsed;
 }
 
+/**
+ * Mode (most frequent value). On tie, prefer smallest value so e.g. 000000001 decodes to 1 not 100000001.
+ */
 function getMode(arr: number[]): number | null {
   if (arr.length === 0) return null;
   const counts = new Map<number, number>();
@@ -238,7 +241,7 @@ function getMode(arr: number[]): number | null {
   let maxCount = 0;
   let mode: number | null = null;
   for (const [v, c] of counts) {
-    if (c > maxCount) {
+    if (c > maxCount || (c === maxCount && (mode === null || v < mode))) {
       maxCount = c;
       mode = v;
     }
