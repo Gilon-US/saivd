@@ -5,9 +5,8 @@
  * See docs/WATERMARK_DATA_AND_DECODING_GUIDE.md and backend "Frontend watermark verification – detailed checklist".
  *
  * Pipeline audit (no intentional miscalculations): canvas 1:1 with video dimensions; crop to mult 16;
- * luma from RGB (BT.709 limited); patch = integer round of 16×16 mean via (sum+128)>>8; rightSide =
- * rowSum % rightEndIndex (integer sum, no overflow at 76*255); decode = mode of 9 groups. Any
- * mismatch with backend is from Y derivation path (we derive Y from canvas RGB; backend uses codec Y).
+ * luma from RGB (BT.709 full range per FRONTEND_WATERMARK_VERIFICATION_FIX); patch = integer round
+ * of 16×16 mean via (sum+128)>>8; rightSide = rowSum % rightEndIndex; decode = mode of 9 groups.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -23,29 +22,21 @@ export const USER_ID_DIGITS = 9;
 export const REPS = 7;
 
 /**
- * Extract luma (Y) from RGBA ImageData using BT.709 with limited range (backend checklist §2).
+ * Extract luma (Y) from RGBA ImageData using BT.709 full range (per FRONTEND_WATERMARK_VERIFICATION_FIX).
  *
- * Backend decoded video Y typically matches BT.709 (0.2126*R + 0.7152*G + 0.0722*B) in limited range 16–235.
- * We use: Y_full then Y_limited = round(16 + (219/255)*Y_full), clamp [0, 255]. Single channel only.
+ * Backend and fix doc use Y = round(0.2126*R + 0.7152*G + 0.0722*B), clamp [0, 255]. No 16–235 limited range.
  *
- * Note: Canvas getImageData() returns RGB in the canvas color space (default sRGB). The browser
- * converts video (YUV from codec) to RGB when drawing; we then derive Y from that RGB. So our Y
- * can differ slightly from the backend’s raw Y plane if the browser’s YUV→RGB differs from the
- * inverse of our RGB→Y. Pipeline math (indexing, sums, modulo) is exact; any mismatch is from
- * this derivation path, not from JS arithmetic errors.
+ * (Canvas RGB -> Y can differ from codec Y; full range BT.709 matches fix doc.)
  */
 function imageDataToLuma(data: ImageData): Uint8Array {
   const {width, height, data: rgba} = data;
   const luma = new Uint8Array(width * height);
-  const scale = 219 / 255;
   for (let i = 0; i < width * height; i++) {
     const r = rgba[i * 4];
     const g = rgba[i * 4 + 1];
     const b = rgba[i * 4 + 2];
-    const yFull = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    const yLimited = 16 + scale * yFull;
-    const rounded = Math.round(yLimited);
-    luma[i] = rounded < 0 ? 0 : rounded > 255 ? 255 : rounded;
+    const y = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+    luma[i] = y < 0 ? 0 : y > 255 ? 255 : y;
   }
   return luma;
 }
@@ -486,7 +477,7 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
           hint: "If first45Values contain numbers > 9, luma/patch pipeline may not match backend. Per backend checklist: use BT.601 (0.299*R+0.587*G+0.114*B) round+clamp [0,255]; or try BT.709 or limited range 16–235. Canvas = video.videoWidth×video.videoHeight, 1:1 draw; crop to mult 16; rightSide = rowSum % rightEndIndex.",
           videoDimensions: { width: imageData.width, height: imageData.height },
           cropped: { width, height },
-          lumaStats: { min: lumaMin, max: lumaMax, mean: lumaMean != null ? Math.round(lumaMean * 10) / 10 : null, formula: "BT.709_limited_range" },
+          lumaStats: { min: lumaMin, max: lumaMax, mean: lumaMean != null ? Math.round(lumaMean * 10) / 10 : null, formula: "BT.709_full_range" },
           patchMatrixStats: { min: patchMin, max: patchMax, mean: patchMean != null ? Math.round(patchMean * 10) / 10 : null },
           patchMatrixSampleFirst5Rows12Cols: patchSample,
           rawRowSumsFirst12,
