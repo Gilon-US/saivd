@@ -51,14 +51,25 @@ export async function captureFrame0YFromUrl(
     const { WebDemuxer } = await import("web-demuxer");
     demuxer = new WebDemuxer({ wasmFilePath: getWasmAbsoluteUrl() });
 
-    const response = await fetch(videoUrl, { mode: "cors" });
-    if (!response.ok) {
-      console.warn("[WebCodecs] fetch failed:", response.status, response.statusText);
-      return null;
+    // Prefer URL so the demuxer fetches internally. Loading a File can trigger
+    // "get_av_stream is not a function" in the worker. If URL load fails (e.g. CORS
+    // in worker), fall back to fetch + blob URL (same-origin so worker can read it).
+    try {
+      await demuxer.load(videoUrl);
+    } catch {
+      const response = await fetch(videoUrl, { mode: "cors" });
+      if (!response.ok) {
+        console.warn("[WebCodecs] fetch failed:", response.status, response.statusText);
+        return null;
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      try {
+        await demuxer.load(objectUrl);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
     }
-    const blob = await response.blob();
-    const file = new File([blob], "video.mp4", { type: blob.type || "video/mp4" });
-    await demuxer.load(file);
 
     const config = await demuxer.getDecoderConfig("video");
     if (!config) return null;
