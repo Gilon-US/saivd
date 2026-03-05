@@ -163,7 +163,10 @@ export function getRightSideRowSums(
     for (let col = 0; col < rightEndIndex && col < givenFrame[row].length; col++) {
       sum += givenFrame[row][col];
     }
-    rightSide.push(sum % rightEndIndex);
+    // Per FRONTEND_WATERMARK_VERIFICATION_FIX.md, use raw row sums with factor 1
+    // (no modulo). Any mode > 9 in the first 9*repsUsed positions is treated as
+    // a pipeline bug (luma/patch/rightSide mismatch), not something to fix via %.
+    rightSide.push(sum);
   }
   return rightSide;
 }
@@ -414,7 +417,7 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
   }
 
   const rightSide = getRightSideRowSums(givenFrame, rightEndIndex);
-  debugLog("decodeNumericUserIdFromFrame: rightSide (row sums % rightEndIndex)", {
+  debugLog("decodeNumericUserIdFromFrame: rightSide (row sums, factor 1)", {
     length: rightSide.length,
     values: rightSide.join(","),
     rightEndIndex,
