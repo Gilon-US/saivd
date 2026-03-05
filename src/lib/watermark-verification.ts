@@ -1,9 +1,8 @@
 /**
- * Client-side watermark verification (decode + RSA verify) per docs/WATERMARK_DATA_AND_DECODING_GUIDE.md.
- * The guide was generated from the actual backend implementation and is the source of truth.
- * Decodes numeric_user_id from frame 0 (no key); the backend does not use the RSA key for the right
- * side on frame 0, so the user ID can be extracted without a key. Verifies frames 0, 10, 20, ...
- * using the creator's public RSA key.
+ * Client-side watermark verification aligned with backend checklist (canvas, crop, BT.601 luma,
+ * 16×16 patch matrix, rightEndIndex, row sum % rightEndIndex, 9-digit decode from frame 0).
+ * Decodes numeric_user_id from frame 0 (no key); verifies frames 0, 10, 20, ... with RSA.
+ * See docs/WATERMARK_DATA_AND_DECODING_GUIDE.md and backend "Frontend watermark verification – detailed checklist".
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -19,29 +18,30 @@ export const USER_ID_DIGITS = 9;
 export const REPS = 7;
 
 /**
- * Extract luma (Y) from RGBA ImageData using limited-range BT.709.
+ * Extract luma (Y) from RGBA ImageData using BT.601 (backend checklist: prefer first).
  *
- * Backend watermarking uses Y from decoded video (typically limited range 16–235). We derive
- * Y from canvas RGB the same way: full-range BT.709 then map to limited range so patch
- * means match. Formula: Y_full = 0.2126*R + 0.7152*G + 0.0722*B; Y = 16 + (219/255)*Y_full.
- * See docs/FRONTEND_WATERMARK_VERIFICATION_FIX.md; use limited range if full-range fails.
+ * Per backend alignment checklist: Y = 0.299*R + 0.587*G + 0.114*B, round and clamp to [0, 255].
+ * Single channel only; patches and row sums use this Y array. If decode fails (e.g. values > 9),
+ * try BT.709 (0.2126, 0.7152, 0.0722) or limited range: 16 + (219/255)*Y_full then clamp [16, 235].
  */
 function imageDataToLuma(data: ImageData): Uint8Array {
   const {width, height, data: rgba} = data;
   const luma = new Uint8Array(width * height);
-  const scale = 219 / 255;
   for (let i = 0; i < width * height; i++) {
     const r = rgba[i * 4];
     const g = rgba[i * 4 + 1];
     const b = rgba[i * 4 + 2];
-    const yFull = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    const yLimited = 16 + scale * yFull;
-    luma[i] = Math.max(0, Math.min(255, Math.round(yLimited)));
+    const y = 0.299 * r + 0.587 * g + 0.114 * b;
+    const rounded = Math.round(y);
+    luma[i] = rounded < 0 ? 0 : rounded > 255 ? 255 : rounded;
   }
   return luma;
 }
 
-/** Crop frame to dimensions that are multiples of 16. Returns cropped luma and width/height. */
+/**
+ * Crop to multiples of 16 for patch matrix (backend checklist §1).
+ * cropW = width - (width % 16), cropH = height - (height % 16). Use only top-left cropW×cropH.
+ */
 export function cropToMultipleOf16(
   imageData: ImageData
 ): {luma: Uint8Array; width: number; height: number} {
@@ -68,7 +68,8 @@ export function cropToMultipleOf16(
 }
 
 /**
- * Build patch matrix (H/16 x W/16). Each cell = mean of 16x16 block, rounded.
+ * Patch matrix per backend checklist §3: block layout r*16..r*16+15, c*16..c*16+15;
+ * patchRows = cropH/16, patchCols = cropW/16; mean of 256 Y values per block, Math.round(mean).
  */
 export function buildPatchMatrix(luma: Uint8Array, width: number, height: number): number[][] {
   const rows = Math.floor(height / PATCH_SIZE);
@@ -84,7 +85,7 @@ export function buildPatchMatrix(luma: Uint8Array, width: number, height: number
         }
       }
       const mean = sum / (PATCH_SIZE * PATCH_SIZE);
-      row.push((mean + 0.5) | 0);
+      row.push(Math.round(mean));
     }
     matrix.push(row);
   }
@@ -92,9 +93,8 @@ export function buildPatchMatrix(luma: Uint8Array, width: number, height: number
 }
 
 /**
- * Compute right_end_index (patch column index; right region is columns 0..right_end_index-1).
- * `pixelHeight` is the full frame height in pixels (after crop to multiple of 16), NOT the patch row count.
- * Spec: groups_per_column = H // 5  (pixel-level 5-row groups for left-side signature).
+ * Right-end index per backend checklist §4: groupsPerColumn = floor(cropH/5),
+ * numLeftColumns = ceil(256/groupsPerColumn), rightEndIndex = patchCols - numLeftColumns.
  */
 export function getRightEndIndex(pixelHeight: number, patchCols: number): number {
   const groupsPerColumn = Math.floor(pixelHeight / 5);
@@ -105,11 +105,8 @@ export function getRightEndIndex(pixelHeight: number, patchCols: number): number
 }
 
 /**
- * Right-side row sums per guide §4 (factor 1, no division). The guide describes
- * rightSide[row] = sum(patch_matrix[row, 0 : right_end_index]). The backend
- * create_column_sums applies % MAX_VAL (MAX_VAL = right_end_index); we apply
- * % rightEndIndex so extracted values are in [0, rightEndIndex) and match the
- * embedded pattern (digits 0-9 for user ID).
+ * Right-side row sums per backend checklist §4: rowSum[r] = sum of patch row r, cols 0..rightEndIndex-1;
+ * factor 1 (no division); rightSide[r] = rowSum[r] % rightEndIndex. Integer addition only.
  */
 export function getRightSideRowSums(
   givenFrame: number[][],
@@ -128,10 +125,8 @@ export function getRightSideRowSums(
 }
 
 /**
- * Decode numeric_user_id from right_side values.
- * Backend encodes a fixed 9-digit decimal string (left-padded with zeros).
- * Use dynamic repsUsed to match backend; decode exactly 9 digits; do not strip trailing zeros.
- * See docs/FRONTEND_USER_ID_DECODE_UPDATE.md.
+ * Decode numeric user ID from rightSide (backend checklist §5): frame 0 only; repsUsed = min(7, floor(len/9));
+ * usable = 9*repsUsed; nine groups of repsUsed values; mode per group (must be 0–9); digitStr = join; no strip trailing zeros.
  */
 export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | null {
   const repsUsed = Math.min(REPS, Math.floor(rightSide.length / USER_ID_DIGITS));
@@ -409,10 +404,10 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
       "[WatermarkDecode] BACKEND_DIAGNOSTIC (copy for backend):",
       JSON.stringify(
         {
-          hint: "If first45Values contain numbers > 9, the frontend may not be using the same luma (Y) as the backend. Follow docs/FRONTEND_WATERMARK_VERIFICATION_FIX.md: derive Y from canvas RGB (e.g. BT.709), build 16×16 patch matrix from Y, compute rightSide with factor 1, then decode the 9 digits.",
+          hint: "If first45Values contain numbers > 9, luma/patch pipeline may not match backend. Per backend checklist: use BT.601 (0.299*R+0.587*G+0.114*B) round+clamp [0,255]; or try BT.709 or limited range 16–235. Canvas = video.videoWidth×video.videoHeight, 1:1 draw; crop to mult 16; rightSide = rowSum % rightEndIndex.",
           videoDimensions: { width: imageData.width, height: imageData.height },
           cropped: { width, height },
-          lumaStats: { min: lumaMin, max: lumaMax, mean: lumaMean != null ? Math.round(lumaMean * 10) / 10 : null },
+          lumaStats: { min: lumaMin, max: lumaMax, mean: lumaMean != null ? Math.round(lumaMean * 10) / 10 : null, formula: "BT.601" },
           patchMatrixStats: { min: patchMin, max: patchMax, mean: patchMean != null ? Math.round(patchMean * 10) / 10 : null },
           patchMatrixSampleFirst5Rows12Cols: patchSample,
           rawRowSumsFirst12,

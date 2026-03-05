@@ -50,6 +50,7 @@ export function useWatermarkVerification(
       videoHeight: video.videoHeight,
       currentTime: video.currentTime,
     });
+    // Backend checklist §1: canvas size = video intrinsic size; draw at 1:1 (one canvas pixel = one video pixel).
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
