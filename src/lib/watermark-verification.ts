@@ -19,20 +19,24 @@ export const USER_ID_DIGITS = 9;
 export const REPS = 7;
 
 /**
- * Extract luma (Y) from RGBA ImageData using BT.709 (full range).
+ * Extract luma (Y) from RGBA ImageData using limited-range BT.709.
  *
- * Per docs/FRONTEND_WATERMARK_VERIFICATION_FIX.md §3: derive Y from canvas RGB so patch
- * means match the backend. Y = round(0.2126*R + 0.7152*G + 0.0722*B), clamp to [0, 255].
+ * Backend watermarking uses Y from decoded video (typically limited range 16–235). We derive
+ * Y from canvas RGB the same way: full-range BT.709 then map to limited range so patch
+ * means match. Formula: Y_full = 0.2126*R + 0.7152*G + 0.0722*B; Y = 16 + (219/255)*Y_full.
+ * See docs/FRONTEND_WATERMARK_VERIFICATION_FIX.md; use limited range if full-range fails.
  */
 function imageDataToLuma(data: ImageData): Uint8Array {
   const {width, height, data: rgba} = data;
   const luma = new Uint8Array(width * height);
+  const scale = 219 / 255;
   for (let i = 0; i < width * height; i++) {
     const r = rgba[i * 4];
     const g = rgba[i * 4 + 1];
     const b = rgba[i * 4 + 2];
-    const y = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
-    luma[i] = y < 0 ? 0 : y > 255 ? 255 : y;
+    const yFull = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const yLimited = 16 + scale * yFull;
+    luma[i] = Math.max(0, Math.min(255, Math.round(yLimited)));
   }
   return luma;
 }
