@@ -29,7 +29,10 @@ function isWebCodecsSupported(): boolean {
 export async function captureFrame0YFromUrl(
   videoUrl: string
 ): Promise<WebCodecsFrame0Result | null> {
-  if (!isWebCodecsSupported()) return null;
+  if (!isWebCodecsSupported()) {
+    console.warn("[WebCodecs] VideoDecoder/EncodedVideoChunk/VideoFrame not available");
+    return null;
+  }
 
   let demuxer: import("web-demuxer").WebDemuxer | null = null;
 
@@ -38,7 +41,10 @@ export async function captureFrame0YFromUrl(
     demuxer = new WebDemuxer({ wasmFilePath: WASM_PATH });
 
     const response = await fetch(videoUrl, { mode: "cors" });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.warn("[WebCodecs] fetch failed:", response.status, response.statusText);
+      return null;
+    }
     const blob = await response.blob();
     const file = new File([blob], "video.mp4", { type: blob.type || "video/mp4" });
     await demuxer.load(file);
@@ -60,7 +66,8 @@ export async function captureFrame0YFromUrl(
     } finally {
       frame.close();
     }
-  } catch {
+  } catch (e) {
+    console.warn("[WebCodecs] captureFrame0YFromUrl failed:", e instanceof Error ? e.message : String(e));
     return null;
   } finally {
     if (demuxer) demuxer.destroy();
