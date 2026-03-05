@@ -133,7 +133,8 @@ Recommended route layout:
 
 - `POST /api/videos/[id]/watermark` – Start watermarking for video `[id]`.
 - `GET /api/videos/watermark/status` – Poll: calls external queue_status, updates DB, optionally clears queue.
-- `GET /api/videos/[id]/extract-user-id` – Extract user ID from watermarked video (e.g. for verification).
+
+Verification is done **locally only** (client-side decode and decrypt from frame data). The backend extract-user-id URL is not used.
 
 All routes must:
 
@@ -269,9 +270,7 @@ Otherwise return 502 with a structured error (e.g. `extraction_failed`).
 
 - **Start watermark**: `POST /api/videos/{id}/watermark` (no body). Then show “processing” and poll status.
 - **Poll status**: `GET /api/videos/watermark/status` on an interval (e.g. every 2 seconds) while the videos list is visible. Use the returned `data.jobs` and `data.hasCompletedJobs` to update UI and refresh the video list when jobs complete.
-- **Verification**: Before playing a watermarked video, call `GET /api/videos/{id}/extract-user-id?frame_index=0`. If the response has `data.user_id`, allow playback and optionally show a QR or “verified” state; otherwise show “not authentic” and block playback.
-
-Cancel in-flight requests (e.g. `extract-user-id`) when the user closes the player (e.g. `AbortController`).
+- **Verification**: Verification is local only. The client decodes and decrypts the watermark from the video frames (e.g. frame 0 for user ID, then RSA verification). Do not use the backend extract-user-id URL; it is deprecated.
 
 ---
 
@@ -296,9 +295,8 @@ Cancel in-flight requests (e.g. `extract-user-id`) when the user closes the play
 - [ ] Set `WATERMARK_SERVICE_URL` (and optional `WATERMARK_TIMEOUT_MS`).
 - [ ] Implement `POST /api/videos/[id]/watermark` with auth, profile/video load, and async start.
 - [ ] Implement `GET /api/videos/watermark/status`: auth, `numeric_user_id`, call `POST /queue_status` with `{ user_id }`, normalize paths, update DB for completed jobs, call `POST /clear_queue` with `{ user_id }` only after all updates.
-- [ ] Implement `GET /api/videos/[id]/extract-user-id` with `video_name` as full key and optional `frame_index` and `bucket`.
 - [ ] Use `normalizeWatermarkPath` for any `s3://...` path from the external API.
 - [ ] Treat both `"success"` and `"completed"` as completed when matching jobs to DB rows and when deciding to clear the queue.
-- [ ] Client: poll status every 2–5 seconds; call extract-user-id before allowing playback of watermarked video; cancel requests on close.
+- [ ] Client: poll status every 2–5 seconds; use local decode/decrypt only for watermarked video verification (no backend extract-user-id).
 
 This guide, together with the external API reference (e.g. `API_REFERENCE.md` or `SAIVD_watermark_API.md`), is sufficient for an LLM to replicate the watermark API integration in another Next.js project.
