@@ -109,9 +109,11 @@ function decodeOneFrame(
 }
 
 /**
- * Extract the Y (luma) plane from a VideoFrame. Supports I420 (and NV12 if Y is contiguous).
+ * Extract the Y (luma) plane from a VideoFrame. Supports I420 and NV12.
  */
-function extractYPlaneFromVideoFrame(frame: VideoFrame): WebCodecsFrame0Result | null {
+async function extractYPlaneFromVideoFrame(
+  frame: VideoFrame
+): Promise<WebCodecsFrame0Result | null> {
   const width = frame.codedWidth;
   const height = frame.codedHeight;
   if (width <= 0 || height <= 0) return null;
@@ -139,7 +141,3 @@ function extractYPlaneFromVideoFrame(frame: VideoFrame): WebCodecsFrame0Result |
   }
   return { yPlane, width, height };
 }
-
-The `copyTo` is async but we're not awaiting it. Fixing the function.
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-StrReplace
