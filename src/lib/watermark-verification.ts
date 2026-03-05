@@ -354,6 +354,44 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
     values: rightSide.join(","),
     rightEndIndex,
   });
+
+  // Diagnostic: luma stats (Y range), patch matrix stats, raw row sums before modulo
+  let lumaMin: number | null = null;
+  let lumaMax: number | null = null;
+  let lumaSum = 0;
+  for (let i = 0; i < luma.length; i++) {
+    const v = luma[i];
+    lumaSum += v;
+    if (lumaMin === null || v < lumaMin) lumaMin = v;
+    if (lumaMax === null || v > lumaMax) lumaMax = v;
+  }
+  const lumaMean = luma.length ? lumaSum / luma.length : null;
+  const allPatchValues: number[] = [];
+  for (let r = 0; r < givenFrame.length; r++) {
+    for (let c = 0; c < givenFrame[r].length; c++) {
+      allPatchValues.push(givenFrame[r][c]);
+    }
+  }
+  const patchMin = allPatchValues.length ? Math.min(...allPatchValues) : null;
+  const patchMax = allPatchValues.length ? Math.max(...allPatchValues) : null;
+  const patchMean = allPatchValues.length
+    ? allPatchValues.reduce((a, b) => a + b, 0) / allPatchValues.length
+    : null;
+  const patchSample: number[][] = [];
+  for (let r = 0; r < Math.min(5, givenFrame.length); r++) {
+    patchSample.push(
+      givenFrame[r].slice(0, Math.min(12, givenFrame[r].length))
+    );
+  }
+  const rawRowSumsFirst12: { row: number; rawSum: number; afterMod: number }[] = [];
+  for (let row = 0; row < Math.min(12, givenFrame.length); row++) {
+    let raw = 0;
+    for (let c = 0; c < rightEndIndex && c < givenFrame[row].length; c++) {
+      raw += givenFrame[row][c];
+    }
+    rawRowSumsFirst12.push({ row, rawSum: raw, afterMod: rightSide[row] });
+  }
+
   const result = decodeNumericUserIdFromRightSide(rightSide);
   if (result === null) {
     const repsUsed = Math.min(REPS, Math.floor(rightSide.length / USER_ID_DIGITS));
@@ -374,6 +412,10 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
           hint: "If first45Values contain numbers > 9, the frontend may not be using the same luma (Y) as the backend. Follow docs/FRONTEND_WATERMARK_VERIFICATION_FIX.md: derive Y from canvas RGB (e.g. BT.709), build 16×16 patch matrix from Y, compute rightSide with factor 1, then decode the 9 digits.",
           videoDimensions: { width: imageData.width, height: imageData.height },
           cropped: { width, height },
+          lumaStats: { min: lumaMin, max: lumaMax, mean: lumaMean != null ? Math.round(lumaMean * 10) / 10 : null },
+          patchMatrixStats: { min: patchMin, max: patchMax, mean: patchMean != null ? Math.round(patchMean * 10) / 10 : null },
+          patchMatrixSampleFirst5Rows12Cols: patchSample,
+          rawRowSumsFirst12,
           patchLayout: {
             patchRows,
             patchCols,
