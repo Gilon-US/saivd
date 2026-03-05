@@ -4,6 +4,8 @@
  * user ID extraction and RSA verification. Falls back to null if WebCodecs or demux fails.
  *
  * WASM: public/wasm/web-demuxer.wasm must be served (copied from web-demuxer package).
+ * We must use an absolute URL: web-demuxer may load WASM from a worker, where relative
+ * paths fail (WorkerGlobalScope has no base URL → "Failed to parse URL from /wasm/...").
  */
 
 export type WebCodecsFrame0Result = {
@@ -12,7 +14,16 @@ export type WebCodecsFrame0Result = {
   height: number;
 };
 
-const WASM_PATH = "/wasm/web-demuxer.wasm";
+/** Relative path for WASM; use getWasmAbsoluteUrl() when passing to WebDemuxer. */
+const WASM_RELATIVE_PATH = "/wasm/web-demuxer.wasm";
+
+function getWasmAbsoluteUrl(): string {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    const base = window.location.origin.replace(/\/$/, "");
+    return `${base}${WASM_RELATIVE_PATH}`;
+  }
+  return WASM_RELATIVE_PATH;
+}
 
 function isWebCodecsSupported(): boolean {
   return (
@@ -38,7 +49,7 @@ export async function captureFrame0YFromUrl(
 
   try {
     const { WebDemuxer } = await import("web-demuxer");
-    demuxer = new WebDemuxer({ wasmFilePath: WASM_PATH });
+    demuxer = new WebDemuxer({ wasmFilePath: getWasmAbsoluteUrl() });
 
     const response = await fetch(videoUrl, { mode: "cors" });
     if (!response.ok) {
