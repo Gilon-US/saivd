@@ -19,23 +19,20 @@ export const USER_ID_DIGITS = 9;
 export const REPS = 7;
 
 /**
- * Extract luma (Y) from RGBA ImageData using limited-range BT.709.
+ * Extract luma (Y) from RGBA ImageData using BT.709 (full range).
  *
- * The guide §4 uses simplified full-range BT.709 (Y = 0.2126*R + 0.7152*G + 0.0722*B).
- * This code uses limited-range (16 + scale*yFull, scale = 219/255) to align with typical
- * backend Y (e.g. 16–235) so patch means match. See WATERMARK_DATA_AND_DECODING_GUIDE.md.
+ * Per docs/FRONTEND_WATERMARK_VERIFICATION_FIX.md §3: derive Y from canvas RGB so patch
+ * means match the backend. Y = round(0.2126*R + 0.7152*G + 0.0722*B), clamp to [0, 255].
  */
 function imageDataToLuma(data: ImageData): Uint8Array {
   const {width, height, data: rgba} = data;
   const luma = new Uint8Array(width * height);
-  const scale = 219 / 255;
   for (let i = 0; i < width * height; i++) {
     const r = rgba[i * 4];
     const g = rgba[i * 4 + 1];
     const b = rgba[i * 4 + 2];
-    const yFull = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    const yLimited = 16 + scale * yFull;
-    luma[i] = Math.max(0, Math.min(255, Math.round(yLimited)));
+    const y = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+    luma[i] = y < 0 ? 0 : y > 255 ? 255 : y;
   }
   return luma;
 }
@@ -370,7 +367,7 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
       "[WatermarkDecode] BACKEND_DIAGNOSTIC (copy for backend):",
       JSON.stringify(
         {
-          hint: "If first45Values contain numbers > 9, frame 0 right side was embedded with RSA key; backend should use local_private_key=None for right side on frame 0.",
+          hint: "If first45Values contain numbers > 9, the frontend may not be using the same luma (Y) as the backend. Follow docs/FRONTEND_WATERMARK_VERIFICATION_FIX.md: derive Y from canvas RGB (e.g. BT.709), build 16×16 patch matrix from Y, compute rightSide with factor 1, then decode the 9 digits.",
           videoDimensions: { width: imageData.width, height: imageData.height },
           cropped: { width, height },
           patchLayout: {
