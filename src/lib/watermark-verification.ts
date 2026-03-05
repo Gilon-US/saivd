@@ -18,21 +18,23 @@ export const USER_ID_DIGITS = 9;
 export const REPS = 7;
 
 /**
- * Extract luma (Y) from RGBA ImageData using BT.601 (backend checklist: prefer first).
+ * Extract luma (Y) from RGBA ImageData using BT.601 with limited range (backend checklist §2).
  *
- * Per backend alignment checklist: Y = 0.299*R + 0.587*G + 0.114*B, round and clamp to [0, 255].
- * Single channel only; patches and row sums use this Y array. If decode fails (e.g. values > 9),
- * try BT.709 (0.2126, 0.7152, 0.0722) or limited range: 16 + (219/255)*Y_full then clamp [16, 235].
+ * Checklist: BT.601 first (0.299*R + 0.587*G + 0.114*B); optional limited range if values don't match.
+ * Backend uses Y from decoded video (typically 16–235). We use limited range: Y_full then
+ * Y_limited = round(16 + (219/255)*Y_full), clamp [0, 255]. Single channel only for patches/row sums.
  */
 function imageDataToLuma(data: ImageData): Uint8Array {
   const {width, height, data: rgba} = data;
   const luma = new Uint8Array(width * height);
+  const scale = 219 / 255;
   for (let i = 0; i < width * height; i++) {
     const r = rgba[i * 4];
     const g = rgba[i * 4 + 1];
     const b = rgba[i * 4 + 2];
-    const y = 0.299 * r + 0.587 * g + 0.114 * b;
-    const rounded = Math.round(y);
+    const yFull = 0.299 * r + 0.587 * g + 0.114 * b;
+    const yLimited = 16 + scale * yFull;
+    const rounded = Math.round(yLimited);
     luma[i] = rounded < 0 ? 0 : rounded > 255 ? 255 : rounded;
   }
   return luma;
@@ -407,7 +409,7 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
           hint: "If first45Values contain numbers > 9, luma/patch pipeline may not match backend. Per backend checklist: use BT.601 (0.299*R+0.587*G+0.114*B) round+clamp [0,255]; or try BT.709 or limited range 16–235. Canvas = video.videoWidth×video.videoHeight, 1:1 draw; crop to mult 16; rightSide = rowSum % rightEndIndex.",
           videoDimensions: { width: imageData.width, height: imageData.height },
           cropped: { width, height },
-          lumaStats: { min: lumaMin, max: lumaMax, mean: lumaMean != null ? Math.round(lumaMean * 10) / 10 : null, formula: "BT.601" },
+          lumaStats: { min: lumaMin, max: lumaMax, mean: lumaMean != null ? Math.round(lumaMean * 10) / 10 : null, formula: "BT.601_limited_range" },
           patchMatrixStats: { min: patchMin, max: patchMax, mean: patchMean != null ? Math.round(patchMean * 10) / 10 : null },
           patchMatrixSampleFirst5Rows12Cols: patchSample,
           rawRowSumsFirst12,
