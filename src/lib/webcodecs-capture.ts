@@ -59,7 +59,6 @@ export async function captureFrame0YFromUrl(
   }
 
   let demuxer: import("web-demuxer").WebDemuxer | null = null;
-  let blobUrl: string | null = null;
 
   try {
     const wasmCheck = await checkWasmUrl();
@@ -67,20 +66,19 @@ export async function captureFrame0YFromUrl(
       console.warn("[WebCodecs] WASM URL check failed:", wasmCheck.status ?? wasmCheck.error, wasmCheck.contentType ?? "", wasmCheck.error ?? "");
     }
 
-    // Fetch the video bytes in the main thread; pass a blob URL to the demuxer so the worker
-    // fetches it (avoids postMessage of File which can fail in some browsers).
+    // Fetch the video bytes in the main thread and pass a File to the demuxer. Passing a blob
+    // URL causes the worker's WASM (Emscripten XHR) to fail: "GET is the only method allowed for blob: URLs".
     const response = await fetch(videoUrl, { mode: "cors" });
     if (!response.ok) {
       console.warn("[WebCodecs] fetch failed:", response.status, response.statusText);
       return null;
     }
     const buffer = await response.arrayBuffer();
-    const blob = new Blob([buffer], { type: "video/mp4" });
-    blobUrl = URL.createObjectURL(blob);
+    const file = new File([buffer], "video.mp4", { type: "video/mp4" });
 
     const { WebDemuxer } = await import("web-demuxer");
     demuxer = new WebDemuxer({ wasmFilePath: getWasmAbsoluteUrl() });
-    await demuxer.load(blobUrl);
+    await demuxer.load(file);
 
     const config = await demuxer.getDecoderConfig("video");
     if (!config) return null;
@@ -107,7 +105,6 @@ export async function captureFrame0YFromUrl(
     return null;
   } finally {
     if (demuxer) demuxer.destroy();
-    if (blobUrl) URL.revokeObjectURL(blobUrl);
   }
 }
 
