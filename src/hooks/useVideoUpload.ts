@@ -278,7 +278,42 @@ export function useVideoUpload() {
         description: `${file.name} has been uploaded successfully.`,
         variant: 'success',
       });
-      
+
+      // Trigger normalization (standard MP4 for streaming and Y-channel decoding).
+      // Non-blocking: do not fail the upload if normalize request fails.
+      try {
+        const normalizeRes = await fetch(`/api/videos/${data.id}/normalize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+        if (!normalizeRes.ok) {
+          const errData = await normalizeRes.json().catch(() => ({}));
+          console.warn('[useVideoUpload] Normalize request failed', {
+            status: normalizeRes.status,
+            error: errData?.error,
+          });
+          toast({
+            title: 'Upload saved',
+            description:
+              'Preparation for streaming could not be started. You can try again from the video.',
+            variant: 'default',
+          });
+        }
+      } catch (normalizeErr) {
+        if (normalizeErr instanceof Error && normalizeErr.name === 'AbortError') {
+          // Upload was cancelled; no need to toast
+        } else {
+          console.warn('[useVideoUpload] Normalize request error', normalizeErr);
+          toast({
+            title: 'Upload saved',
+            description:
+              'Preparation for streaming could not be started. You can try again from the video.',
+            variant: 'default',
+          });
+        }
+      }
+
       return data;
     } catch (error: unknown) {
       // Don't update state if the upload was cancelled

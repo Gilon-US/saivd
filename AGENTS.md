@@ -183,6 +183,9 @@ Required for core functionality:
 - `SUPABASE_SERVICE_ROLE_KEY` (server-side/admin)
 - `WASABI_ACCESS_KEY_ID`, `WASABI_SECRET_ACCESS_KEY`, `WASABI_REGION`, `WASABI_BUCKET_NAME`, `WASABI_ENDPOINT`
 - `NEXT_PUBLIC_APP_URL` (for CORS, callbacks)
+- `WATERMARK_SERVICE_URL` (or `WATERMARK_API_URL`) for watermark and normalize API
+- `WATERMARK_CALLBACK_HMAC_SECRET` for watermark-complete webhook
+- `NORMALIZE_CALLBACK_HMAC_SECRET` for normalize webhook (server-only)
 
 See `.env.local.example` and README for full list.
 

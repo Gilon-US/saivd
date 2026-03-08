@@ -23,6 +23,10 @@ export type Video = {
   upload_date: string;
   /** When set, the watermark completion callback was received and processed. */
   callback_received_at?: string | null;
+  /** S3 key of the normalized (-clean) file for streaming and Y-channel decoding. */
+  normalized_url?: string | null;
+  /** Status of normalize job: pending, normalizing, completed, or failed. */
+  normalization_status?: string | null;
 };
 
 type VideoGridProps = {
@@ -631,7 +635,18 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
               <div className="flex gap-4 justify-start items-start">
                 {/* Original video */}
                 <div className="space-y-2 flex-shrink-0">
-                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Original</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Original</h4>
+                    {(video.normalization_status === "pending" || video.normalization_status === "normalizing") && (
+                      <span className="text-xs text-amber-600 dark:text-amber-400">Preparing for streaming…</span>
+                    )}
+                    {(video.normalization_status === "completed" || video.normalized_url) && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Ready</span>
+                    )}
+                    {video.normalization_status === "failed" && (
+                      <span className="text-xs text-red-500 dark:text-red-400">Preparation failed</span>
+                    )}
+                  </div>
                   <div
                     className="w-60 max-w-[240px] aspect-video relative bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
                     onClick={() => handleVideoClick(video, "original")}>
@@ -676,8 +691,15 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="absolute top-1 right-1 h-7 w-7 rounded-full bg-white/80 hover:bg-white shadow-sm z-10"
-                      title="Create or refresh watermarked version"
+                      className="absolute top-1 right-1 h-7 w-7 rounded-full bg-white/80 hover:bg-white shadow-sm z-10 disabled:opacity-50 disabled:pointer-events-none"
+                      title={
+                        video.normalization_status === "pending" || video.normalization_status === "normalizing"
+                          ? "Video is being prepared for streaming. Wait for preparation to complete before adding a watermark."
+                          : "Create or refresh watermarked version"
+                      }
+                      disabled={
+                        video.normalization_status === "pending" || video.normalization_status === "normalizing"
+                      }
                       onClick={() => handleCreateWatermark(video)}>
                       <QrCode className="h-3 w-3" />
                     </Button>

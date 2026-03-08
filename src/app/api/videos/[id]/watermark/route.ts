@@ -61,7 +61,7 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     // Load video and ensure it belongs to the user
     const {data: video, error: videoError} = await supabase
       .from("videos")
-      .select("id, user_id, original_url, original_thumbnail_url, processed_url, processed_thumbnail_url, status")
+      .select("id, user_id, original_url, normalized_url, original_thumbnail_url, processed_url, processed_thumbnail_url, status")
       .eq("id", videoId)
       .eq("user_id", user.id)
       .single();
@@ -130,7 +130,8 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       rsaPrivate = privateKey;
     }
 
-    const inputLocation = video.original_url; // stored Wasabi/S3 key
+    // Use normalized asset when available for stable Y-channel; else original upload
+    const inputLocation = video.normalized_url ?? video.original_url;
 
     // Derive an output key for the watermarked version (simple suffix before extension)
     const outputLocation = inputLocation.replace(/(\.[^./]+)$/, "-watermarked$1");

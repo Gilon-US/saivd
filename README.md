@@ -103,17 +103,20 @@ A comprehensive video management platform built with Next.js for uploading, proc
 
 ### Environment Variables
 
-| Variable                        | Description                        | Required     |
-| ------------------------------- | ---------------------------------- | ------------ |
-| `WASABI_ACCESS_KEY_ID`          | Your Wasabi access key ID          | Yes          |
-| `WASABI_SECRET_ACCESS_KEY`      | Your Wasabi secret access key      | Yes          |
-| `WASABI_REGION`                 | Wasabi region for your bucket      | Yes          |
-| `WASABI_BUCKET_NAME`            | Your Wasabi bucket name            | Yes          |
-| `WASABI_ENDPOINT`               | Wasabi endpoint URL                | Yes          |
-| `NEXT_PUBLIC_APP_URL`           | Your app URL (for CORS)            | No           |
-| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase URL                       | Yes for auth |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key             | Yes for auth |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service role key          | No           |
+| Variable                           | Description                                           | Required        |
+| ---------------------------------- | ----------------------------------------------------- | --------------- |
+| `WASABI_ACCESS_KEY_ID`             | Your Wasabi access key ID                             | Yes             |
+| `WASABI_SECRET_ACCESS_KEY`         | Your Wasabi secret access key                         | Yes             |
+| `WASABI_REGION`                    | Wasabi region for your bucket                         | Yes             |
+| `WASABI_BUCKET_NAME`               | Your Wasabi bucket name                               | Yes             |
+| `WASABI_ENDPOINT`                  | Wasabi endpoint URL                                   | Yes             |
+| `NEXT_PUBLIC_APP_URL`              | Your app URL (for CORS and webhooks)                  | Yes for normalize |
+| `NEXT_PUBLIC_SUPABASE_URL`         | Supabase URL                                          | Yes for auth    |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`    | Supabase anonymous key                                | Yes for auth    |
+| `SUPABASE_SERVICE_ROLE_KEY`        | Supabase service role key                             | No              |
+| `WATERMARK_SERVICE_URL`            | Base URL of watermark/normalize service                 | Yes for watermark/normalize |
+| `WATERMARK_CALLBACK_HMAC_SECRET`   | HMAC secret for watermark-complete webhook             | Yes for watermark |
+| `NORMALIZE_CALLBACK_HMAC_SECRET`   | HMAC secret for normalize webhook (X-Signature verification) | Yes for normalize |
 
 ### File Upload Settings
 

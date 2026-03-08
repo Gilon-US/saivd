@@ -27,9 +27,8 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
       return NextResponse.json({success: false, error: {code: "not_found", message: "Video not found"}}, {status: 404});
     }
 
-    // Choose which asset to play based on query param. If the client requests
-    // the watermarked variant and a processed_url exists, use that; otherwise
-    // fall back to the original_url.
+    // Choose which asset to play based on query param. For watermarked variant use
+    // processed_url; for original use normalized_url (stable MP4) when available, else original_url.
     const url = new URL(request.url);
     const variant = url.searchParams.get("variant");
 
@@ -41,10 +40,13 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
       } else {
         key = video.processed_url;
       }
-    } else if (video.original_url?.startsWith("http")) {
-      key = extractKeyFromUrl(video.original_url);
     } else {
-      key = video.original_url;
+      const originalAsset = video.normalized_url ?? video.original_url;
+      if (originalAsset?.startsWith("http")) {
+        key = extractKeyFromUrl(originalAsset);
+      } else {
+        key = originalAsset ?? null;
+      }
     }
 
     if (!key) {

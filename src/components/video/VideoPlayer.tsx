@@ -33,7 +33,10 @@ export function VideoPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // Prevent playback until verification passes (for watermarked videos)
+  // Prevent playback until verification passes (for watermarked videos).
+  // Only treat videos as playable when either:
+  // - verification has not been requested (null), or
+  // - verification has positively succeeded ("verified").
   const isPlaybackAllowed = verificationStatus === null || verificationStatus === "verified";
 
   // Frontend watermark verification: decode frame 0, fetch public key, verify; then verify frames 10, 20, ...

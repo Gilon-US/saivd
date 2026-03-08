@@ -20,6 +20,8 @@ export type Video = {
   processed_thumbnail_url: string | null;
   status: "uploaded" | "processing" | "processed" | "failed";
   upload_date: string;
+  normalized_url?: string | null;
+  normalization_status?: string | null;
 };
 
 type VideoUploaderProps = {

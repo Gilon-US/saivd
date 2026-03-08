@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     // Server-side thumbnail generation can be added later as an enhancement
     const thumbnailUrl = null;
 
-    // Store video metadata in Supabase
+    // Store video metadata in Supabase (normalization_status pending until normalize callback runs)
     const {data: video, error} = await supabase
       .from("videos")
       .insert({
@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
         original_thumbnail_url: thumbnailUrl,
         preview_thumbnail_data: previewThumbnailData,
         status: "uploaded", // Explicitly set status
+        normalization_status: "pending",
         upload_date: new Date().toISOString(),
       })
       .select()
