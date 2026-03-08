@@ -686,12 +686,12 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                 <div className="space-y-2 flex-shrink-0">
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Watermarked</h4>
                   <div className="w-60 max-w-[240px] aspect-video relative bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden">
-                    {/* Always-visible icon button to (re)create watermarked version */}
+                    {/* Always-visible icon button to (re)create watermarked version; disabled while normalizing */}
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="absolute top-1 right-1 h-7 w-7 rounded-full bg-white/80 hover:bg-white shadow-sm z-10 disabled:opacity-50 disabled:pointer-events-none"
+                      className="absolute top-1 right-1 h-7 w-7 rounded-full bg-white/80 hover:bg-white shadow-sm z-10 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed"
                       title={
                         video.normalization_status === "pending" || video.normalization_status === "normalizing"
                           ? "Video is being prepared for streaming. Wait for preparation to complete before adding a watermark."
