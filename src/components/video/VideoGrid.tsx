@@ -468,20 +468,24 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         const hasCompletedJobs = json.data.hasCompletedJobs ?? false;
         const videosUpdated = json.data.videosUpdated ?? 0;
 
-        // Also check if any videos are currently in "processing" state
-        // If so, refresh to check for updates even if no jobs are completed yet
+        // Also check if any videos are currently in "processing" (watermark) or normalizing state
         const currentVideos = videosRef.current;
         const hasProcessingVideos = currentVideos.some((v) => v.status === "processing");
+        const hasNormalizingVideos = currentVideos.some(
+          (v) => v.normalization_status === "pending" || v.normalization_status === "normalizing"
+        );
 
         // Refresh if:
         // 1. There are completed jobs (which means videos might have been updated)
         // 2. Videos were actually updated in this poll
-        // 3. There are processing videos (to check for status changes)
-        if ((hasCompletedJobs || videosUpdated > 0 || hasProcessingVideos) && !isCancelled) {
+        // 3. There are processing videos (watermark) – to check for status changes
+        // 4. There are videos normalizing – so normalization callbacks’ DB updates show in the UI
+        if ((hasCompletedJobs || videosUpdated > 0 || hasProcessingVideos || hasNormalizingVideos) && !isCancelled) {
           console.log("[VideoGrid] Refreshing videos after status poll", {
             hasCompletedJobs,
             videosUpdated,
             hasProcessingVideos,
+            hasNormalizingVideos,
           });
           onSilentRefresh();
         }
