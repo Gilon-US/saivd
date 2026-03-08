@@ -1,10 +1,8 @@
 "use client";
 
-import {useEffect, useRef, useState, useCallback} from "react";
+import {useEffect, useRef, useState} from "react";
 import {
-  decodeNumericUserIdFromFrame,
   decodeNumericUserIdFromLuma,
-  decodeAndVerifyFrame,
   decodeAndVerifyFrameFromLuma,
   fetchPublicKeyPem,
   importPublicKeyFromPem,
@@ -22,10 +20,8 @@ type UseWatermarkVerificationOptions = {
 
 /**
  * Frame 0 is the only frame with right-side data that can be read without the RSA key. We extract
- * the user ID from frame 0 (no key) so the player — including third-party players — can fetch the
- * RSA public key via API. Once we have the public key, we verify every tenth frame (0, 10, 20, …)
- * using the RSA key; only user ID extraction is keyless and only on frame 0. Requires video to be
- * same-origin or CORS-enabled so canvas getImageData is allowed.
+ * the user ID from frame 0 (no key) via WebCodecs (demux → decode → Y plane). Canvas path is
+ * disabled; verification fails if WebCodecs/WASM demuxer is unavailable.
  */
 export function useWatermarkVerification(
   videoRef: React.RefObject<HTMLVideoElement | null>,
@@ -44,41 +40,7 @@ export function useWatermarkVerification(
     console.log("[WatermarkVerify]", ...args);
   };
 
-  // Capture a single frame from the video to ImageData. Returns null if canvas is tainted (cross-origin).
-  const captureFrameToImageData = useCallback((): ImageData | null => {
-    const video = videoRef.current;
-    if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
-    debugLog("Capturing frame for analysis", {
-      videoWidth: video.videoWidth,
-      videoHeight: video.videoHeight,
-      currentTime: video.currentTime,
-    });
-    // Backend checklist §1: canvas size = video intrinsic size; draw at 1:1 so no scaling or subpixel interpolation.
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return null;
-    try {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      debugLog("Frame captured successfully", {
-        width: imageData.width,
-        height: imageData.height,
-        dataLength: imageData.data.length,
-      });
-      return imageData;
-    } catch (err) {
-      debugLog("Frame capture failed (likely cross-origin video or CORS – canvas tainted)", {
-        error: err instanceof Error ? err.message : String(err),
-        videoSrc: video.src?.slice(0, 80),
-      });
-      return null;
-    }
-  }, [videoRef]);
-
-  // Frame 0: decode user ID (no key) → fetch public key → RSA verify frame 0.
-  // Only frame 0 has right side readable without the key (so we can get user ID and fetch key).
+  // Frame 0: decode user ID (no key) → fetch public key → RSA verify frame 0. WebCodecs only.
   useEffect(() => {
     debugLog("Effect start", {enabled, hasVideoUrl: !!videoUrl, hasVideoRef: !!videoRef.current});
     if (!enabled || !videoUrl || !videoRef.current) {
@@ -93,13 +55,12 @@ export function useWatermarkVerification(
 
     const runVerification = async () => {
       let numericUserId: number | null = null;
-      let imageData: ImageData | null = null;
       let webCodecsY: { yPlane: Uint8Array; width: number; height: number } | null = null;
 
       try {
         webCodecsY = await captureFrame0YFromUrl(videoUrl);
       } catch (e) {
-        debugLog("WebCodecs capture failed, falling back to canvas", e);
+        debugLog("WebCodecs capture failed (canvas path disabled)", e);
       }
 
       if (webCodecsY) {
@@ -112,33 +73,14 @@ export function useWatermarkVerification(
         debugLog("Decoded numericUserId from frame 0 (WebCodecs)", {numericUserId});
       }
 
-      if (numericUserId === null || numericUserId <= 0) {
-        imageData = captureFrameToImageData();
-        if (!imageData) {
-          debugLog(
-            "Playback decode failed: could not read frame. Video may be cross-origin (presigned URL) without CORS – canvas is tainted and getImageData() is blocked. Ensure the video URL is served with Access-Control-Allow-Origin or use same-origin proxy."
-          );
-          setStatus("failed");
-          if (!callbackFiredRef.current && onVerificationComplete) {
-            callbackFiredRef.current = true;
-            onVerificationComplete("failed", null);
-          }
-          return;
-        }
-        try {
-          numericUserId = decodeNumericUserIdFromFrame(imageData);
-          debugLog("Decoded numericUserId from frame 0 (canvas fallback)", {numericUserId});
-        } catch (e) {
-          debugLog("Decode error", e);
-        }
-      }
-
-      if (numericUserId === null || numericUserId <= 0) {
-        debugLog("numericUserId invalid after decode", {numericUserId});
+      if (!webCodecsY || numericUserId === null || numericUserId <= 0) {
+        debugLog("Frame 0 decode failed: WebCodecs path only (no canvas fallback)", {
+          hadWebCodecsY: !!webCodecsY,
+          numericUserId: numericUserId ?? null,
+        });
         console.log(
-          "[WatermarkVerify] Frame 0 decode failed. Look for [WatermarkDecode] BACKEND_DIAGNOSTIC in the console to copy for backend (videoUrl snippet:",
-          videoUrl?.slice(-80),
-          ")"
+          "[WatermarkVerify] Frame 0 decode failed. Ensure WebCodecs/WASM demuxer is working (see [WebCodecs] logs). Video URL snippet:",
+          videoUrl?.slice(-80)
         );
         setStatus("failed");
         if (!callbackFiredRef.current && onVerificationComplete) {
@@ -168,26 +110,18 @@ export function useWatermarkVerification(
       }
       publicKeyRef.current = key;
 
-      if (key) {
+      if (key && webCodecsY) {
         try {
-          if (webCodecsY) {
-            const result = await decodeAndVerifyFrameFromLuma(
-              key,
-              webCodecsY.yPlane,
-              webCodecsY.width,
-              webCodecsY.height
-            );
-            debugLog("Frame 0 RSA verification result (WebCodecs)", {
-              verified: result.verified,
-              numericUserId: result.numericUserId,
-            });
-          } else if (imageData) {
-            const result = await decodeAndVerifyFrame(key, imageData);
-            debugLog("Frame 0 RSA verification result (canvas)", {
-              verified: result.verified,
-              numericUserId: result.numericUserId,
-            });
-          }
+          const result = await decodeAndVerifyFrameFromLuma(
+            key,
+            webCodecsY.yPlane,
+            webCodecsY.width,
+            webCodecsY.height
+          );
+          debugLog("Frame 0 RSA verification result (WebCodecs)", {
+            verified: result.verified,
+            numericUserId: result.numericUserId,
+          });
         } catch (e) {
           debugLog("RSA verification threw (non-blocking)", e);
         }
@@ -233,76 +167,10 @@ export function useWatermarkVerification(
       video.removeEventListener("loadeddata", onCanReadFrame);
       video.removeEventListener("seeked", onSeeked);
     };
-  }, [enabled, videoUrl, onVerificationComplete, captureFrameToImageData, videoRef]);
+  }, [enabled, videoUrl, onVerificationComplete, videoRef]);
 
-  // Verify every tenth frame (10, 20, ...) using the RSA public key. Only frame 0 is keyless for
-  // user ID extraction; all other frame verifications use the key.
-  useEffect(() => {
-    if (status !== "verified" || !videoRef.current || !publicKeyRef.current) return;
-
-    const video = videoRef.current;
-    let cancelled = false;
-    let handleId: number | undefined;
-
-    const verifyAtFrameIndex = async (frameIndex: number) => {
-      if (cancelled || !publicKeyRef.current) return;
-      if (verifiedFrameIndicesRef.current.has(frameIndex)) return;
-      const imageData = captureFrameToImageData();
-      if (!imageData) return;
-      try {
-        const result = await decodeAndVerifyFrame(publicKeyRef.current, imageData);
-        if (cancelled) return;
-        if (!result.verified) {
-          debugLog("RSA verification did not pass for subsequent frame (informational)", {frameIndex});
-        } else {
-          debugLog("RSA verification succeeded for subsequent frame", {frameIndex});
-          verifiedFrameIndicesRef.current.add(frameIndex);
-        }
-      } catch (e) {
-        debugLog("RSA verification threw for subsequent frame (non-blocking)", {frameIndex, error: e});
-      }
-    };
-
-    type VideoFrameCallback = (now: number, metadata: { mediaTime: number; presentedFrames: number }) => void;
-    const videoWithRFC = video as HTMLVideoElement & {
-      requestVideoFrameCallback?(callback: VideoFrameCallback): number;
-      cancelVideoFrameCallback?(id: number): void;
-    };
-
-    if (typeof videoWithRFC.requestVideoFrameCallback === "function") {
-      const tick: VideoFrameCallback = (_now, metadata) => {
-        if (cancelled || !videoRef.current) return;
-        const frameIndex = metadata.presentedFrames;
-        if (frameIndex > 0 && frameIndex % 10 === 0) {
-          void verifyAtFrameIndex(frameIndex);
-        }
-        if (!video.paused && !video.ended) {
-          handleId = videoWithRFC.requestVideoFrameCallback!(tick);
-        }
-      };
-      handleId = videoWithRFC.requestVideoFrameCallback(tick);
-      return () => {
-        cancelled = true;
-        if (handleId !== undefined && typeof videoWithRFC.cancelVideoFrameCallback === "function") {
-          videoWithRFC.cancelVideoFrameCallback(handleId);
-        }
-      };
-    }
-
-    const fps = 30;
-    const interval = setInterval(() => {
-      if (cancelled || !videoRef.current || video.paused || video.ended) return;
-      const t = video.currentTime;
-      const frameIndex = Math.round(t * fps);
-      if (frameIndex > 0 && frameIndex % 10 === 0) {
-        void verifyAtFrameIndex(frameIndex);
-      }
-    }, 500);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [status, captureFrameToImageData, videoRef]);
+  // Subsequent-frame verification (10, 20, ...) is disabled: canvas path is off and WebCodecs
+  // frame capture for arbitrary frames is not yet implemented. Only frame 0 is verified via WebCodecs.
 
   return {status, verifiedUserId};
 }

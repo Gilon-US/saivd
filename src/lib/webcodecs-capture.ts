@@ -25,6 +25,19 @@ function getWasmAbsoluteUrl(): string {
   return WASM_RELATIVE_PATH;
 }
 
+/** Verify WASM URL is reachable and returns application/wasm. Helps diagnose worker load failures. */
+async function checkWasmUrl(): Promise<{ ok: boolean; status?: number; contentType?: string; error?: string }> {
+  const url = getWasmAbsoluteUrl();
+  try {
+    const res = await fetch(url, { method: "HEAD" });
+    const contentType = res.headers.get("content-type") ?? "";
+    const ok = res.ok && (contentType.includes("application/wasm") || contentType.includes("application/octet-stream"));
+    return { ok: res.ok, status: res.status, contentType, error: ok ? undefined : `Expected application/wasm, got ${contentType}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 function isWebCodecsSupported(): boolean {
   return (
     typeof VideoDecoder !== "undefined" &&
@@ -46,21 +59,28 @@ export async function captureFrame0YFromUrl(
   }
 
   let demuxer: import("web-demuxer").WebDemuxer | null = null;
+  let blobUrl: string | null = null;
 
   try {
-    // Fetch the video bytes in the main thread and pass a File to the demuxer.
-    // Using raw bytes avoids worker-side fetch/CORS quirks for remote URLs.
+    const wasmCheck = await checkWasmUrl();
+    if (!wasmCheck.ok) {
+      console.warn("[WebCodecs] WASM URL check failed:", wasmCheck.status ?? wasmCheck.error, wasmCheck.contentType ?? "", wasmCheck.error ?? "");
+    }
+
+    // Fetch the video bytes in the main thread; pass a blob URL to the demuxer so the worker
+    // fetches it (avoids postMessage of File which can fail in some browsers).
     const response = await fetch(videoUrl, { mode: "cors" });
     if (!response.ok) {
       console.warn("[WebCodecs] fetch failed:", response.status, response.statusText);
       return null;
     }
     const buffer = await response.arrayBuffer();
-    const file = new File([buffer], "video.mp4", { type: "video/mp4" });
+    const blob = new Blob([buffer], { type: "video/mp4" });
+    blobUrl = URL.createObjectURL(blob);
 
     const { WebDemuxer } = await import("web-demuxer");
     demuxer = new WebDemuxer({ wasmFilePath: getWasmAbsoluteUrl() });
-    await demuxer.load(file);
+    await demuxer.load(blobUrl);
 
     const config = await demuxer.getDecoderConfig("video");
     if (!config) return null;
@@ -80,10 +100,14 @@ export async function captureFrame0YFromUrl(
       frame.close();
     }
   } catch (e) {
-    console.warn("[WebCodecs] captureFrame0YFromUrl failed:", e instanceof Error ? e.message : String(e));
+    const msg = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack : undefined;
+    console.warn("[WebCodecs] captureFrame0YFromUrl failed:", msg);
+    if (stack) console.warn("[WebCodecs] stack:", stack);
     return null;
   } finally {
     if (demuxer) demuxer.destroy();
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
   }
 }
 
