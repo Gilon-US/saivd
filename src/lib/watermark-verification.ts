@@ -5,9 +5,9 @@
  * See docs/WATERMARK_DATA_AND_DECODING_GUIDE.md and docs/FRONTEND_WATERMARK_VERIFICATION_IMPLEMENTATION_GUIDE.md.
  *
  * Pipeline: canvas 1:1 with video dimensions; crop to mult 16; luma from RGB using limited-range BT.709
- * (16–235) per implementation guide §3.2 so decoding matches normalized/watermarked backend output;
- * patch = 16×16 mean via (sum+128)>>8; rightSide = row sums over cols [0, rightEndIndex), factor 1;
- * decode = mode of 9 groups (values 0–9).
+ * (16–235) per implementation guide §3.2; patch = 16×16 mean via (sum+128)>>8; rightSide[r] =
+ * rawSum[r] % rightEndIndex (rawSum = sum over cols [0, rightEndIndex), factor 1); decode = mode
+ * of 9 groups (backend encodes so digit = row_sum % right_end_index).
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -152,10 +152,9 @@ export function getRightEndIndex(pixelHeight: number, patchCols: number): number
 }
 
 /**
- * Right-side row sums per backend checklist §4 and WATERMARK_DATA_AND_DECODING_GUIDE:
- * rowSum[r] = sum of patch row r, cols 0..rightEndIndex-1; factor 1 (no division, no modulo).
- * Backend encodes so the first 9*repsUsed values are digits 0–9; when luma/patch pipeline
- * matches (e.g. limited-range BT.709), row sums in that range are 0–9.
+ * Right-side row sums per backend spec: rawSum[r] = sum of patch row r, cols 0..rightEndIndex-1
+ * (factor 1); value[r] = rawSum[r] % rightEndIndex so value is in [0, rightEndIndex-1].
+ * Backend encodes so (row_sum % right_end_index) = digit (0–9); frontend applies same modulo.
  */
 export function getRightSideRowSums(
   givenFrame: number[][],
@@ -168,7 +167,7 @@ export function getRightSideRowSums(
     for (let col = 0; col < rightEndIndex && col < givenFrame[row].length; col++) {
       sum += givenFrame[row][col];
     }
-    rightSide.push(sum);
+    rightSide.push(sum % rightEndIndex);
   }
   return rightSide;
 }
@@ -479,7 +478,7 @@ export function decodeNumericUserIdFromFrame(imageData: ImageData): number | nul
       "[WatermarkDecode] BACKEND_DIAGNOSTIC (copy for backend):",
       JSON.stringify(
         {
-          hint: "If first45Values contain numbers > 9, luma/patch pipeline may not match backend. Use limited-range BT.709 (16–235) per FRONTEND_WATERMARK_VERIFICATION_IMPLEMENTATION_GUIDE §3.2. Canvas = video.videoWidth×video.videoHeight, 1:1 draw; crop to mult 16; rightSide = row sums factor 1.",
+          hint: "If first45Values contain numbers > 9, luma/patch pipeline may not match backend. Use limited-range BT.709 (16–235); rightSide[row] = rawSum[row] % rightEndIndex (rawSum = sum over cols [0, rightEndIndex), factor 1). Canvas = video.videoWidth×video.videoHeight, 1:1 draw; crop to mult 16.",
           videoDimensions: { width: imageData.width, height: imageData.height },
           cropped: { width, height },
           lumaStats: { min: lumaMin, max: lumaMax, mean: lumaMean != null ? Math.round(lumaMean * 10) / 10 : null, formula: "BT.709_limited_range_16_235" },
