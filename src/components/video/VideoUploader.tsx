@@ -22,6 +22,7 @@ export type Video = {
   upload_date: string;
   normalized_url?: string | null;
   normalization_status?: string | null;
+  normalization_message?: string | null;
 };
 
 type VideoUploaderProps = {

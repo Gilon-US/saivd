@@ -27,6 +27,8 @@ export type Video = {
   normalized_url?: string | null;
   /** Status of normalize job: pending, normalizing, completed, or failed. */
   normalization_status?: string | null;
+  /** Progress or error message from normalize callback (e.g. "Downloading", "Normalizing", "Uploading"). */
+  normalization_message?: string | null;
 };
 
 type VideoGridProps = {
@@ -638,13 +640,17 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                   <div className="flex items-center gap-2">
                     <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Original</h4>
                     {(video.normalization_status === "pending" || video.normalization_status === "normalizing") && (
-                      <span className="text-xs text-amber-600 dark:text-amber-400">Preparing for streaming…</span>
+                      <span className="text-xs text-amber-600 dark:text-amber-400" title={video.normalization_message ?? undefined}>
+                        {video.normalization_message ? `Preparing: ${video.normalization_message}` : "Preparing for streaming…"}
+                      </span>
                     )}
                     {(video.normalization_status === "completed" || video.normalized_url) && (
                       <span className="text-xs text-gray-500 dark:text-gray-400">Ready</span>
                     )}
                     {video.normalization_status === "failed" && (
-                      <span className="text-xs text-red-500 dark:text-red-400">Preparation failed</span>
+                      <span className="text-xs text-red-500 dark:text-red-400" title={video.normalization_message ?? undefined}>
+                        {video.normalization_message ? `Preparation failed: ${video.normalization_message}` : "Preparation failed"}
+                      </span>
                     )}
                   </div>
                   <div

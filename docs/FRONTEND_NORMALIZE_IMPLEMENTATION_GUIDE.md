@@ -117,6 +117,21 @@ The body is JSON. Example fields:
 - **Progress:** You will receive one or more POSTs with `status: "processing"` and `message` like `"Downloading"`, `"Normalizing"`, `"Uploading"`. Use these to show a progress UI; do not treat them as final.
 - **Final:** Exactly one POST will have `status: "success"` or `status: "failed"`. On `"success"`, use `output_location` as the normalized S3 key (e.g. for the next step: watermark). On `"failed"`, use `message` for error display and DB.
 
+### 4.2.1 Handling progress and updating the UI (this app)
+
+This application handles normalization progress callbacks and surfaces them in the UI:
+
+- **Callback handler** (`POST /api/webhooks/normalize`): On each callback we verify `X-Signature`, read `videoId` from the query, and update the `videos` row for that ID:
+  - **`status === "processing"`:** Set `normalization_status = "normalizing"` and `normalization_message = message` (e.g. `"Downloading"`, `"Normalizing"`, `"Uploading"`). The backend may send multiple progress callbacks; each one updates the same record so the latest message is stored.
+  - **`status === "success"`:** Set `normalized_url = output_location`, `normalization_status = "completed"`, and clear `normalization_message`.
+  - **`status === "failed"`:** Set `normalization_status = "failed"` and `normalization_message = message` (for error display).
+
+- **Database columns:** `videos.normalization_status`, `videos.normalization_message`, and `videos.normalized_url` (see migration `add_normalization_columns.sql`). The list API returns these so the client can show progress.
+
+- **UI (video grid):** When `normalization_status` is `"pending"` or `"normalizing"`, we show a status label next to the "Original" video. If `normalization_message` is set (from a progress callback), we display it as **"Preparing: &lt;message&gt;"** (e.g. "Preparing: Normalizing"); otherwise we show **"Preparing for streaming…"**. On failure we show **"Preparation failed"** and, when present, **"Preparation failed: &lt;message&gt;"** (tooltip or inline). The "Create watermarked version" button is disabled while status is pending or normalizing.
+
+- **Seeing updates:** The video list is refetched when the user refreshes and on the existing status-poll interval, so normalization progress (and final status) appears as callbacks are processed. For real-time updates without polling, you could add Supabase Realtime subscriptions on the `videos` table.
+
 ### 4.3 Verifying the signature
 
 Every callback request includes a header:
