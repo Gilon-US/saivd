@@ -17,6 +17,10 @@ export type WebCodecsFrame0Result = {
 /** Relative path for WASM; use getWasmAbsoluteUrl() when passing to WebDemuxer. */
 const WASM_RELATIVE_PATH = "/wasm/web-demuxer.wasm";
 
+/** Initial and retry byte ranges for partial fetches (faststart MP4s). */
+const INITIAL_RANGE_BYTES = 8 * 1024 * 1024; // 8MB
+const RETRY_RANGE_BYTES = 16 * 1024 * 1024; // 16MB
+
 function getWasmAbsoluteUrl(): string {
   if (typeof window !== "undefined" && window.location?.origin) {
     const base = window.location.origin.replace(/\/$/, "");
@@ -47,6 +51,86 @@ function isWebCodecsSupported(): boolean {
 }
 
 /**
+ * Fetch the first `byteCount` bytes of the video (HTTP Range). Returns null on failure.
+ */
+async function fetchRange(videoUrl: string, byteCount: number): Promise<ArrayBuffer | null> {
+  try {
+    const end = Math.max(0, byteCount - 1);
+    const response = await fetch(videoUrl, {
+      mode: "cors",
+      headers: {
+        Range: `bytes=0-${end}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.warn("[WebCodecs] range fetch failed:", response.status, response.statusText);
+      return null;
+    }
+
+    // We accept both 206 (partial) and 200 (full) here; caller only cares that we have bytes.
+    const buffer = await response.arrayBuffer();
+    console.log("[WebCodecs] range fetch ok", {
+      requestedBytes: byteCount,
+      receivedBytes: buffer.byteLength,
+      status: response.status,
+    });
+    return buffer;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn("[WebCodecs] fetchRange failed:", msg);
+    return null;
+  }
+}
+
+/**
+ * Demux and decode frame 0 from a buffer containing the start of a faststart MP4.
+ * Returns null if demux or decode fails for any reason.
+ */
+async function demuxFrame0FromBuffer(buffer: ArrayBuffer): Promise<WebCodecsFrame0Result | null> {
+  let demuxer: import("web-demuxer").WebDemuxer | null = null;
+  try {
+    const file = new File([buffer], "video.mp4", {type: "video/mp4"});
+    const {WebDemuxer} = await import("web-demuxer");
+    demuxer = new WebDemuxer({wasmFilePath: getWasmAbsoluteUrl()});
+    await demuxer.load(file);
+
+    const config = await demuxer.getDecoderConfig("video");
+    if (!config) {
+      console.warn("[WebCodecs] demuxFrame0FromBuffer: missing video decoder config");
+      return null;
+    }
+
+    const chunk = await demuxer.seek("video", 0);
+    if (!chunk) {
+      console.warn("[WebCodecs] demuxFrame0FromBuffer: no chunk at t=0 (possibly insufficient data)");
+      return null;
+    }
+
+    const frame = await decodeOneFrame(config, chunk);
+    if (!frame) {
+      console.warn("[WebCodecs] demuxFrame0FromBuffer: decodeOneFrame returned null");
+      return null;
+    }
+
+    try {
+      const y = await extractYPlaneFromVideoFrame(frame);
+      return y;
+    } finally {
+      frame.close();
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn("[WebCodecs] demuxFrame0FromBuffer failed:", msg);
+    return null;
+  } finally {
+    if (demuxer) {
+      demuxer.destroy();
+    }
+  }
+}
+
+/**
  * Decode frame 0 from the video URL via WebCodecs and return the I420 Y plane.
  * Returns null if unsupported, fetch fails, demux fails, or decode fails.
  */
@@ -58,53 +142,47 @@ export async function captureFrame0YFromUrl(
     return null;
   }
 
-  let demuxer: import("web-demuxer").WebDemuxer | null = null;
-
   try {
     const wasmCheck = await checkWasmUrl();
     if (!wasmCheck.ok) {
       console.warn("[WebCodecs] WASM URL check failed:", wasmCheck.status ?? wasmCheck.error, wasmCheck.contentType ?? "", wasmCheck.error ?? "");
     }
 
-    // Fetch the video bytes in the main thread and pass a File to the demuxer. Passing a blob
-    // URL causes the worker's WASM (Emscripten XHR) to fail: "GET is the only method allowed for blob: URLs".
-    const response = await fetch(videoUrl, { mode: "cors" });
-    if (!response.ok) {
-      console.warn("[WebCodecs] fetch failed:", response.status, response.statusText);
+    // First attempt: partial fetch from the start of the file (faststart MP4).
+    const initialBuffer = await fetchRange(videoUrl, INITIAL_RANGE_BYTES);
+    if (!initialBuffer) {
+      console.warn("[WebCodecs] captureFrame0YFromUrl: initial range fetch failed");
       return null;
     }
-    const buffer = await response.arrayBuffer();
-    const file = new File([buffer], "video.mp4", { type: "video/mp4" });
 
-    const { WebDemuxer } = await import("web-demuxer");
-    demuxer = new WebDemuxer({ wasmFilePath: getWasmAbsoluteUrl() });
-    await demuxer.load(file);
-
-    const config = await demuxer.getDecoderConfig("video");
-    if (!config) return null;
-
-    const chunk = await demuxer.seek("video", 0);
-    if (!chunk) return null;
-
-    const frame = await decodeOneFrame(config, chunk);
-    demuxer.destroy();
-    demuxer = null;
-
-    if (!frame) return null;
-    try {
-      const y = await extractYPlaneFromVideoFrame(frame);
-      return y;
-    } finally {
-      frame.close();
+    let result = await demuxFrame0FromBuffer(initialBuffer);
+    if (result) {
+      return result;
     }
+
+    console.warn(
+      "[WebCodecs] captureFrame0YFromUrl: initial range insufficient for frame 0, attempting larger range"
+    );
+
+    const retryBuffer = await fetchRange(videoUrl, RETRY_RANGE_BYTES);
+    if (!retryBuffer) {
+      console.warn("[WebCodecs] captureFrame0YFromUrl: retry range fetch failed");
+      return null;
+    }
+
+    result = await demuxFrame0FromBuffer(retryBuffer);
+    if (!result) {
+      console.warn(
+        "[WebCodecs] captureFrame0YFromUrl: unable to demux frame 0 from initial+retry ranges"
+      );
+    }
+    return result;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error ? e.stack : undefined;
     console.warn("[WebCodecs] captureFrame0YFromUrl failed:", msg);
     if (stack) console.warn("[WebCodecs] stack:", stack);
     return null;
-  } finally {
-    if (demuxer) demuxer.destroy();
   }
 }
 
