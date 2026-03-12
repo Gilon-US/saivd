@@ -803,7 +803,11 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                       </div>
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700">
-                        <span className="text-gray-400 text-xs text-center mb-2">No watermarked version</span>
+                        <span className="text-gray-400 text-xs text-center mb-2">
+                          {video.normalization_status === "pending" || video.normalization_status === "normalizing"
+                            ? "Pre-processing"
+                            : "No watermarked version"}
+                        </span>
                       </div>
                     )}
                   </div>
