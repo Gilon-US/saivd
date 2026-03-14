@@ -51,6 +51,11 @@ export function useWatermarkVerification(
       return;
     }
 
+    const verifyStartTime = performance.now();
+    console.log("[Frame0Decode] Verification starting immediately (no video element wait)", {
+      t: Math.round(verifyStartTime),
+    });
+
     setStatus("verifying");
     let mounted = true;
 
@@ -58,6 +63,9 @@ export function useWatermarkVerification(
       let numericUserId: number | null = null;
       let webCodecsY: { yPlane: Uint8Array; width: number; height: number } | null = null;
 
+      console.log("[Frame0Decode] Calling captureFrame0YFromUrl now (Range fetch only)", {
+        t: Math.round(performance.now()),
+      });
       try {
         webCodecsY = await captureFrame0YFromUrl(videoUrl);
       } catch (e) {
@@ -85,6 +93,7 @@ export function useWatermarkVerification(
           "[WatermarkVerify] Frame 0 decode failed. Ensure WebCodecs/WASM demuxer is working (see [WebCodecs] logs). Video URL snippet:",
           videoUrl?.slice(-80)
         );
+        console.log("[Frame0Decode] Verification finished", { status: "failed", elapsedMs: Math.round(performance.now() - verifyStartTime) });
         if (mounted) setStatus("failed");
         if (mounted && !callbackFiredRef.current && onVerificationComplete) {
           callbackFiredRef.current = true;
@@ -131,6 +140,8 @@ export function useWatermarkVerification(
       }
 
       if (!mounted) return;
+      const elapsed = Math.round(performance.now() - verifyStartTime);
+      console.log("[Frame0Decode] Verification finished", { status: "verified", elapsedMs: elapsed });
       verifiedFrameIndicesRef.current = new Set([0]);
       setVerifiedUserId(String(numericUserId));
       setStatus("verified");

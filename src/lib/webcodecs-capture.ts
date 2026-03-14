@@ -76,10 +76,14 @@ async function fetchRange(videoUrl: string, byteCount: number): Promise<ArrayBuf
 
     // We accept both 206 (partial) and 200 (full) here; caller only cares that we have bytes.
     const buffer = await response.arrayBuffer();
-    console.log("[WebCodecs] range fetch ok", {
+    const isPartial = response.status === 206;
+    console.log("[Frame0Decode] Range fetch", {
       requestedBytes: byteCount,
       receivedBytes: buffer.byteLength,
       status: response.status,
+      partial: isPartial,
+      warning: !isPartial ? "Server returned 200 (full file) not 206 (partial) – check Range support" : undefined,
+      t: Math.round(performance.now()),
     });
     return buffer;
   } catch (e) {
@@ -143,6 +147,12 @@ async function demuxFrame0FromBuffer(buffer: ArrayBuffer): Promise<WebCodecsFram
 export async function captureFrame0YFromUrl(
   videoUrl: string
 ): Promise<WebCodecsFrame0Result | null> {
+  const t0 = performance.now();
+  console.log("[Frame0Decode] captureFrame0YFromUrl START", {
+    urlSnippet: videoUrl.slice(-60),
+    t: Math.round(t0),
+  });
+
   if (!isWebCodecsSupported()) {
     console.warn("[WebCodecs] VideoDecoder/EncodedVideoChunk/VideoFrame not available");
     return null;
@@ -157,13 +167,22 @@ export async function captureFrame0YFromUrl(
     // Try minimal range first (faststart); step up only if demux/decode needs more data.
     for (let i = 0; i < RANGE_STEPS_BYTES.length; i++) {
       const byteCount = RANGE_STEPS_BYTES[i];
+      console.log("[Frame0Decode] Trying range step", { step: i + 1, requestedBytes: byteCount, t: Math.round(performance.now()) });
       const buffer = await fetchRange(videoUrl, byteCount);
       if (!buffer) {
         if (i === 0) console.warn("[WebCodecs] captureFrame0YFromUrl: range fetch failed");
         continue;
       }
       const result = await demuxFrame0FromBuffer(buffer);
-      if (result) return result;
+      if (result) {
+        console.log("[Frame0Decode] captureFrame0YFromUrl END success", {
+          usedStep: i + 1,
+          requestedBytes: byteCount,
+          receivedBytes: buffer.byteLength,
+          elapsedMs: Math.round(performance.now() - t0),
+        });
+        return result;
+      }
       if (i < RANGE_STEPS_BYTES.length - 1) {
         console.warn(
           "[WebCodecs] captureFrame0YFromUrl: range insufficient for frame 0, trying larger",
@@ -172,7 +191,8 @@ export async function captureFrame0YFromUrl(
       }
     }
     console.warn(
-      "[WebCodecs] captureFrame0YFromUrl: unable to demux frame 0 from tried ranges"
+      "[Frame0Decode] captureFrame0YFromUrl END failed (insufficient data)",
+      { elapsedMs: Math.round(performance.now() - t0) }
     );
     return null;
   } catch (e) {

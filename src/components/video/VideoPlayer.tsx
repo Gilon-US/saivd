@@ -65,6 +65,19 @@ export function VideoPlayer({
   // Use verified user ID for QR code if available, otherwise use frame analysis QR URL
   const qrUrl = verifiedUserId ? `/profile/${verifiedUserId}/qr` : frameAnalysisQrUrl;
 
+  // Diagnostic: log when video src is withheld vs set (to trace full-video preload)
+  const videoSrcWithheld = enableFrameAnalysis && verificationStatus !== "verified";
+  useEffect(() => {
+    console.log("[Frame0Decode] Video element src", {
+      withheld: videoSrcWithheld,
+      reason: videoSrcWithheld
+        ? "verification pending or failed – video has no src (no full load)"
+        : "playback allowed – src set",
+      verificationStatus,
+      t: Math.round(performance.now()),
+    });
+  }, [videoSrcWithheld, verificationStatus]);
+
   useEffect(() => {
     if (!isOpen) {
       setIsPlaying(false);
