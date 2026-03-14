@@ -149,7 +149,7 @@ export function VideoPlayer({
         <div className="relative bg-black rounded-lg overflow-hidden">
           <video
             ref={videoRef}
-            src={videoUrl}
+            src={enableFrameAnalysis && verificationStatus !== "verified" ? undefined : videoUrl}
             crossOrigin="anonymous"
             className="w-full aspect-video"
             onTimeUpdate={handleTimeUpdate}

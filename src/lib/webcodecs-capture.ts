@@ -17,9 +17,15 @@ export type WebCodecsFrame0Result = {
 /** Relative path for WASM; use getWasmAbsoluteUrl() when passing to WebDemuxer. */
 const WASM_RELATIVE_PATH = "/wasm/web-demuxer.wasm";
 
-/** Initial and retry byte ranges for partial fetches (faststart MP4s). */
-const INITIAL_RANGE_BYTES = 8 * 1024 * 1024; // 8MB
-const RETRY_RANGE_BYTES = 16 * 1024 * 1024; // 16MB
+/**
+ * Byte ranges for partial fetches. Watermarked videos are normalized to faststart (moov at start)
+ * on the backend, so frame 0 is in the first chunk of mdat; we use minimal range and step up only if needed.
+ */
+const RANGE_STEPS_BYTES = [
+  1 * 1024 * 1024,  // 1 MB – enough for many faststart files
+  4 * 1024 * 1024,  // 4 MB
+  8 * 1024 * 1024,  // 8 MB
+];
 
 function getWasmAbsoluteUrl(): string {
   if (typeof window !== "undefined" && window.location?.origin) {
@@ -148,35 +154,27 @@ export async function captureFrame0YFromUrl(
       console.warn("[WebCodecs] WASM URL check failed:", wasmCheck.status ?? wasmCheck.error, wasmCheck.contentType ?? "", wasmCheck.error ?? "");
     }
 
-    // First attempt: partial fetch from the start of the file (faststart MP4).
-    const initialBuffer = await fetchRange(videoUrl, INITIAL_RANGE_BYTES);
-    if (!initialBuffer) {
-      console.warn("[WebCodecs] captureFrame0YFromUrl: initial range fetch failed");
-      return null;
+    // Try minimal range first (faststart); step up only if demux/decode needs more data.
+    for (let i = 0; i < RANGE_STEPS_BYTES.length; i++) {
+      const byteCount = RANGE_STEPS_BYTES[i];
+      const buffer = await fetchRange(videoUrl, byteCount);
+      if (!buffer) {
+        if (i === 0) console.warn("[WebCodecs] captureFrame0YFromUrl: range fetch failed");
+        continue;
+      }
+      const result = await demuxFrame0FromBuffer(buffer);
+      if (result) return result;
+      if (i < RANGE_STEPS_BYTES.length - 1) {
+        console.warn(
+          "[WebCodecs] captureFrame0YFromUrl: range insufficient for frame 0, trying larger",
+          { requestedBytes: byteCount }
+        );
+      }
     }
-
-    let result = await demuxFrame0FromBuffer(initialBuffer);
-    if (result) {
-      return result;
-    }
-
     console.warn(
-      "[WebCodecs] captureFrame0YFromUrl: initial range insufficient for frame 0, attempting larger range"
+      "[WebCodecs] captureFrame0YFromUrl: unable to demux frame 0 from tried ranges"
     );
-
-    const retryBuffer = await fetchRange(videoUrl, RETRY_RANGE_BYTES);
-    if (!retryBuffer) {
-      console.warn("[WebCodecs] captureFrame0YFromUrl: retry range fetch failed");
-      return null;
-    }
-
-    result = await demuxFrame0FromBuffer(retryBuffer);
-    if (!result) {
-      console.warn(
-        "[WebCodecs] captureFrame0YFromUrl: unable to demux frame 0 from initial+retry ranges"
-      );
-    }
-    return result;
+    return null;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error ? e.stack : undefined;

@@ -24,7 +24,7 @@ type UseWatermarkVerificationOptions = {
  * disabled; verification fails if WebCodecs/WASM demuxer is unavailable.
  */
 export function useWatermarkVerification(
-  videoRef: React.RefObject<HTMLVideoElement | null>,
+  _videoRef: React.RefObject<HTMLVideoElement | null>,
   videoUrl: string | null,
   options: UseWatermarkVerificationOptions
 ) {
@@ -41,17 +41,18 @@ export function useWatermarkVerification(
   };
 
   // Frame 0: decode user ID (no key) → fetch public key → RSA verify frame 0. WebCodecs only.
+  // Run verification immediately when enabled; do not wait for the video element (captureFrame0YFromUrl does its own Range fetch).
   useEffect(() => {
-    debugLog("Effect start", {enabled, hasVideoUrl: !!videoUrl, hasVideoRef: !!videoRef.current});
-    if (!enabled || !videoUrl || !videoRef.current) {
+    debugLog("Effect start", {enabled, hasVideoUrl: !!videoUrl});
+    if (!enabled || !videoUrl) {
       setStatus("idle");
       setVerifiedUserId(null);
       callbackFiredRef.current = false;
       return;
     }
 
-    const video = videoRef.current;
     setStatus("verifying");
+    let mounted = true;
 
     const runVerification = async () => {
       let numericUserId: number | null = null;
@@ -62,6 +63,8 @@ export function useWatermarkVerification(
       } catch (e) {
         debugLog("WebCodecs capture failed (canvas path disabled)", e);
       }
+
+      if (!mounted) return;
 
       if (webCodecsY) {
         debugLog("Using WebCodecs Y plane for frame 0 (accurate extraction)");
@@ -82,8 +85,8 @@ export function useWatermarkVerification(
           "[WatermarkVerify] Frame 0 decode failed. Ensure WebCodecs/WASM demuxer is working (see [WebCodecs] logs). Video URL snippet:",
           videoUrl?.slice(-80)
         );
-        setStatus("failed");
-        if (!callbackFiredRef.current && onVerificationComplete) {
+        if (mounted) setStatus("failed");
+        if (mounted && !callbackFiredRef.current && onVerificationComplete) {
           callbackFiredRef.current = true;
           onVerificationComplete("failed", null);
         }
@@ -127,6 +130,7 @@ export function useWatermarkVerification(
         }
       }
 
+      if (!mounted) return;
       verifiedFrameIndicesRef.current = new Set([0]);
       setVerifiedUserId(String(numericUserId));
       setStatus("verified");
@@ -137,37 +141,12 @@ export function useWatermarkVerification(
       }
     };
 
-    const onCanReadFrame = () => {
-      video.currentTime = 0;
-    };
-
-    const onSeeked = () => {
-      debugLog("Video seeked to frame 0, starting playback decode");
-      runVerification();
-    };
-
-    if (video.readyState >= 2) {
-      debugLog("Video already has data (readyState >= 2), seeking to 0 for frame 0");
-      video.currentTime = 0;
-      const t = setTimeout(() => {
-        onSeeked();
-      }, 0);
-      return () => clearTimeout(t);
-    }
-
-    debugLog("Waiting for video loadeddata then seeked to frame 0", {
-      readyState: video.readyState,
-      videoUrl: videoUrl?.slice(0, 60),
-    });
-    video.addEventListener("loadeddata", onCanReadFrame, {once: true});
-    video.addEventListener("seeked", onSeeked, {once: true});
-    video.currentTime = 0;
+    runVerification();
 
     return () => {
-      video.removeEventListener("loadeddata", onCanReadFrame);
-      video.removeEventListener("seeked", onSeeked);
+      mounted = false;
     };
-  }, [enabled, videoUrl, onVerificationComplete, videoRef]);
+  }, [enabled, videoUrl, onVerificationComplete]);
 
   // Subsequent-frame verification (10, 20, ...) is disabled: canvas path is off and WebCodecs
   // frame capture for arbitrary frames is not yet implemented. Only frame 0 is verified via WebCodecs.
