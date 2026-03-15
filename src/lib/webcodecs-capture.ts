@@ -19,12 +19,11 @@ const WASM_RELATIVE_PATH = "/wasm/web-demuxer.wasm";
 
 /**
  * Byte ranges for partial fetches. Watermarked videos are normalized to faststart (moov at start)
- * on the backend, so frame 0 is in the first chunk of mdat; we use minimal range and step up only if needed.
+ * on the backend. Some files have large moov/STCO so we try 8 MB first to avoid 1→4→8 round-trips.
  */
 const RANGE_STEPS_BYTES = [
-  1 * 1024 * 1024,  // 1 MB – enough for many faststart files
-  4 * 1024 * 1024,  // 4 MB
-  8 * 1024 * 1024,  // 8 MB
+  8 * 1024 * 1024,   // 8 MB – many faststart files need this for moov/stco; one request vs 1+4+8
+  16 * 1024 * 1024,  // 16 MB – fallback for very large moov
 ];
 
 function getWasmAbsoluteUrl(): string {
@@ -164,7 +163,8 @@ export async function captureFrame0YFromUrl(
       console.warn("[WebCodecs] WASM URL check failed:", wasmCheck.status ?? wasmCheck.error, wasmCheck.contentType ?? "", wasmCheck.error ?? "");
     }
 
-    // Try minimal range first (faststart); step up only if demux/decode needs more data.
+    // Try range steps; demux can fail with "corrupted STCO atom" / "reached eof" if moov or chunk table is truncated.
+    let totalBytesFetched = 0;
     for (let i = 0; i < RANGE_STEPS_BYTES.length; i++) {
       const byteCount = RANGE_STEPS_BYTES[i];
       console.log("[Frame0Decode] Trying range step", { step: i + 1, requestedBytes: byteCount, t: Math.round(performance.now()) });
@@ -173,26 +173,30 @@ export async function captureFrame0YFromUrl(
         if (i === 0) console.warn("[WebCodecs] captureFrame0YFromUrl: range fetch failed");
         continue;
       }
+      totalBytesFetched += buffer.byteLength;
       const result = await demuxFrame0FromBuffer(buffer);
       if (result) {
+        const totalMB = (totalBytesFetched / (1024 * 1024)).toFixed(2);
         console.log("[Frame0Decode] captureFrame0YFromUrl END success", {
           usedStep: i + 1,
           requestedBytes: byteCount,
           receivedBytes: buffer.byteLength,
+          totalBytesFetched,
+          totalMB: `${totalMB} MB (Range only; full video not loaded)`,
           elapsedMs: Math.round(performance.now() - t0),
         });
         return result;
       }
       if (i < RANGE_STEPS_BYTES.length - 1) {
         console.warn(
-          "[WebCodecs] captureFrame0YFromUrl: range insufficient for frame 0, trying larger",
-          { requestedBytes: byteCount }
+          "[Frame0Decode] Demux failed (truncated moov/STCO?); trying larger range",
+          { requestedBytes: byteCount, totalBytesFetched }
         );
       }
     }
     console.warn(
       "[Frame0Decode] captureFrame0YFromUrl END failed (insufficient data)",
-      { elapsedMs: Math.round(performance.now() - t0) }
+      { totalBytesFetched, elapsedMs: Math.round(performance.now() - t0) }
     );
     return null;
   } catch (e) {

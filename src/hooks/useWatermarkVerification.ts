@@ -142,6 +142,7 @@ export function useWatermarkVerification(
       if (!mounted) return;
       const elapsed = Math.round(performance.now() - verifyStartTime);
       console.log("[Frame0Decode] Verification finished", { status: "verified", elapsedMs: elapsed });
+      console.log("[Frame0Decode] Full video is loaded only after this (when <video> src is set for playback). Verification used Range requests only.");
       verifiedFrameIndicesRef.current = new Set([0]);
       setVerifiedUserId(String(numericUserId));
       setStatus("verified");
