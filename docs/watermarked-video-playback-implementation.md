@@ -1,5 +1,7 @@
 # Watermarked Video Playback Implementation (Current SAIVD App)
 
+> V2 update: runtime now includes continuous every-10th-frame verification during playback (after bootstrap success), with one inconclusive grace checkpoint and immediate stop on cryptographic mismatch.
+
 ## 1. Purpose and Scope
 
 This document describes the **current implementation** of watermarked video playback and verification in the SAIVD Next.js app. It is intended as **implementation context** for another dedicated player application that:

@@ -88,6 +88,15 @@ Before starting implementation, ensure you have the following:
 4. Access to the external watermarking service API
 5. Shadcn UI and Tailwind CSS configured
 
+### 7. Third-Party Next.js App Guide (external apps)
+
+**[Third-Party Next.js App Implementation Guide](../THIRD_PARTY_NEXTJS_APP_IMPLEMENTATION_GUIDE.md)** – For **third-party Next.js applications** that want to play and verify SAIVD watermarked videos using the same technique as this app. Covers:
+
+- SAIVD base URL and endpoints (public key, QR image)
+- Frame 0 verification (WebCodecs/canvas capture, decode user ID, fetch key from SAIVD, RSA verify)
+- Verifying other watermarked frames (10, 20, 30, …)
+- Blocking playback until verification and showing the creator QR overlay
+
 ## Additional Resources
 
 For more detailed information, refer to the following documents:
@@ -98,3 +107,4 @@ For more detailed information, refer to the following documents:
 - [API Specification](../api-specification.md): API endpoint specifications
 - [Component Architecture](../component-architecture.md): Frontend component organization
 - [Implementation Roadmap](../implementation-roadmap.md): Phased implementation plan
+- [Third-Party Next.js App Implementation Guide](../THIRD_PARTY_NEXTJS_APP_IMPLEMENTATION_GUIDE.md): Watermarked video playback and verification for external apps (SAIVD base URL: `https://saivd.netlify.app`)

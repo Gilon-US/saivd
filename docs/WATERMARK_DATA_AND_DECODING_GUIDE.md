@@ -1,5 +1,8 @@
 # Watermark Data and Decoding Guide (Frontend)
 
+> V2 update: this guide is supplemented by `docs/V2_WATERMARK_STRATEGY.md`.
+> The active runtime policy is bootstrap decode/verify before playback and every-10th-frame verification with one inconclusive grace checkpoint.
+
 This document is the single source of truth for **what data is embedded in watermarked video frames**, **what requires no key** vs **what requires the public RSA key**, and **how the frontend must implement** both decoding flows. It reflects the actual backend process used when `use_patches_2=True` and `watermark_every_n_frames=10` (default).
 
 ---

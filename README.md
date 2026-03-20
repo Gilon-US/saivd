@@ -2,6 +2,10 @@
 
 A comprehensive video management platform built with Next.js for uploading, processing, and managing videos with Wasabi Cloud Storage integration and watermarking capabilities.
 
+## V2 Watermark Verification
+
+The app uses the V2 in-browser verification strategy. See `docs/V2_WATERMARK_STRATEGY.md` for bootstrap, marker-aware decode, and every-10th-frame runtime verification policy.
+
 ## Features
 
 - 🚀 **Next.js 15** with TypeScript and App Router

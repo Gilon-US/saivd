@@ -9,7 +9,7 @@ import {DeleteConfirmDialog} from "./DeleteConfirmDialog";
 import {DeleteWatermarkedConfirmDialog} from "./DeleteWatermarkedConfirmDialog";
 import {WatermarkStartNotification} from "./WatermarkStartNotification";
 import {VideoPlayer} from "./VideoPlayer";
-import {useState, useEffect, useRef} from "react";
+import {useState, useEffect, useRef, useCallback} from "react";
 
 export type Video = {
   id: string;
@@ -99,6 +99,14 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
   });
 
   const [isOpeningVideo, setIsOpeningVideo] = useState<string | null>(null);
+  const handleVerificationComplete = useCallback((status: "verified" | "failed", userId: string | null) => {
+    console.log("[VideoGrid] Verification result received from VideoPlayer", {status, userId});
+    setVideoPlayer((prev) => ({
+      ...prev,
+      verificationStatus: status,
+      verifiedUserId: userId,
+    }));
+  }, []);
 
   const handleVideoClick = async (video: Video, variant: "original" | "watermarked" = "original") => {
     try {
@@ -853,14 +861,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
           enableFrameAnalysis={videoPlayer.enableFrameAnalysis}
           verificationStatus={videoPlayer.verificationStatus}
           verifiedUserId={videoPlayer.verifiedUserId}
-          onVerificationComplete={(status, userId) => {
-            console.log("[VideoGrid] Verification result received from VideoPlayer", {status, userId});
-            setVideoPlayer((prev) => ({
-              ...prev,
-              verificationStatus: status,
-              verifiedUserId: userId,
-            }));
-          }}
+          onVerificationComplete={handleVerificationComplete}
         />
       )}
     </div>

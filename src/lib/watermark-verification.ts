@@ -21,6 +21,19 @@ export const MAX_MESSAGE_LENGTH = 100;
 export const SIGNATURE_LENGTH = 256;
 export const USER_ID_DIGITS = 9;
 export const REPS = 7;
+export const V2_CALIBRATION_MARKER = [0, 5, 9, 0, 5, 9] as const;
+export const V2_BOOTSTRAP_FRAME_COUNT = 3;
+
+export function captureVideoFrameImageData(video: HTMLVideoElement): ImageData | null {
+  if (!video.videoWidth || !video.videoHeight) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
 
 /**
  * Extract luma (Y) from RGBA ImageData using limited-range BT.709 (16–235).
@@ -177,7 +190,8 @@ export function getRightSideRowSums(
  * usable = 9*repsUsed; nine groups of repsUsed values; mode per group (must be 0–9); digitStr = join; no strip trailing zeros.
  */
 export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | null {
-  const repsUsed = Math.min(REPS, Math.floor(rightSide.length / USER_ID_DIGITS));
+  const fullGroups = V2_CALIBRATION_MARKER.length + USER_ID_DIGITS;
+  const repsUsed = Math.min(REPS, Math.floor(rightSide.length / fullGroups));
   if (repsUsed < 1) {
     debugLog("decodeNumericUserIdFromRightSide: insufficient data", {
       rightSideLength: rightSide.length,
@@ -185,19 +199,47 @@ export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | 
     });
     return null;
   }
-  const nVals = USER_ID_DIGITS * repsUsed;
+  const nVals = fullGroups * repsUsed;
   const prefix = rightSide.slice(0, nVals);
+  const markerPrefix = prefix.slice(0, V2_CALIBRATION_MARKER.length * repsUsed);
+  const modulo = Math.max(10, (prefix.length ? Math.max(...prefix) : 0) + 1);
+
+  // Solve deterministic decode shift from the calibration marker groups.
+  let bestShift = 0;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let shift = 0; shift < modulo; shift++) {
+    let score = 0;
+    for (let i = 0; i < V2_CALIBRATION_MARKER.length; i++) {
+      const group = markerPrefix.slice(i * repsUsed, (i + 1) * repsUsed).map((v) => (v - shift + modulo) % modulo);
+      const m = getMode(group);
+      const expected = V2_CALIBRATION_MARKER[i];
+      if (m === null) {
+        score += 99;
+      } else {
+        score += Math.abs(m - expected);
+      }
+    }
+    if (score < bestScore) {
+      bestScore = score;
+      bestShift = shift;
+    }
+    if (score === 0) break;
+  }
+  const corrected = prefix.map((v) => (v - bestShift + modulo) % modulo);
   debugLog("decodeNumericUserIdFromRightSide", {
     rightSideLength: rightSide.length,
     repsUsed,
     nVals,
+    bestShift,
+    bestScore,
     first50: rightSide.slice(0, 50).join(","),
   });
 
   const digits: number[] = [];
   const groupDetails: {digitIndex: number; group: number[]; mode: number | null}[] = [];
   for (let d = 0; d < USER_ID_DIGITS; d++) {
-    const group = prefix.slice(d * repsUsed, (d + 1) * repsUsed);
+    const start = (V2_CALIBRATION_MARKER.length + d) * repsUsed;
+    const group = corrected.slice(start, start + repsUsed);
     const mode = getMode(group);
     groupDetails.push({digitIndex: d, group, mode});
     if (mode === null || mode < 0 || mode > 9) {
