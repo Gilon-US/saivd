@@ -24,6 +24,15 @@ export const REPS = 7;
 export const V2_CALIBRATION_MARKER = [0, 5, 9, 0, 5, 9] as const;
 export const V2_BOOTSTRAP_FRAME_COUNT = 3;
 
+export type DecodeDiagnostics = {
+  numericUserId: number | null;
+  bestScore: number;
+  bestShift: number;
+  repsUsed: number;
+  rightSideLength: number;
+  validDigits: boolean;
+};
+
 export function captureVideoFrameImageData(video: HTMLVideoElement): ImageData | null {
   if (!video.videoWidth || !video.videoHeight) return null;
   const canvas = document.createElement("canvas");
@@ -117,14 +126,40 @@ export function decodeNumericUserIdFromLuma(
   width: number,
   height: number
 ): number | null {
+  return decodeNumericUserIdDiagnosticsFromLuma(luma, width, height).numericUserId;
+}
+
+export function decodeNumericUserIdDiagnosticsFromLuma(
+  luma: Uint8Array,
+  width: number,
+  height: number
+): DecodeDiagnostics {
   const {luma: cropped, width: w, height: h} = cropLumaToMultipleOf16(luma, width, height);
-  if (w < PATCH_SIZE || h < PATCH_SIZE) return null;
+  if (w < PATCH_SIZE || h < PATCH_SIZE) {
+    return {
+      numericUserId: null,
+      bestScore: Number.POSITIVE_INFINITY,
+      bestShift: 0,
+      repsUsed: 0,
+      rightSideLength: 0,
+      validDigits: false,
+    };
+  }
   const givenFrame = buildPatchMatrix(cropped, w, h);
   const patchCols = givenFrame[0]?.length ?? 0;
   const rightEndIndex = getRightEndIndex(h, patchCols);
-  if (rightEndIndex <= 0) return null;
+  if (rightEndIndex <= 0) {
+    return {
+      numericUserId: null,
+      bestScore: Number.POSITIVE_INFINITY,
+      bestShift: 0,
+      repsUsed: 0,
+      rightSideLength: 0,
+      validDigits: false,
+    };
+  }
   const rightSide = getRightSideRowSums(givenFrame, rightEndIndex);
-  return decodeNumericUserIdFromRightSide(rightSide);
+  return decodeNumericUserIdDiagnosticsFromRightSide(rightSide);
 }
 
 /**
@@ -189,7 +224,7 @@ export function getRightSideRowSums(
  * Decode numeric user ID from rightSide (backend checklist §5): frame 0 only; repsUsed = min(7, floor(len/9));
  * usable = 9*repsUsed; nine groups of repsUsed values; mode per group (must be 0–9); digitStr = join; no strip trailing zeros.
  */
-export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | null {
+export function decodeNumericUserIdDiagnosticsFromRightSide(rightSide: number[]): DecodeDiagnostics {
   const fullGroups = V2_CALIBRATION_MARKER.length + USER_ID_DIGITS;
   const repsUsed = Math.min(REPS, Math.floor(rightSide.length / fullGroups));
   if (repsUsed < 1) {
@@ -197,7 +232,14 @@ export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | 
       rightSideLength: rightSide.length,
       repsUsed,
     });
-    return null;
+    return {
+      numericUserId: null,
+      bestScore: Number.POSITIVE_INFINITY,
+      bestShift: 0,
+      repsUsed,
+      rightSideLength: rightSide.length,
+      validDigits: false,
+    };
   }
   const nVals = fullGroups * repsUsed;
   const prefix = rightSide.slice(0, nVals);
@@ -249,7 +291,14 @@ export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | 
         group,
         allGroupsSoFar: groupDetails,
       });
-      return null;
+      return {
+        numericUserId: null,
+        bestScore,
+        bestShift,
+        repsUsed,
+        rightSideLength: rightSide.length,
+        validDigits: false,
+      };
     }
     digits.push(mode);
   }
@@ -260,10 +309,28 @@ export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | 
   const parsed = parseInt(digitStr, 10);
   if (Number.isNaN(parsed)) {
     debugLog("decodeNumericUserIdFromRightSide: parse failed", {digitStr, parsed, digits});
-    return null;
+    return {
+      numericUserId: null,
+      bestScore,
+      bestShift,
+      repsUsed,
+      rightSideLength: rightSide.length,
+      validDigits: false,
+    };
   }
   debugLog("decodeNumericUserIdFromRightSide: success", {numericUserId: parsed, digits, digitStr});
-  return parsed;
+  return {
+    numericUserId: parsed,
+    bestScore,
+    bestShift,
+    repsUsed,
+    rightSideLength: rightSide.length,
+    validDigits: true,
+  };
+}
+
+export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | null {
+  return decodeNumericUserIdDiagnosticsFromRightSide(rightSide).numericUserId;
 }
 
 /**

@@ -96,7 +96,7 @@ async function fetchRange(videoUrl: string, byteCount: number): Promise<ArrayBuf
  * Demux and decode frame 0 from a buffer containing the start of a faststart MP4.
  * Returns null if demux or decode fails for any reason.
  */
-async function demuxFrame0FromBuffer(buffer: ArrayBuffer): Promise<WebCodecsFrame0Result | null> {
+async function demuxFrameFromBuffer(buffer: ArrayBuffer, frameIndex = 0): Promise<WebCodecsFrame0Result | null> {
   let demuxer: import("web-demuxer").WebDemuxer | null = null;
   try {
     const file = new File([buffer], "video.mp4", {type: "video/mp4"});
@@ -110,15 +110,21 @@ async function demuxFrame0FromBuffer(buffer: ArrayBuffer): Promise<WebCodecsFram
       return null;
     }
 
-    const chunk = await demuxer.seek("video", 0);
+    // Decode requested frame index by seeking in seconds (fallback ~30fps).
+    // For frameIndex=0 this is exact frame-0 seek.
+    const targetTimeSec = frameIndex <= 0 ? 0 : frameIndex / 30;
+    const chunk = await demuxer.seek("video", targetTimeSec);
     if (!chunk) {
-      console.warn("[WebCodecs] demuxFrame0FromBuffer: no chunk at t=0 (possibly insufficient data)");
+      console.warn("[WebCodecs] demuxFrameFromBuffer: no chunk at target time (possibly insufficient data)", {
+        frameIndex,
+        targetTimeSec,
+      });
       return null;
     }
 
     const frame = await decodeOneFrame(config, chunk);
     if (!frame) {
-      console.warn("[WebCodecs] demuxFrame0FromBuffer: decodeOneFrame returned null");
+      console.warn("[WebCodecs] demuxFrameFromBuffer: decodeOneFrame returned null", {frameIndex});
       return null;
     }
 
@@ -130,7 +136,7 @@ async function demuxFrame0FromBuffer(buffer: ArrayBuffer): Promise<WebCodecsFram
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.warn("[WebCodecs] demuxFrame0FromBuffer failed:", msg);
+    console.warn("[WebCodecs] demuxFrameFromBuffer failed:", msg, {frameIndex});
     return null;
   } finally {
     if (demuxer) {
@@ -143,11 +149,13 @@ async function demuxFrame0FromBuffer(buffer: ArrayBuffer): Promise<WebCodecsFram
  * Decode frame 0 from the video URL via WebCodecs and return the I420 Y plane.
  * Returns null if unsupported, fetch fails, demux fails, or decode fails.
  */
-export async function captureFrame0YFromUrl(
-  videoUrl: string
+export async function captureFrameYFromUrl(
+  videoUrl: string,
+  frameIndex = 0
 ): Promise<WebCodecsFrame0Result | null> {
   const t0 = performance.now();
-  console.log("[Frame0Decode] captureFrame0YFromUrl START", {
+  console.log("[Frame0Decode] captureFrameYFromUrl START", {
+    frameIndex,
     urlSnippet: videoUrl.slice(-60),
     t: Math.round(t0),
   });
@@ -174,10 +182,11 @@ export async function captureFrame0YFromUrl(
         continue;
       }
       totalBytesFetched += buffer.byteLength;
-      const result = await demuxFrame0FromBuffer(buffer);
+      const result = await demuxFrameFromBuffer(buffer, frameIndex);
       if (result) {
         const totalMB = (totalBytesFetched / (1024 * 1024)).toFixed(2);
-        console.log("[Frame0Decode] captureFrame0YFromUrl END success", {
+        console.log("[Frame0Decode] captureFrameYFromUrl END success", {
+          frameIndex,
           usedStep: i + 1,
           requestedBytes: byteCount,
           receivedBytes: buffer.byteLength,
@@ -195,17 +204,23 @@ export async function captureFrame0YFromUrl(
       }
     }
     console.warn(
-      "[Frame0Decode] captureFrame0YFromUrl END failed (insufficient data)",
+      "[Frame0Decode] captureFrameYFromUrl END failed (insufficient data)",
       { totalBytesFetched, elapsedMs: Math.round(performance.now() - t0) }
     );
     return null;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error ? e.stack : undefined;
-    console.warn("[WebCodecs] captureFrame0YFromUrl failed:", msg);
+    console.warn("[WebCodecs] captureFrameYFromUrl failed:", msg, {frameIndex});
     if (stack) console.warn("[WebCodecs] stack:", stack);
     return null;
   }
+}
+
+export async function captureFrame0YFromUrl(
+  videoUrl: string
+): Promise<WebCodecsFrame0Result | null> {
+  return captureFrameYFromUrl(videoUrl, 0);
 }
 
 function decodeOneFrame(

@@ -2,14 +2,14 @@
 
 import {useEffect, useRef, useState} from "react";
 import {
-  decodeNumericUserIdFromLuma,
+  decodeNumericUserIdDiagnosticsFromLuma,
   decodeAndVerifyFrameFromLuma,
   decodeAndVerifyFrame,
   captureVideoFrameImageData,
   fetchPublicKeyPem,
   importPublicKeyFromPem,
 } from "@/lib/watermark-verification";
-import { captureFrame0YFromUrl } from "@/lib/webcodecs-capture";
+import {captureFrameYFromUrl} from "@/lib/webcodecs-capture";
 
 export type WatermarkVerificationStatus = "idle" | "verifying" | "verified" | "failed";
 
@@ -21,8 +21,8 @@ type UseWatermarkVerificationOptions = {
 };
 
 /**
- * Frame 0 is the only frame with right-side data that can be read without the RSA key. We extract
- * the user ID from frame 0 (no key) via WebCodecs (demux → decode → Y plane). Canvas path is
+ * Bootstrap decodes user ID from frames 0/1/2 (no key) via WebCodecs (demux → decode → Y plane).
+ * Canvas path is
  * disabled; verification fails if WebCodecs/WASM demuxer is unavailable.
  */
 export function useWatermarkVerification(
@@ -89,37 +89,109 @@ export function useWatermarkVerification(
     let mounted = true;
 
     const runVerification = async () => {
-      let numericUserId: number | null = null;
-      let webCodecsY: { yPlane: Uint8Array; width: number; height: number } | null = null;
+      const frameIndexes = [0, 1, 2];
+      const candidates: Array<{
+        frameIndex: number;
+        numericUserId: number;
+        bestScore: number;
+        repsUsed: number;
+        yPlane: Uint8Array;
+        width: number;
+        height: number;
+      }> = [];
 
-      console.log("[Frame0Decode] Calling captureFrame0YFromUrl now (Range fetch only)", {
-        t: Math.round(performance.now()),
-      });
-      try {
-        webCodecsY = await captureFrame0YFromUrl(videoUrl);
-      } catch (e) {
-        debugLog("WebCodecs capture failed (canvas path disabled)", e);
-      }
+      for (const frameIndex of frameIndexes) {
+        const frameStart = performance.now();
+        let webCodecsY: { yPlane: Uint8Array; width: number; height: number } | null = null;
+        try {
+          webCodecsY = await captureFrameYFromUrl(videoUrl, frameIndex);
+        } catch (e) {
+          debugLog("WebCodecs capture failed (canvas path disabled)", {frameIndex, error: e});
+        }
+        if (!mounted) return;
+        if (!webCodecsY) {
+          console.log("[Frame0Decode] Bootstrap frame decode result", {
+            frameIndex,
+            elapsedMs: Math.round(performance.now() - frameStart),
+            captured: false,
+          });
+          continue;
+        }
 
-      if (!mounted) return;
-
-      if (webCodecsY) {
-        debugLog("Using WebCodecs Y plane for frame 0 (accurate extraction)");
-        numericUserId = decodeNumericUserIdFromLuma(
+        const diagnostics = decodeNumericUserIdDiagnosticsFromLuma(
           webCodecsY.yPlane,
           webCodecsY.width,
           webCodecsY.height
         );
-        debugLog("Decoded numericUserId from frame 0 (WebCodecs)", {numericUserId});
+        console.log("[Frame0Decode] Bootstrap frame decode result", {
+          frameIndex,
+          elapsedMs: Math.round(performance.now() - frameStart),
+          numericUserId: diagnostics.numericUserId,
+          bestScore: diagnostics.bestScore,
+          repsUsed: diagnostics.repsUsed,
+          validDigits: diagnostics.validDigits,
+          rightSideLength: diagnostics.rightSideLength,
+        });
+
+        if (
+          diagnostics.numericUserId !== null &&
+          diagnostics.numericUserId > 0 &&
+          diagnostics.validDigits
+        ) {
+          candidates.push({
+            frameIndex,
+            numericUserId: diagnostics.numericUserId,
+            bestScore: diagnostics.bestScore,
+            repsUsed: diagnostics.repsUsed,
+            yPlane: webCodecsY.yPlane,
+            width: webCodecsY.width,
+            height: webCodecsY.height,
+          });
+        }
       }
 
-      if (!webCodecsY || numericUserId === null || numericUserId <= 0) {
-        debugLog("Frame 0 decode failed: WebCodecs path only (no canvas fallback)", {
-          hadWebCodecsY: !!webCodecsY,
-          numericUserId: numericUserId ?? null,
+      const votes = new Map<number, number>();
+      for (const candidate of candidates) {
+        votes.set(candidate.numericUserId, (votes.get(candidate.numericUserId) ?? 0) + 1);
+      }
+      let selected: (typeof candidates)[number] | null = null;
+      let maxVotes = 0;
+      for (const candidate of candidates) {
+        const voteCount = votes.get(candidate.numericUserId) ?? 0;
+        if (
+          !selected ||
+          voteCount > maxVotes ||
+          (voteCount === maxVotes && candidate.bestScore < selected.bestScore)
+        ) {
+          selected = candidate;
+          maxVotes = voteCount;
+        }
+      }
+
+      const passesConsensus =
+        !!selected &&
+        (maxVotes >= 2 || (maxVotes === 1 && selected.bestScore === 0 && selected.repsUsed >= 4));
+
+      console.log("[Frame0Decode] Bootstrap consensus summary", {
+        candidates: candidates.map((c) => ({
+          frameIndex: c.frameIndex,
+          numericUserId: c.numericUserId,
+          bestScore: c.bestScore,
+          repsUsed: c.repsUsed,
+          votes: votes.get(c.numericUserId) ?? 0,
+        })),
+        selectedNumericUserId: selected?.numericUserId ?? null,
+        selectedFrameIndex: selected?.frameIndex ?? null,
+        selectedVotes: selected ? votes.get(selected.numericUserId) ?? 0 : 0,
+        pass: passesConsensus,
+      });
+
+      if (!passesConsensus || !selected) {
+        debugLog("Bootstrap consensus failed: WebCodecs path only (no canvas fallback)", {
+          candidateCount: candidates.length,
         });
         console.log(
-          "[WatermarkVerify] Frame 0 decode failed. Ensure WebCodecs/WASM demuxer is working (see [WebCodecs] logs). Video URL snippet:",
+          "[WatermarkVerify] Bootstrap decode failed. Ensure WebCodecs/WASM demuxer is working (see [WebCodecs] logs). Video URL snippet:",
           videoUrl?.slice(-80)
         );
         console.log("[Frame0Decode] Verification finished", { status: "failed", elapsedMs: Math.round(performance.now() - verifyStartTime) });
@@ -131,6 +203,7 @@ export function useWatermarkVerification(
         return;
       }
 
+      const numericUserId = selected.numericUserId;
       let pem: string | null = null;
       try {
         debugLog("Fetching public key PEM", {numericUserId});
@@ -151,17 +224,18 @@ export function useWatermarkVerification(
       }
       publicKeyRef.current = key;
 
-      if (key && webCodecsY) {
+      if (key) {
         try {
           const result = await decodeAndVerifyFrameFromLuma(
             key,
-            webCodecsY.yPlane,
-            webCodecsY.width,
-            webCodecsY.height
+            selected.yPlane,
+            selected.width,
+            selected.height
           );
-          debugLog("Frame 0 RSA verification result (WebCodecs)", {
+          debugLog("Bootstrap RSA verification result (WebCodecs)", {
             verified: result.verified,
             numericUserId: result.numericUserId,
+            frameIndex: selected.frameIndex,
           });
         } catch (e) {
           debugLog("RSA verification threw (non-blocking)", e);

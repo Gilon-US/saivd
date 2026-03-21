@@ -44,11 +44,13 @@ import {
   SIGNATURE_LENGTH,
   USER_ID_DIGITS,
   REPS,
+  V2_CALIBRATION_MARKER,
   cropToMultipleOf16,
   buildPatchMatrix,
   getRightEndIndex,
   getRightSideRowSums,
   decodeNumericUserIdFromRightSide,
+  decodeNumericUserIdDiagnosticsFromRightSide,
   getLeftSideSignature,
   buildMessageBytes,
 } from "../watermark-verification";
@@ -142,36 +144,48 @@ describe("watermark-verification", () => {
   });
 
   describe("decodeNumericUserIdFromRightSide", () => {
-    it("decodes 9 digits from 63 values (groups of 7, mode)", () => {
-      const rightSide: number[] = [];
-      for (const d of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
-        for (let r = 0; r < REPS; r++) rightSide.push(d);
+    const buildRightSide = (digits: number[], reps = REPS): number[] => {
+      const values: number[] = [];
+      for (const marker of V2_CALIBRATION_MARKER) {
+        for (let r = 0; r < reps; r++) values.push(marker);
       }
+      for (const d of digits) {
+        for (let r = 0; r < reps; r++) values.push(d);
+      }
+      return values;
+    };
+
+    it("decodes 9 digits using V2 calibration marker + digit groups", () => {
+      const rightSide: number[] = [];
+      rightSide.push(...buildRightSide([1, 2, 3, 4, 5, 6, 7, 8, 9]));
       while (rightSide.length < 100) rightSide.push(0);
       const id = decodeNumericUserIdFromRightSide(rightSide);
       expect(id).toBe(123456789);
     });
 
-    it("decodes exactly 9 digits with dynamic reps (e.g. 44 rows → repsUsed=4, 9 digits)", () => {
-      // 44 values: repsUsed = min(7, floor(44/9)) = 4, use first 9*4 = 36 values
-      const rightSide: number[] = [];
-      const nineDigits = [5, 3, 0, 0, 0, 0, 0, 0, 0];
-      for (const d of nineDigits) {
-        for (let r = 0; r < 4; r++) rightSide.push(d);
-      }
-      rightSide.push(9, 9, 9, 9, 9, 9, 9, 9); // 8 extra (not used)
+    it("decodes exactly 9 digits with dynamic reps (e.g. repsUsed=4)", () => {
+      const rightSide = buildRightSide([5, 3, 0, 0, 0, 0, 0, 0, 0], 4);
       const id = decodeNumericUserIdFromRightSide(rightSide);
-      // digitStr = "530000000", no trailing-zero strip
       expect(id).toBe(530000000);
     });
 
-    it("returns null when no usable groups (< 7 values)", () => {
+    it("returns null when no usable groups", () => {
       expect(decodeNumericUserIdFromRightSide([1, 2, 3])).toBeNull();
     });
 
     it("returns null when mode yields invalid digit (> 9)", () => {
-      const rightSide = new Array(63).fill(255);
+      const rightSide = buildRightSide(new Array(USER_ID_DIGITS).fill(12));
       expect(decodeNumericUserIdFromRightSide(rightSide)).toBeNull();
+    });
+
+    it("returns diagnostics for decoded payload", () => {
+      const rightSide = buildRightSide([9, 8, 7, 6, 5, 4, 3, 2, 1], 4);
+      const out = decodeNumericUserIdDiagnosticsFromRightSide(rightSide);
+      expect(out.numericUserId).toBe(987654321);
+      expect(out.bestScore).toBe(0);
+      expect(out.repsUsed).toBe(4);
+      expect(out.rightSideLength).toBe(rightSide.length);
+      expect(out.validDigits).toBe(true);
     });
   });
 
