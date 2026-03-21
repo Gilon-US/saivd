@@ -4,12 +4,13 @@ import {useEffect, useRef, useState} from "react";
 import {
   decodeNumericUserIdDiagnosticsFromLuma,
   decodeAndVerifyFrameFromLuma,
-  decodeAndVerifyFrame,
-  captureVideoFrameImageData,
   fetchPublicKeyPem,
   importPublicKeyFromPem,
 } from "@/lib/watermark-verification";
-import {captureFrameYFromUrl} from "@/lib/webcodecs-capture";
+import {
+  disposeWasmVerificationSession,
+  getFrameYFromWasm,
+} from "@/lib/wasm-watermark-verification-client";
 
 export type WatermarkVerificationStatus = "idle" | "verifying" | "verified" | "failed";
 
@@ -21,9 +22,8 @@ type UseWatermarkVerificationOptions = {
 };
 
 /**
- * Bootstrap decodes user ID from frames 0/1/2 (no key) via WebCodecs (demux → decode → Y plane).
- * Canvas path is
- * disabled; verification fails if WebCodecs/WASM demuxer is unavailable.
+ * Bootstrap decodes user ID from frames 0/1/2 (no key) via Web Worker + ffmpeg.wasm (demux → decode → Y plane).
+ * Canvas/WebCodecs are not used for verification; fails if the WASM worker cannot decode.
  */
 export function useWatermarkVerification(
   videoRef: React.RefObject<HTMLVideoElement | null>,
@@ -63,6 +63,7 @@ export function useWatermarkVerification(
       publicKeyRef.current = null;
       inconclusiveGraceUsedRef.current = false;
       verifiedFrameIndicesRef.current = new Set();
+      void disposeWasmVerificationSession();
       return;
     }
 
@@ -104,9 +105,9 @@ export function useWatermarkVerification(
         const frameStart = performance.now();
         let webCodecsY: { yPlane: Uint8Array; width: number; height: number } | null = null;
         try {
-          webCodecsY = await captureFrameYFromUrl(videoUrl, frameIndex);
+          webCodecsY = await getFrameYFromWasm(videoUrl, frameIndex);
         } catch (e) {
-          debugLog("WebCodecs capture failed (canvas path disabled)", {frameIndex, error: e});
+          debugLog("WASM frame capture failed", {frameIndex, error: e});
         }
         if (!mounted) return;
         if (!webCodecsY) {
@@ -187,11 +188,11 @@ export function useWatermarkVerification(
       });
 
       if (!passesConsensus || !selected) {
-        debugLog("Bootstrap consensus failed: WebCodecs path only (no canvas fallback)", {
+        debugLog("Bootstrap consensus failed: WASM verification path only", {
           candidateCount: candidates.length,
         });
         console.log(
-          "[WatermarkVerify] Bootstrap decode failed. Ensure WebCodecs/WASM demuxer is working (see [WebCodecs] logs). Video URL snippet:",
+          "[WatermarkVerify] Bootstrap decode failed. Ensure WASM worker/ffmpeg can load (see [WatermarkVerify] logs). Video URL snippet:",
           videoUrl?.slice(-80)
         );
         console.log("[Frame0Decode] Verification finished", { status: "failed", elapsedMs: Math.round(performance.now() - verifyStartTime) });
@@ -232,7 +233,7 @@ export function useWatermarkVerification(
             selected.width,
             selected.height
           );
-          debugLog("Bootstrap RSA verification result (WebCodecs)", {
+          debugLog("Bootstrap RSA verification result (WASM Y plane)", {
             verified: result.verified,
             numericUserId: result.numericUserId,
             frameIndex: selected.frameIndex,
@@ -245,7 +246,7 @@ export function useWatermarkVerification(
       if (!mounted) return;
       const elapsed = Math.round(performance.now() - verifyStartTime);
       console.log("[Frame0Decode] Verification finished", { status: "verified", elapsedMs: elapsed });
-      console.log("[Frame0Decode] Full video is loaded only after this (when <video> src is set for playback). Verification used Range requests only.");
+      console.log("[Frame0Decode] Full video loads only after this (when <video> src is set). Verification used Range requests + WASM decode.");
       verifiedFrameIndicesRef.current = new Set([0]);
       setVerifiedUserId(String(numericUserId));
       setStatus("verified");
@@ -260,11 +261,12 @@ export function useWatermarkVerification(
 
     return () => {
       mounted = false;
+      void disposeWasmVerificationSession();
     };
   }, [enabled, videoUrl]);
 
   useEffect(() => {
-    if (!enabled || status !== "verified") return;
+    if (!enabled || status !== "verified" || !videoUrl) return;
     const video = videoRef.current;
     if (!video) return;
     let cancelled = false;
@@ -282,8 +284,13 @@ export function useWatermarkVerification(
       const checkpoint = Math.floor(currentFrame / 10) * 10;
       if (checkpoint <= 0 || verifiedFrameIndicesRef.current.has(checkpoint)) return;
 
-      const imageData = captureVideoFrameImageData(video);
-      if (!imageData) {
+      let wasmFrame: Awaited<ReturnType<typeof getFrameYFromWasm>> = null;
+      try {
+        wasmFrame = await getFrameYFromWasm(videoUrl, checkpoint);
+      } catch {
+        wasmFrame = null;
+      }
+      if (!wasmFrame) {
         if (inconclusiveGraceUsedRef.current) {
           setStatus("failed");
           video.pause();
@@ -298,7 +305,12 @@ export function useWatermarkVerification(
         return;
       }
 
-      const frameResult = await decodeAndVerifyFrame(key, imageData);
+      const frameResult = await decodeAndVerifyFrameFromLuma(
+        key,
+        wasmFrame.yPlane,
+        wasmFrame.width,
+        wasmFrame.height
+      );
       if (frameResult.verified) {
         inconclusiveGraceUsedRef.current = false;
         verifiedFrameIndicesRef.current.add(checkpoint);
@@ -336,7 +348,7 @@ export function useWatermarkVerification(
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [enabled, status, videoRef]);
+  }, [enabled, status, videoRef, videoUrl]);
 
   return {status, verifiedUserId};
 }

@@ -1,33 +1,32 @@
 import {act, renderHook} from "@testing-library/react";
 import {useWatermarkVerification} from "../useWatermarkVerification";
 
-jest.mock("../../lib/webcodecs-capture", () => ({
-  captureFrameYFromUrl: jest.fn(),
+jest.mock("../../lib/wasm-watermark-verification-client", () => ({
+  getFrameYFromWasm: jest.fn(),
+  disposeWasmVerificationSession: jest.fn(),
 }));
 
 jest.mock("../../lib/watermark-verification", () => ({
   decodeNumericUserIdDiagnosticsFromLuma: jest.fn(),
   decodeAndVerifyFrameFromLuma: jest.fn(),
-  decodeAndVerifyFrame: jest.fn(),
-  captureVideoFrameImageData: jest.fn(),
   fetchPublicKeyPem: jest.fn(),
   importPublicKeyFromPem: jest.fn(),
 }));
 
-import {captureFrameYFromUrl} from "../../lib/webcodecs-capture";
+import {getFrameYFromWasm} from "../../lib/wasm-watermark-verification-client";
 import {
   decodeNumericUserIdDiagnosticsFromLuma,
   fetchPublicKeyPem,
 } from "../../lib/watermark-verification";
 
-const mockedCaptureFrameYFromUrl = captureFrameYFromUrl as jest.MockedFunction<typeof captureFrameYFromUrl>;
+const mockedGetFrameYFromWasm = getFrameYFromWasm as jest.MockedFunction<typeof getFrameYFromWasm>;
 const mockedDecodeDiagnostics = decodeNumericUserIdDiagnosticsFromLuma as jest.MockedFunction<
   typeof decodeNumericUserIdDiagnosticsFromLuma
 >;
 const mockedFetchPublicKeyPem = fetchPublicKeyPem as jest.MockedFunction<typeof fetchPublicKeyPem>;
 
 function mockFrameCaptureSuccess() {
-  mockedCaptureFrameYFromUrl.mockResolvedValue({
+  mockedGetFrameYFromWasm.mockResolvedValue({
     yPlane: new Uint8Array(16),
     width: 4,
     height: 4,
