@@ -151,19 +151,25 @@ async function ensureSampleData(trackId: number, sampleIndex: number, signal: Ab
     throw new Error(`Invalid sample index ${sampleIndex}`);
   }
   const sample = trak.samples[sampleIndex];
-  if (sample.alreadyRead === sample.size && sample.data) {
-    return mp4boxfile.getTrackSample(trackId, sampleIndex) as Sample;
+  if (sample.data && sample.alreadyRead === sample.size) {
+    return sample as Sample;
   }
   const start = sample.offset;
   const end = sample.offset + sample.size - 1;
   const buf = await fetchByteRange(videoUrl, start, end, signal);
   if (!buf) throw new Error(`Range fetch failed for sample ${sampleIndex}`);
-  mp4boxfile.appendBuffer(attachFileStart(buf.slice(0), start));
-  const s = mp4boxfile.getTrackSample(trackId, sampleIndex);
-  if (!s?.data || s.alreadyRead !== s.size) {
-    throw new Error(`Sample ${sampleIndex} data not available after fetch`);
+  const u8 = new Uint8Array(buf);
+  if (u8.byteLength !== sample.size) {
+    throw new Error(
+      `Sample ${sampleIndex} size mismatch: expected ${sample.size} bytes, got ${u8.byteLength} (Range GET may be ignored — check presigned URL / CORS)`
+    );
   }
-  return s;
+  // Do NOT use appendBuffer + getTrackSample for random access: mp4box appendBuffer
+  // parses the chunk and cleanBuffers() drops fully "used" buffers before getSample
+  // can memcpy, so sample data never appears. We only need moov for offsets/sizes.
+  sample.data = u8;
+  sample.alreadyRead = sample.size;
+  return sample as Sample;
 }
 
 async function decodeFrameToY(frameIndex: number, signal: AbortSignal): Promise<{yPlane: Uint8Array; width: number; height: number}> {
