@@ -112,6 +112,56 @@ function avccToAnnexB(data: Uint8Array): Uint8Array {
   return out;
 }
 
+/** H.264 SPS/PPS from MP4 `avcC` (not repeated in every sample) — required for ffmpeg to decode raw Annex B. */
+type AvcCBoxLike = {
+  SPS?: Array<{length?: number; data?: Uint8Array}>;
+  PPS?: Array<{length?: number; data?: Uint8Array}>;
+};
+
+function getAvcCAnnexBPrefix(iso: ISOFile, trackId: number): Uint8Array | null {
+  const trak = iso.getTrackById(trackId) as {
+    mdia?: {minf?: {stbl?: {stsd?: {entries?: Array<{avcC?: AvcCBoxLike}>}}}};
+  } | null;
+  const avcC = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0]?.avcC;
+  if (!avcC) return null;
+  const startCode = new Uint8Array([0, 0, 0, 1]);
+  const chunks: Uint8Array[] = [];
+  for (const s of avcC.SPS ?? []) {
+    const d = s?.data;
+    if (d?.length) {
+      const m = new Uint8Array(4 + d.length);
+      m.set(startCode);
+      m.set(d, 4);
+      chunks.push(m);
+    }
+  }
+  for (const p of avcC.PPS ?? []) {
+    const d = p?.data;
+    if (d?.length) {
+      const m = new Uint8Array(4 + d.length);
+      m.set(startCode);
+      m.set(d, 4);
+      chunks.push(m);
+    }
+  }
+  if (chunks.length === 0) return null;
+  const total = chunks.reduce((a, c) => a + c.length, 0);
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.length;
+  }
+  return out;
+}
+
+function concatUint8(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const o = new Uint8Array(a.length + b.length);
+  o.set(a);
+  o.set(b, a.length);
+  return o;
+}
+
 async function ensureMoovParsed(url: string, signal: AbortSignal): Promise<Movie> {
   for (const byteCount of RANGE_STEPS_BYTES) {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -176,14 +226,20 @@ async function ensureSampleData(trackId: number, sampleIndex: number, signal: Ab
 async function decodeFrameToY(frameIndex: number, signal: AbortSignal): Promise<{yPlane: Uint8Array; width: number; height: number}> {
   const ff = await ensureFfmpegLoaded(baseUrlForFfmpeg);
   const sample = await ensureSampleData(videoTrackId, frameIndex, signal);
-  const annexB = avccToAnnexB(sample.data!);
-  if (annexB.length === 0) {
+  const sampleAnnexB = avccToAnnexB(sample.data!);
+  if (sampleAnnexB.length === 0) {
     throw new Error("Empty Annex-B payload after AVCC conversion");
   }
+  const prefix = mp4boxfile ? getAvcCAnnexBPrefix(mp4boxfile, videoTrackId) : null;
+  const annexB = prefix && prefix.length > 0 ? concatUint8(prefix, sampleAnnexB) : sampleAnnexB;
+  try {
+    await ff.deleteFile("out.yuv");
+  } catch {
+    /* ignore */
+  }
   await ff.writeFile("in.h264", annexB);
-  // ffmpeg.wasm often writes **empty** output for `-pix_fmt gray`; use yuv420p and unpack Y
-  // with stride (linesize ≥ width). See `yuv420-luma-extract.ts`.
-  await ff.exec(
+  // Pixel format before muxer format (rawvideo). SPS/PPS prefix required or decode outputs 0 bytes.
+  const exitCode = await ff.exec(
     [
       "-y",
       "-loglevel",
@@ -194,15 +250,18 @@ async function decodeFrameToY(frameIndex: number, signal: AbortSignal): Promise<
       "in.h264",
       "-frames:v",
       "1",
-      "-f",
-      "rawvideo",
       "-pix_fmt",
       "yuv420p",
+      "-f",
+      "rawvideo",
       "out.yuv",
     ],
     undefined,
     {signal}
   );
+  if (exitCode !== 0) {
+    throw new Error(`ffmpeg H.264 decode failed (exit ${exitCode}); check SPS/PPS prefix and stream`);
+  }
   const raw = await ff.readFile("out.yuv");
   let full: Uint8Array;
   if (raw instanceof Uint8Array) {
