@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
 /**
  * Use standalone output only when explicitly requested (e.g. Docker/self-hosted).
@@ -12,10 +13,25 @@ const nextConfig: NextConfig = {
   experimental: {
     // Add any experimental features here
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, webpack }) => {
     if (!isServer) {
+      config.resolve = config.resolve ?? {};
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        // Used by `src/lib/ffmpeg-inner-worker.ts` (same as tsconfig paths)
+        "@ffmpeg/ffmpeg-esm": path.join(process.cwd(), "node_modules/@ffmpeg/ffmpeg/dist/esm"),
+      };
       config.output = config.output ?? {};
       config.output.workerPublicPath = "/_next/";
+      // @ffmpeg/ffmpeg inner worker uses import(coreURL); Webpack must not treat
+      // same-origin https: URLs as chunk IDs. Replace with patched worker (webpackIgnore).
+      config.plugins = config.plugins ?? [];
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /@ffmpeg[\\/]ffmpeg[\\/]dist[\\/]esm[\\/]worker\.js$/,
+          path.resolve(process.cwd(), "src/lib/ffmpeg-inner-worker.ts")
+        )
+      );
     }
     return config;
   },
