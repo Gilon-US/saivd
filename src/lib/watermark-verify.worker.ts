@@ -9,7 +9,6 @@
  */
 
 import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { toBlobURL } from "@ffmpeg/util";
 import { createFile } from "mp4box";
 import type { ISOFile, Movie, MP4BoxBuffer, Sample } from "mp4box";
 
@@ -134,8 +133,12 @@ async function ensureMoovParsed(url: string, signal: AbortSignal): Promise<Movie
 async function ensureFfmpegLoaded(base: string): Promise<FFmpeg> {
   if (ffmpeg?.loaded) return ffmpeg;
   const ff = new FFmpeg();
-  const coreURL = await toBlobURL(`${base}/ffmpeg/ffmpeg-core.js`, "text/javascript");
-  const wasmURL = await toBlobURL(`${base}/ffmpeg/ffmpeg-core.wasm`, "application/wasm");
+  // Same-origin URLs under /public/ffmpeg — do NOT use toBlobURL here. @ffmpeg/ffmpeg's
+  // inner worker does `import(coreURL)`; blob: URLs are mis-handled by Webpack's runtime
+  // ("Cannot find module 'blob:https://…'") on Netlify/production bundles.
+  const origin = base.replace(/\/$/, "");
+  const coreURL = `${origin}/ffmpeg/ffmpeg-core.js`;
+  const wasmURL = `${origin}/ffmpeg/ffmpeg-core.wasm`;
   await ff.load({coreURL, wasmURL});
   ffmpeg = ff;
   return ff;
