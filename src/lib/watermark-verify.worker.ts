@@ -11,6 +11,7 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { createFile } from "mp4box";
 import type { ISOFile, Movie, MP4BoxBuffer, Sample } from "mp4box";
+import { extractYLumaFromYuv420pRaw } from "./yuv420-luma-extract";
 
 const RANGE_STEPS_BYTES = [8 * 1024 * 1024, 16 * 1024 * 1024, 32 * 1024 * 1024];
 
@@ -180,9 +181,8 @@ async function decodeFrameToY(frameIndex: number, signal: AbortSignal): Promise<
     throw new Error("Empty Annex-B payload after AVCC conversion");
   }
   await ff.writeFile("in.h264", annexB);
-  // Raw yuv420p has **stride-padded** Y (linesize ≥ width, often 32-byte aligned). Taking
-  // the first width×height bytes is wrong and breaks patch decoding (e.g. bogus user IDs).
-  // `gray` is a single packed luma plane: exactly width×height bytes, same Y as 420p luma.
+  // ffmpeg.wasm often writes **empty** output for `-pix_fmt gray`; use yuv420p and unpack Y
+  // with stride (linesize ≥ width). See `yuv420-luma-extract.ts`.
   await ff.exec(
     [
       "-y",
@@ -194,17 +194,16 @@ async function decodeFrameToY(frameIndex: number, signal: AbortSignal): Promise<
       "in.h264",
       "-frames:v",
       "1",
-      "-pix_fmt",
-      "gray",
       "-f",
       "rawvideo",
+      "-pix_fmt",
+      "yuv420p",
       "out.yuv",
     ],
     undefined,
     {signal}
   );
   const raw = await ff.readFile("out.yuv");
-  const ySize = videoWidth * videoHeight;
   let full: Uint8Array;
   if (raw instanceof Uint8Array) {
     full = raw;
@@ -213,12 +212,7 @@ async function decodeFrameToY(frameIndex: number, signal: AbortSignal): Promise<
   } else {
     full = new Uint8Array(raw as ArrayBuffer);
   }
-  if (full.byteLength !== ySize) {
-    throw new Error(
-      `FFmpeg gray frame size mismatch: expected ${ySize} bytes, got ${full.byteLength} (w=${videoWidth} h=${videoHeight})`
-    );
-  }
-  const yPlane = full;
+  const yPlane = extractYLumaFromYuv420pRaw(full, videoWidth, videoHeight);
   try {
     await ff.deleteFile("in.h264");
     await ff.deleteFile("out.yuv");
