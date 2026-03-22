@@ -2,12 +2,6 @@ import {NextRequest, NextResponse} from "next/server";
 import {createClient} from "@/utils/supabase/server";
 import {enqueueWatermarkForVideo} from "@/lib/enqueue-watermark";
 
-export function normalizeWatermarkPath(path: string): string {
-  const match = path.match(/^s3:\/\/[^/]+\/(.+)$/);
-  if (!match) return path;
-  return match[1];
-}
-
 // POST /api/videos/[id]/watermark
 // Creates a watermarked version of the video by calling the external watermark service.
 export async function POST(_request: NextRequest, context: {params: Promise<{id: string}>}) {

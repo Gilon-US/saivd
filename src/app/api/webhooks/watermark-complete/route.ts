@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { createServiceRoleClient } from "@/utils/supabase/service";
-import { normalizeWatermarkPath } from "@/app/api/videos/[id]/watermark/route";
+import {normalizeWatermarkPath} from "@/lib/watermark-path";
 
 const SIGNATURE_HEADER = "x-signature";
 

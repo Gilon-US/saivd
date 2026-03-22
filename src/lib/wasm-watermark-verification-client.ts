@@ -74,7 +74,9 @@ function attachWorkerHandlers(w: Worker) {
 }
 
 function createWorker(): Worker {
-  const w = new Worker(new URL("../workers/watermark-verify.worker.ts", import.meta.url), {
+  // Webpack 5 resolves this at build time. Do not use --turbopack for `next build`; Turbopack fails with
+  // "Cannot find module as expression is too dynamic" for this worker + ffmpeg/mp4box.
+  const w = new Worker(new URL("./watermark-verify.worker.ts", import.meta.url), {
     type: "module",
   });
   attachWorkerHandlers(w);

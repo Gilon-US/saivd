@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {createClient} from "@/utils/supabase/server";
-import {normalizeWatermarkPath} from "../../[id]/watermark/route";
+import {normalizeWatermarkPath} from "@/lib/watermark-path";
 
 type QueueStatusResponse = {
   timestamp: string[];

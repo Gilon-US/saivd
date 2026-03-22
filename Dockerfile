@@ -34,7 +34,8 @@ ENV NODE_ENV=production
 # Required for Docker: next.config uses standalone only when this is set (Netlify leaves it unset)
 ENV USE_STANDALONE_OUTPUT=true
 
-# Build the application
+# Build the application (uses package.json "build" → `next build`, Webpack — not
+# `next build --turbopack`, so FFmpeg/WASM watermark-verify workers bundle correctly)
 RUN npm run build
 
 # ---- Production stage ----

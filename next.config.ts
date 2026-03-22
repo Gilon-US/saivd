@@ -7,8 +7,17 @@ import type { NextConfig } from "next";
  */
 const nextConfig: NextConfig = {
   ...(process.env.USE_STANDALONE_OUTPUT === "true" ? { output: "standalone" as const } : {}),
+  /** Needed for watermark verify worker deps (mp4box, @ffmpeg/ffmpeg) in client bundles */
+  transpilePackages: ["@ffmpeg/ffmpeg", "@ffmpeg/util", "mp4box"],
   experimental: {
     // Add any experimental features here
+  },
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.output = config.output ?? {};
+      config.output.workerPublicPath = "/_next/";
+    }
+    return config;
   },
 };
 

@@ -3,6 +3,9 @@
 /**
  * Web Worker: stateful MP4 demux (mp4box) + WASM H.264 decode (@ffmpeg/ffmpeg) for watermark verification only.
  * Playback stays on the main thread <video> element.
+ *
+ * Co-located with wasm-watermark-verification-client.ts so Webpack can bundle `new URL('./watermark-verify.worker.ts', import.meta.url)` reliably.
+ * Production builds must use `next build` without --turbopack (see package.json); Turbopack fails with "expression is too dynamic" for this worker.
  */
 
 import { FFmpeg } from "@ffmpeg/ffmpeg";
