@@ -8,8 +8,9 @@ import {
   importPublicKeyFromPem,
 } from "@/lib/watermark-verification";
 import {
-  disposeWasmVerificationSession,
   getFrameYFromWasm,
+  prewarmWasmVerificationSession,
+  scheduleDisposeWasmVerificationSession,
 } from "@/lib/wasm-watermark-verification-client";
 
 export type WatermarkVerificationStatus = "idle" | "verifying" | "verified" | "failed";
@@ -20,6 +21,8 @@ type UseWatermarkVerificationOptions = {
   /** Callback when verification completes (success or failure). */
   onVerificationComplete?: (status: "verified" | "failed", userId: string | null) => void;
 };
+
+const SESSION_KEEPALIVE_TTL_MS = 45000;
 
 /**
  * Bootstrap decodes user ID from frames 0/1/2 (no key) via Web Worker + ffmpeg.wasm (demux → decode → Y plane).
@@ -40,6 +43,7 @@ export function useWatermarkVerification(
   const verificationSessionKeyRef = useRef<string | null>(null);
   const verificationStartedRef = useRef(false);
   const inconclusiveGraceUsedRef = useRef(false);
+  const prewarmStartedRef = useRef(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const debugLog = (...args: any[]) => {
@@ -50,11 +54,24 @@ export function useWatermarkVerification(
     onVerificationCompleteRef.current = onVerificationComplete;
   }, [onVerificationComplete]);
 
+  useEffect(() => {
+    if (!enabled || !videoUrl) return;
+    if (prewarmStartedRef.current && verificationSessionKeyRef.current === videoUrl) return;
+    prewarmStartedRef.current = true;
+    verificationSessionKeyRef.current = videoUrl;
+    const t0 = performance.now();
+    void prewarmWasmVerificationSession(videoUrl).finally(() => {
+      console.log("[Frame0Decode] Prewarm complete", {
+        prewarmMs: Math.round(performance.now() - t0),
+      });
+    });
+  }, [enabled, videoUrl]);
+
   // Frame 0: decode user ID (no key) → fetch public key → RSA verify frame 0. WebCodecs only.
   // Run verification immediately when enabled; do not wait for the video element (captureFrame0YFromUrl does its own Range fetch).
   useEffect(() => {
     debugLog("Effect start", {enabled, hasVideoUrl: !!videoUrl});
-    if (!enabled || !videoUrl) {
+    if (!videoUrl) {
       setStatus("idle");
       setVerifiedUserId(null);
       callbackFiredRef.current = false;
@@ -62,8 +79,13 @@ export function useWatermarkVerification(
       verificationSessionKeyRef.current = null;
       publicKeyRef.current = null;
       inconclusiveGraceUsedRef.current = false;
+      prewarmStartedRef.current = false;
       verifiedFrameIndicesRef.current = new Set();
-      void disposeWasmVerificationSession();
+      scheduleDisposeWasmVerificationSession(SESSION_KEEPALIVE_TTL_MS);
+      return;
+    }
+    if (!enabled) {
+      // Keep warmed session alive while player remains open and URL is stable.
       return;
     }
 
@@ -90,6 +112,7 @@ export function useWatermarkVerification(
     let mounted = true;
 
     const runVerification = async () => {
+      const decodeStart = performance.now();
       const frameIndexes = [0, 1, 2];
       const candidates: Array<{
         frameIndex: number;
@@ -100,6 +123,7 @@ export function useWatermarkVerification(
         width: number;
         height: number;
       }> = [];
+      let strongFrame0Candidate: (typeof candidates)[number] | null = null;
 
       for (const frameIndex of frameIndexes) {
         const frameStart = performance.now();
@@ -139,7 +163,7 @@ export function useWatermarkVerification(
           diagnostics.numericUserId > 0 &&
           diagnostics.validDigits
         ) {
-          candidates.push({
+          const candidate = {
             frameIndex,
             numericUserId: diagnostics.numericUserId,
             bestScore: diagnostics.bestScore,
@@ -147,7 +171,18 @@ export function useWatermarkVerification(
             yPlane: webCodecsY.yPlane,
             width: webCodecsY.width,
             height: webCodecsY.height,
-          });
+          };
+          candidates.push(candidate);
+          if (frameIndex === 0 && diagnostics.bestScore === 0 && diagnostics.repsUsed >= 4) {
+            strongFrame0Candidate = candidate;
+            console.log("[Frame0Decode] Strong frame0 candidate short-circuit", {
+              frameIndex,
+              numericUserId: diagnostics.numericUserId,
+              bestScore: diagnostics.bestScore,
+              repsUsed: diagnostics.repsUsed,
+            });
+            break;
+          }
         }
       }
 
@@ -172,6 +207,10 @@ export function useWatermarkVerification(
       const passesConsensus =
         !!selected &&
         (maxVotes >= 2 || (maxVotes === 1 && selected.bestScore === 0 && selected.repsUsed >= 4));
+      const shouldShortCircuit = !!strongFrame0Candidate;
+      if (shouldShortCircuit) {
+        selected = strongFrame0Candidate;
+      }
 
       console.log("[Frame0Decode] Bootstrap consensus summary", {
         candidates: candidates.map((c) => ({
@@ -184,10 +223,11 @@ export function useWatermarkVerification(
         selectedNumericUserId: selected?.numericUserId ?? null,
         selectedFrameIndex: selected?.frameIndex ?? null,
         selectedVotes: selected ? votes.get(selected.numericUserId) ?? 0 : 0,
-        pass: passesConsensus,
+        pass: shouldShortCircuit ? true : passesConsensus,
+        shortCircuitedOnFrame0: shouldShortCircuit,
       });
 
-      if (!passesConsensus || !selected) {
+      if ((!passesConsensus && !shouldShortCircuit) || !selected) {
         debugLog("Bootstrap consensus failed: WASM verification path only", {
           candidateCount: candidates.length,
         });
@@ -205,6 +245,10 @@ export function useWatermarkVerification(
       }
 
       const numericUserId = selected.numericUserId;
+      console.log("[Frame0Decode] Decode phase timing", {
+        frameDecodeMs: Math.round(performance.now() - decodeStart),
+      });
+      const keyFetchStart = performance.now();
       let pem: string | null = null;
       try {
         debugLog("Fetching public key PEM", {numericUserId});
@@ -213,6 +257,9 @@ export function useWatermarkVerification(
       } catch (e) {
         debugLog("Fetch public key failed (non-blocking)", e);
       }
+      console.log("[Frame0Decode] Key fetch timing", {
+        keyFetchMs: Math.round(performance.now() - keyFetchStart),
+      });
 
       let key: CryptoKey | null = null;
       if (pem) {
@@ -261,7 +308,6 @@ export function useWatermarkVerification(
 
     return () => {
       mounted = false;
-      void disposeWasmVerificationSession();
     };
   }, [enabled, videoUrl]);
 

@@ -41,6 +41,7 @@ const pending = new Map<
 
 let activeUrl: string | null = null;
 let initMeta: {nbSamples: number; width: number; height: number} | null = null;
+let disposeTimer: ReturnType<typeof setTimeout> | null = null;
 
 function nextId(): number {
   return ++requestSeq;
@@ -108,6 +109,10 @@ function send<T extends OkMsg>(payload: Record<string, unknown>): Promise<T> {
 export async function ensureWasmVerificationSession(
   videoUrl: string
 ): Promise<{nbSamples: number; width: number; height: number} | null> {
+  if (disposeTimer) {
+    clearTimeout(disposeTimer);
+    disposeTimer = null;
+  }
   if (activeUrl === videoUrl && initMeta) {
     return initMeta;
   }
@@ -124,6 +129,31 @@ export async function ensureWasmVerificationSession(
     height: data.height,
   };
   return initMeta;
+}
+
+/**
+ * Best-effort warmup for worker + session init. Safe to call and ignore failures.
+ */
+export async function prewarmWasmVerificationSession(videoUrl: string): Promise<void> {
+  try {
+    await ensureWasmVerificationSession(videoUrl);
+  } catch {
+    // ignore warmup failures; normal verification path will handle/report errors
+  }
+}
+
+/**
+ * Schedule worker/session disposal after a short TTL. Reopening the same URL before TTL expiry
+ * cancels the timer in ensureWasmVerificationSession and reuses warm state.
+ */
+export function scheduleDisposeWasmVerificationSession(ttlMs: number): void {
+  if (disposeTimer) {
+    clearTimeout(disposeTimer);
+  }
+  disposeTimer = setTimeout(() => {
+    disposeTimer = null;
+    void disposeWasmVerificationSession();
+  }, ttlMs);
 }
 
 /**
@@ -152,6 +182,10 @@ export async function getFrameYFromWasm(
  * Terminate worker, abort fetches, clear session. Call when VideoPlayer closes or verification disables.
  */
 export async function disposeWasmVerificationSession(): Promise<void> {
+  if (disposeTimer) {
+    clearTimeout(disposeTimer);
+    disposeTimer = null;
+  }
   activeUrl = null;
   initMeta = null;
   const w = worker;

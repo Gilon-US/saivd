@@ -5,6 +5,7 @@ import {X, Play, Pause, Volume2, VolumeX, Maximize} from "lucide-react";
 import {useFrameAnalysis, type FrameAnalysisFunction} from "@/hooks/useFrameAnalysis";
 import {useWatermarkVerification} from "@/hooks/useWatermarkVerification";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
+import { prewarmWasmVerificationSession } from "@/lib/wasm-watermark-verification-client";
 
 interface VideoPlayerProps {
   videoUrl: string;
@@ -54,6 +55,11 @@ export function VideoPlayer({
     enabled: verificationEnabled,
     onVerificationComplete,
   });
+
+  useEffect(() => {
+    if (!isOpen || !enableFrameAnalysis || !videoUrl) return;
+    void prewarmWasmVerificationSession(videoUrl);
+  }, [isOpen, enableFrameAnalysis, videoUrl]);
 
   // Frame analysis hook – when videoId is provided, QR URL comes from verifiedUserId (parent state).
   const analysisFunction = useCallback<FrameAnalysisFunction>(() => {
