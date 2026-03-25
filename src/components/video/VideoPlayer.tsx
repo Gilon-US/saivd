@@ -140,7 +140,18 @@ export function VideoPlayer({
       if (document.fullscreenElement) {
         document.exitFullscreen();
       } else {
-        videoRef.current.requestFullscreen();
+        const el = videoRef.current as HTMLVideoElement & {
+          webkitEnterFullscreen?: () => void;
+          webkitEnterFullScreen?: () => void;
+        };
+        // iOS Safari often doesn't support requestFullscreen() for <video>; use the WebKit API when available.
+        if (typeof el.webkitEnterFullscreen === "function") {
+          el.webkitEnterFullscreen();
+        } else if (typeof el.webkitEnterFullScreen === "function") {
+          el.webkitEnterFullScreen();
+        } else {
+          videoRef.current.requestFullscreen();
+        }
       }
     }
   };
