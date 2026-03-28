@@ -43,6 +43,22 @@ let activeUrl: string | null = null;
 let initMeta: {nbSamples: number; width: number; height: number} | null = null;
 let disposeTimer: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * Serializes dispose+init so prewarm and verification cannot interleave (e.g. one dispose
+ * terminating the worker while another init/decode is in flight on iOS Safari).
+ * Same-url waiters re-check cache after prior ops complete (promise chaining pattern).
+ */
+let sessionEnsureChain: Promise<void> = Promise.resolve();
+
+function enqueueSessionEnsure<T>(fn: () => Promise<T>): Promise<T> {
+  const result = sessionEnsureChain.then(() => fn());
+  sessionEnsureChain = result.then(
+    () => undefined,
+    () => undefined
+  );
+  return result;
+}
+
 function nextId(): number {
   return ++requestSeq;
 }
@@ -113,6 +129,15 @@ export async function ensureWasmVerificationSession(
     clearTimeout(disposeTimer);
     disposeTimer = null;
   }
+  if (activeUrl === videoUrl && initMeta) {
+    return initMeta;
+  }
+  return enqueueSessionEnsure(() => runEnsureWasmVerificationSessionLocked(videoUrl));
+}
+
+async function runEnsureWasmVerificationSessionLocked(
+  videoUrl: string
+): Promise<{nbSamples: number; width: number; height: number} | null> {
   if (activeUrl === videoUrl && initMeta) {
     return initMeta;
   }
