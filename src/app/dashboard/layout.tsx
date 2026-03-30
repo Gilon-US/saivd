@@ -4,6 +4,7 @@ import {ReactNode} from "react";
 import Link from "next/link";
 import {LogoutButton} from "@/components/auth/LogoutButton";
 import {ProfileProvider, useProfile} from "@/contexts/ProfileContext";
+import packageJson from "../../../package.json";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -48,7 +49,7 @@ function DashboardShell({children}: DashboardLayoutProps) {
         <main className="flex-1 p-6">{children}</main>
         <footer className="bg-white dark:bg-gray-800 shadow-inner py-4">
           <div className="container mx-auto px-4 text-center text-sm text-gray-500">
-            © {new Date().getFullYear()} SAIVD App. All rights reserved.
+            © {new Date().getFullYear()} SAIVD App. All rights reserved. v{packageJson.version}
           </div>
         </footer>
       </div>

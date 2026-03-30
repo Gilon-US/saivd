@@ -335,6 +335,9 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
         throw new Error("Could not read video dimensions or sample count");
       }
 
+      // Warm ffmpeg core during init so first decode avoids cold-load penalty on mobile Safari.
+      await ensureFfmpegLoaded(baseUrlForFfmpeg);
+
       const r: WorkerResponse = {
         id: msg.id,
         ok: true,

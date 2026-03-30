@@ -24,7 +24,8 @@ type UseWatermarkVerificationOptions = {
 };
 
 const SESSION_KEEPALIVE_TTL_MS = 45000;
-const FRAME_DECODE_TIMEOUT_MS = 12000;
+const FRAME0_DECODE_TIMEOUT_MS = 20000;
+const FOLLOWUP_FRAME_DECODE_TIMEOUT_MS = 8000;
 const BOOTSTRAP_TIMEOUT_MS = 30000;
 
 /**
@@ -130,14 +131,16 @@ export function useWatermarkVerification(
 
       for (const frameIndex of frameIndexes) {
         const frameStart = performance.now();
+        const frameDecodeTimeoutMs =
+          frameIndex === 0 ? FRAME0_DECODE_TIMEOUT_MS : FOLLOWUP_FRAME_DECODE_TIMEOUT_MS;
         let webCodecsY: { yPlane: Uint8Array; width: number; height: number } | null = null;
         try {
           webCodecsY = await Promise.race([
             getFrameYFromWasm(videoUrl, frameIndex),
             new Promise<null>((_, reject) =>
               setTimeout(
-                () => reject(new Error(`Frame decode timeout (${FRAME_DECODE_TIMEOUT_MS}ms)`)),
-                FRAME_DECODE_TIMEOUT_MS
+                () => reject(new Error(`Frame decode timeout (${frameDecodeTimeoutMs}ms)`)),
+                frameDecodeTimeoutMs
               )
             ),
           ]);
