@@ -8,6 +8,7 @@ import {
   importPublicKeyFromPem,
 } from "@/lib/watermark-verification";
 import {
+  disposeWasmVerificationSession,
   getFrameYFromWasm,
   prewarmWasmVerificationSession,
   scheduleDisposeWasmVerificationSession,
@@ -23,6 +24,8 @@ type UseWatermarkVerificationOptions = {
 };
 
 const SESSION_KEEPALIVE_TTL_MS = 45000;
+const FRAME_DECODE_TIMEOUT_MS = 12000;
+const BOOTSTRAP_TIMEOUT_MS = 30000;
 
 /**
  * Bootstrap decodes user ID from frames 0/1/2 (no key) via Web Worker + ffmpeg.wasm (demux → decode → Y plane).
@@ -129,9 +132,21 @@ export function useWatermarkVerification(
         const frameStart = performance.now();
         let webCodecsY: { yPlane: Uint8Array; width: number; height: number } | null = null;
         try {
-          webCodecsY = await getFrameYFromWasm(videoUrl, frameIndex);
+          webCodecsY = await Promise.race([
+            getFrameYFromWasm(videoUrl, frameIndex),
+            new Promise<null>((_, reject) =>
+              setTimeout(
+                () => reject(new Error(`Frame decode timeout (${FRAME_DECODE_TIMEOUT_MS}ms)`)),
+                FRAME_DECODE_TIMEOUT_MS
+              )
+            ),
+          ]);
         } catch (e) {
           debugLog("WASM frame capture failed", {frameIndex, error: e});
+          // If ffmpeg/worker gets stuck on iOS Safari, force a reset so subsequent frames can proceed.
+          if (e instanceof Error && e.message.includes("timeout")) {
+            await disposeWasmVerificationSession();
+          }
         }
         if (!mounted) return;
         if (!webCodecsY) {
@@ -304,7 +319,23 @@ export function useWatermarkVerification(
       }
     };
 
-    runVerification();
+    void Promise.race([
+      runVerification(),
+      new Promise<void>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Bootstrap verification timeout (${BOOTSTRAP_TIMEOUT_MS}ms)`)),
+          BOOTSTRAP_TIMEOUT_MS
+        )
+      ),
+    ]).catch((e) => {
+      debugLog("Bootstrap verification aborted by timeout/error", e);
+      if (!mounted) return;
+      setStatus("failed");
+      if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
+        callbackFiredRef.current = true;
+        onVerificationCompleteRef.current("failed", null);
+      }
+    });
 
     return () => {
       mounted = false;
