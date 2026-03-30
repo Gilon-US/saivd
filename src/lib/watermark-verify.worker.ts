@@ -29,6 +29,11 @@ type WorkerResponse =
       nbSamples: number;
       width: number;
       height: number;
+      timings?: {
+        moovParseMs: number;
+        ffmpegLoadMs: number;
+        totalInitMs: number;
+      };
     }
   | {
       id: number;
@@ -37,6 +42,14 @@ type WorkerResponse =
       yPlane: ArrayBuffer;
       width: number;
       height: number;
+      timings?: {
+        sampleFetchMs: number;
+        avccToAnnexBMs: number;
+        ffmpegExecMs: number;
+        readOutputMs: number;
+        lumaExtractMs: number;
+        totalDecodeMs: number;
+      };
     }
   | { id: number; ok: true; type: "dispose" }
   | { id: number; ok: false; error: string };
@@ -223,15 +236,35 @@ async function ensureSampleData(trackId: number, sampleIndex: number, signal: Ab
   return sample as Sample;
 }
 
-async function decodeFrameToY(frameIndex: number, signal: AbortSignal): Promise<{yPlane: Uint8Array; width: number; height: number}> {
+async function decodeFrameToY(
+  frameIndex: number,
+  signal: AbortSignal
+): Promise<{
+  yPlane: Uint8Array;
+  width: number;
+  height: number;
+  timings: {
+    sampleFetchMs: number;
+    avccToAnnexBMs: number;
+    ffmpegExecMs: number;
+    readOutputMs: number;
+    lumaExtractMs: number;
+    totalDecodeMs: number;
+  };
+}> {
+  const decodeStart = performance.now();
   const ff = await ensureFfmpegLoaded(baseUrlForFfmpeg);
+  const sampleFetchStart = performance.now();
   const sample = await ensureSampleData(videoTrackId, frameIndex, signal);
+  const sampleFetchMs = performance.now() - sampleFetchStart;
+  const avccStart = performance.now();
   const sampleAnnexB = avccToAnnexB(sample.data!);
   if (sampleAnnexB.length === 0) {
     throw new Error("Empty Annex-B payload after AVCC conversion");
   }
   const prefix = mp4boxfile ? getAvcCAnnexBPrefix(mp4boxfile, videoTrackId) : null;
   const annexB = prefix && prefix.length > 0 ? concatUint8(prefix, sampleAnnexB) : sampleAnnexB;
+  const avccToAnnexBMs = performance.now() - avccStart;
   try {
     await ff.deleteFile("out.yuv");
   } catch {
@@ -239,6 +272,7 @@ async function decodeFrameToY(frameIndex: number, signal: AbortSignal): Promise<
   }
   await ff.writeFile("in.h264", annexB);
   // Pixel format before muxer format (rawvideo). SPS/PPS prefix required or decode outputs 0 bytes.
+  const execStart = performance.now();
   const exitCode = await ff.exec(
     [
       "-y",
@@ -259,10 +293,13 @@ async function decodeFrameToY(frameIndex: number, signal: AbortSignal): Promise<
     undefined,
     {signal}
   );
+  const ffmpegExecMs = performance.now() - execStart;
   if (exitCode !== 0) {
     throw new Error(`ffmpeg H.264 decode failed (exit ${exitCode}); check SPS/PPS prefix and stream`);
   }
+  const readStart = performance.now();
   const raw = await ff.readFile("out.yuv");
+  const readOutputMs = performance.now() - readStart;
   let full: Uint8Array;
   if (raw instanceof Uint8Array) {
     full = raw;
@@ -271,14 +308,28 @@ async function decodeFrameToY(frameIndex: number, signal: AbortSignal): Promise<
   } else {
     full = new Uint8Array(raw as ArrayBuffer);
   }
+  const extractStart = performance.now();
   const yPlane = extractYLumaFromYuv420pRaw(full, videoWidth, videoHeight);
+  const lumaExtractMs = performance.now() - extractStart;
   try {
     await ff.deleteFile("in.h264");
     await ff.deleteFile("out.yuv");
   } catch {
     /* ignore */
   }
-  return {yPlane, width: videoWidth, height: videoHeight};
+  return {
+    yPlane,
+    width: videoWidth,
+    height: videoHeight,
+    timings: {
+      sampleFetchMs: Math.round(sampleFetchMs),
+      avccToAnnexBMs: Math.round(avccToAnnexBMs),
+      ffmpegExecMs: Math.round(ffmpegExecMs),
+      readOutputMs: Math.round(readOutputMs),
+      lumaExtractMs: Math.round(lumaExtractMs),
+      totalDecodeMs: Math.round(performance.now() - decodeStart),
+    },
+  };
 }
 
 function resetSession() {
@@ -314,13 +365,16 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
     }
 
     if (msg.type === "init") {
+      const initStart = performance.now();
       resetSession();
       videoUrl = msg.videoUrl;
       baseUrlForFfmpeg = msg.baseUrl.replace(/\/$/, "");
       abortController = new AbortController();
       const signal = abortController.signal;
 
+      const moovStart = performance.now();
       const info = await ensureMoovParsed(msg.videoUrl, signal);
+      const moovParseMs = performance.now() - moovStart;
       const vTrack = info.videoTracks?.[0];
       if (!vTrack) {
         throw new Error("No video track in MP4");
@@ -336,7 +390,9 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
       }
 
       // Warm ffmpeg core during init so first decode avoids cold-load penalty on mobile Safari.
+      const ffmpegLoadStart = performance.now();
       await ensureFfmpegLoaded(baseUrlForFfmpeg);
+      const ffmpegLoadMs = performance.now() - ffmpegLoadStart;
 
       const r: WorkerResponse = {
         id: msg.id,
@@ -346,6 +402,11 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
         nbSamples,
         width: videoWidth,
         height: videoHeight,
+        timings: {
+          moovParseMs: Math.round(moovParseMs),
+          ffmpegLoadMs: Math.round(ffmpegLoadMs),
+          totalInitMs: Math.round(performance.now() - initStart),
+        },
       };
       self.postMessage(r);
       return;
@@ -359,7 +420,7 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
       if (msg.frameIndex < 0 || msg.frameIndex >= nbSamples) {
         throw new Error(`frameIndex ${msg.frameIndex} out of range (nbSamples=${nbSamples})`);
       }
-      const {yPlane, width, height} = await decodeFrameToY(msg.frameIndex, signal);
+      const {yPlane, width, height, timings} = await decodeFrameToY(msg.frameIndex, signal);
       const buf = yPlane.buffer.slice(yPlane.byteOffset, yPlane.byteOffset + yPlane.byteLength) as ArrayBuffer;
       const r: WorkerResponse = {
         id: msg.id,
@@ -368,6 +429,7 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
         yPlane: buf,
         width,
         height,
+        timings,
       };
       self.postMessage(r, [buf]);
       return;

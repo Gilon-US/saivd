@@ -7,6 +7,14 @@ export type WasmFrameYResult = {
   yPlane: Uint8Array;
   width: number;
   height: number;
+  timings?: {
+    sampleFetchMs: number;
+    avccToAnnexBMs: number;
+    ffmpegExecMs: number;
+    readOutputMs: number;
+    lumaExtractMs: number;
+    totalDecodeMs: number;
+  };
 };
 
 type InitOk = {
@@ -17,6 +25,11 @@ type InitOk = {
   nbSamples: number;
   width: number;
   height: number;
+  timings?: {
+    moovParseMs: number;
+    ffmpegLoadMs: number;
+    totalInitMs: number;
+  };
 };
 
 type DecodeOk = {
@@ -26,6 +39,14 @@ type DecodeOk = {
   yPlane: ArrayBuffer;
   width: number;
   height: number;
+  timings?: {
+    sampleFetchMs: number;
+    avccToAnnexBMs: number;
+    ffmpegExecMs: number;
+    readOutputMs: number;
+    lumaExtractMs: number;
+    totalDecodeMs: number;
+  };
 };
 
 type DisposeOk = {id: number; ok: true; type: "dispose"};
@@ -153,6 +174,9 @@ async function runEnsureWasmVerificationSessionLocked(
     width: data.width,
     height: data.height,
   };
+  if (data.timings) {
+    console.log("[Frame0Decode] WASM init timing", data.timings);
+  }
   return initMeta;
 }
 
@@ -200,6 +224,7 @@ export async function getFrameYFromWasm(
     yPlane: new Uint8Array(data.yPlane),
     width: data.width,
     height: data.height,
+    timings: data.timings,
   };
 }
 

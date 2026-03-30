@@ -133,7 +133,7 @@ export function useWatermarkVerification(
         const frameStart = performance.now();
         const frameDecodeTimeoutMs =
           frameIndex === 0 ? FRAME0_DECODE_TIMEOUT_MS : FOLLOWUP_FRAME_DECODE_TIMEOUT_MS;
-        let webCodecsY: { yPlane: Uint8Array; width: number; height: number } | null = null;
+        let webCodecsY: Awaited<ReturnType<typeof getFrameYFromWasm>> = null;
         try {
           webCodecsY = await Promise.race([
             getFrameYFromWasm(videoUrl, frameIndex),
@@ -174,6 +174,7 @@ export function useWatermarkVerification(
           repsUsed: diagnostics.repsUsed,
           validDigits: diagnostics.validDigits,
           rightSideLength: diagnostics.rightSideLength,
+          workerTimings: webCodecsY.timings ?? null,
         });
 
         if (
