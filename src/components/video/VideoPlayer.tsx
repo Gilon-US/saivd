@@ -7,6 +7,11 @@ import {useWatermarkVerification, type VerificationProgress, type VerificationPr
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
 import { prewarmWasmVerificationSession } from "@/lib/wasm-watermark-verification-client";
 
+const CREATOR_APP_ORIGIN =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  process.env.PUBLIC_APP_URL ??
+  "https://saivd.netlify.app";
+
 interface VideoPlayerProps {
   videoUrl: string;
   videoId?: string | null;
@@ -84,6 +89,8 @@ export function VideoPlayer({
 
   // Use verified user ID for QR code if available, otherwise use frame analysis QR URL
   const qrUrl = verifiedUserId ? `/profile/${verifiedUserId}/qr` : frameAnalysisQrUrl;
+  const extractedUserId = verifiedUserId ?? extractNumericUserIdFromQrUrl(qrUrl);
+  const creatorProfileUrl = extractedUserId ? `${CREATOR_APP_ORIGIN}/profile/${extractedUserId}` : null;
 
   // Diagnostic: log when video src is withheld vs set (to trace full-video preload)
   const videoSrcWithheld = enableFrameAnalysis && verificationStatus !== "verified";
@@ -232,7 +239,16 @@ export function VideoPlayer({
           {/* QR / Logo flip overlay – flips between QR code (front) and logo (back) every 6s.
               Shown when we have a verified user ID or frame analysis returns a QR URL. */}
           {qrUrl && isPlaybackAllowed && (
-            <div className="absolute top-2 left-2 sm:top-4 sm:left-4 pointer-events-none z-20 qr-logo-flip-container">
+            <button
+              type="button"
+              onClick={() => {
+                if (creatorProfileUrl) {
+                  window.location.assign(creatorProfileUrl);
+                }
+              }}
+              disabled={!creatorProfileUrl}
+              aria-label="View creator profile"
+              className="absolute top-2 left-2 sm:top-4 sm:left-4 z-20 qr-logo-flip-container cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 rounded-md">
               <div className="qr-logo-flip-card">
                 <div className="qr-logo-flip-face qr-logo-flip-face-front">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -251,7 +267,7 @@ export function VideoPlayer({
                   />
                 </div>
               </div>
-            </div>
+            </button>
           )}
 
           {/* Custom controls - only shown when playback is allowed */}
@@ -308,6 +324,13 @@ function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+function extractNumericUserIdFromQrUrl(qrUrl: string | null): string | null {
+  if (!qrUrl) return null;
+
+  const match = qrUrl.match(/\/profile\/(\d+)\/qr(?:$|\?)/);
+  return match?.[1] ?? null;
 }
 
 function phaseHeadline(phase?: VerificationProgressPhase): string {
