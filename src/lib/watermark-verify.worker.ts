@@ -12,6 +12,7 @@ import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { createFile } from "mp4box";
 import type { ISOFile, Movie, MP4BoxBuffer, Sample } from "mp4box";
 import { extractYLumaFromYuv420pRaw } from "./yuv420-luma-extract";
+import { getFfmpegCoreUrls } from "./ffmpeg-verification-assets";
 
 const RANGE_STEPS_BYTES = [8 * 1024 * 1024, 16 * 1024 * 1024, 32 * 1024 * 1024];
 
@@ -200,9 +201,7 @@ async function ensureFfmpegLoaded(base: string): Promise<FFmpeg> {
   // Same-origin URLs under /public/ffmpeg — do NOT use toBlobURL here. @ffmpeg/ffmpeg's
   // inner worker does `import(coreURL)`; blob: URLs are mis-handled by Webpack's runtime
   // ("Cannot find module 'blob:https://…'") on Netlify/production bundles.
-  const origin = base.replace(/\/$/, "");
-  const coreURL = `${origin}/ffmpeg/ffmpeg-core.js`;
-  const wasmURL = `${origin}/ffmpeg/ffmpeg-core.wasm`;
+  const {coreURL, wasmURL} = getFfmpegCoreUrls(base.replace(/\/$/, ""));
   await ff.load({coreURL, wasmURL});
   ffmpeg = ff;
   return ff;
@@ -332,25 +331,31 @@ async function decodeFrameToY(
   };
 }
 
-function resetSession() {
-  try {
-    ffmpeg?.terminate();
-  } catch {
-    /* ignore */
-  }
-  ffmpeg = null;
-  mp4boxfile = null;
-  videoUrl = "";
-  videoTrackId = 0;
-  videoWidth = 0;
-  videoHeight = 0;
-  nbSamples = 0;
+/** Clear demux / video state only; keep FFmpeg loaded for the next init (new URL). */
+function resetDemuxSession() {
   try {
     abortController?.abort();
   } catch {
     /* ignore */
   }
   abortController = null;
+  mp4boxfile = null;
+  videoUrl = "";
+  videoTrackId = 0;
+  videoWidth = 0;
+  videoHeight = 0;
+  nbSamples = 0;
+}
+
+/** Full teardown: terminate FFmpeg and clear all state (dispose message only). */
+function disposeFfmpegAndDemux() {
+  try {
+    ffmpeg?.terminate();
+  } catch {
+    /* ignore */
+  }
+  ffmpeg = null;
+  resetDemuxSession();
 }
 
 self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
@@ -358,7 +363,7 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
 
   try {
     if (msg.type === "dispose") {
-      resetSession();
+      disposeFfmpegAndDemux();
       const r: WorkerResponse = {id: msg.id, ok: true, type: "dispose"};
       self.postMessage(r);
       return;
@@ -366,15 +371,27 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
 
     if (msg.type === "init") {
       const initStart = performance.now();
-      resetSession();
+      resetDemuxSession();
       videoUrl = msg.videoUrl;
       baseUrlForFfmpeg = msg.baseUrl.replace(/\/$/, "");
       abortController = new AbortController();
       const signal = abortController.signal;
 
-      const moovStart = performance.now();
-      const info = await ensureMoovParsed(msg.videoUrl, signal);
-      const moovParseMs = performance.now() - moovStart;
+      let moovParseMs = 0;
+      let ffmpegLoadMs = 0;
+      const moovPromise = (async (): Promise<Movie> => {
+        const t0 = performance.now();
+        const movie = await ensureMoovParsed(msg.videoUrl, signal);
+        moovParseMs = performance.now() - t0;
+        return movie;
+      })();
+      const ffmpegPromise = (async () => {
+        const t0 = performance.now();
+        await ensureFfmpegLoaded(baseUrlForFfmpeg);
+        ffmpegLoadMs = performance.now() - t0;
+      })();
+      const [info] = await Promise.all([moovPromise, ffmpegPromise]);
+
       const vTrack = info.videoTracks?.[0];
       if (!vTrack) {
         throw new Error("No video track in MP4");
@@ -388,11 +405,6 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
       if (!videoWidth || !videoHeight || !nbSamples) {
         throw new Error("Could not read video dimensions or sample count");
       }
-
-      // Warm ffmpeg core during init so first decode avoids cold-load penalty on mobile Safari.
-      const ffmpegLoadStart = performance.now();
-      await ensureFfmpegLoaded(baseUrlForFfmpeg);
-      const ffmpegLoadMs = performance.now() - ffmpegLoadStart;
 
       const r: WorkerResponse = {
         id: msg.id,

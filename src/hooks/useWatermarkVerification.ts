@@ -9,6 +9,7 @@ import {
 } from "@/lib/watermark-verification";
 import {
   disposeWasmVerificationSession,
+  ensureWasmVerificationSession,
   getFrameYFromWasm,
   prewarmWasmVerificationSession,
   scheduleDisposeWasmVerificationSession,
@@ -24,9 +25,13 @@ type UseWatermarkVerificationOptions = {
 };
 
 const SESSION_KEEPALIVE_TTL_MS = 45000;
-const FRAME0_DECODE_TIMEOUT_MS = 20000;
-const FOLLOWUP_FRAME_DECODE_TIMEOUT_MS = 8000;
-const BOOTSTRAP_TIMEOUT_MS = 30000;
+/** Decode-only budgets (session init is awaited separately so iOS moov/ffmpeg load does not consume these). */
+const FRAME0_DECODE_TIMEOUT_MS = 25000;
+const FOLLOWUP_FRAME_DECODE_TIMEOUT_MS = 12000;
+const FRAME0_DECODE_TIMEOUT_4K_MS = 60000;
+const FOLLOWUP_DECODE_TIMEOUT_4K_MS = 25000;
+/** Whole bootstrap including init, decodes, key fetch — must exceed worst-case cold 4K on Mobile Safari. */
+const BOOTSTRAP_TIMEOUT_MS = 180000;
 
 /**
  * Bootstrap decodes user ID from frames 0/1/2 (no key) via Web Worker + ffmpeg.wasm (demux → decode → Y plane).
@@ -116,6 +121,45 @@ export function useWatermarkVerification(
     let mounted = true;
 
     const runVerification = async () => {
+      const initStart = performance.now();
+      let sessionMeta: Awaited<ReturnType<typeof ensureWasmVerificationSession>> = null;
+      try {
+        sessionMeta = await ensureWasmVerificationSession(videoUrl);
+      } catch (e) {
+        debugLog("WASM session init failed", e);
+        if (!mounted) return;
+        setStatus("failed");
+        if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
+          callbackFiredRef.current = true;
+          onVerificationCompleteRef.current("failed", null);
+        }
+        return;
+      }
+      if (!mounted) return;
+      if (!sessionMeta) {
+        if (mounted) setStatus("failed");
+        if (mounted && !callbackFiredRef.current && onVerificationCompleteRef.current) {
+          callbackFiredRef.current = true;
+          onVerificationCompleteRef.current("failed", null);
+        }
+        return;
+      }
+
+      const maxDim = Math.max(sessionMeta.width, sessionMeta.height);
+      const is4K = maxDim >= 2160;
+      const frame0DecodeTimeoutMs = is4K ? FRAME0_DECODE_TIMEOUT_4K_MS : FRAME0_DECODE_TIMEOUT_MS;
+      const followupDecodeTimeoutMs = is4K
+        ? FOLLOWUP_DECODE_TIMEOUT_4K_MS
+        : FOLLOWUP_FRAME_DECODE_TIMEOUT_MS;
+
+      console.log("[Frame0Decode] Session ready (init complete)", {
+        initMs: Math.round(performance.now() - initStart),
+        width: sessionMeta.width,
+        height: sessionMeta.height,
+        frame0DecodeTimeoutMs,
+        followupDecodeTimeoutMs,
+      });
+
       const decodeStart = performance.now();
       const frameIndexes = [0, 1, 2];
       const candidates: Array<{
@@ -132,7 +176,7 @@ export function useWatermarkVerification(
       for (const frameIndex of frameIndexes) {
         const frameStart = performance.now();
         const frameDecodeTimeoutMs =
-          frameIndex === 0 ? FRAME0_DECODE_TIMEOUT_MS : FOLLOWUP_FRAME_DECODE_TIMEOUT_MS;
+          frameIndex === 0 ? frame0DecodeTimeoutMs : followupDecodeTimeoutMs;
         let webCodecsY: Awaited<ReturnType<typeof getFrameYFromWasm>> = null;
         try {
           webCodecsY = await Promise.race([

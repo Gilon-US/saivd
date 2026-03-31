@@ -162,22 +162,36 @@ async function runEnsureWasmVerificationSessionLocked(
   if (activeUrl === videoUrl && initMeta) {
     return initMeta;
   }
-  await disposeWasmVerificationSession();
-  const data = await send<InitOk>({
-    type: "init",
-    videoUrl,
-    baseUrl: baseUrl(),
-  });
-  activeUrl = videoUrl;
-  initMeta = {
-    nbSamples: data.nbSamples,
-    width: data.width,
-    height: data.height,
+
+  const applyInitOk = (data: InitOk) => {
+    activeUrl = videoUrl;
+    initMeta = {
+      nbSamples: data.nbSamples,
+      width: data.width,
+      height: data.height,
+    };
+    if (data.timings) {
+      console.log("[Frame0Decode] WASM init timing", data.timings);
+    }
+    return initMeta;
   };
-  if (data.timings) {
-    console.log("[Frame0Decode] WASM init timing", data.timings);
+
+  try {
+    const data = await send<InitOk>({
+      type: "init",
+      videoUrl,
+      baseUrl: baseUrl(),
+    });
+    return applyInitOk(data);
+  } catch {
+    await disposeWasmVerificationSession();
+    const data = await send<InitOk>({
+      type: "init",
+      videoUrl,
+      baseUrl: baseUrl(),
+    });
+    return applyInitOk(data);
   }
-  return initMeta;
 }
 
 /**

@@ -61,6 +61,18 @@ src/
 
 ---
 
+## Video pipeline & time-to-frame-0 (watermark verification)
+
+**Backend contract:** The processing service **normalizes every video to MP4 with `moov` at the beginning** (fast start / progressive-download–friendly layout) **before** watermarking. Client-side verification (Range fetch, MP4 parse, first-sample decode) should **assume faststart** for SAVD-processed assets.
+
+**Does faststart help optimize frame 0?** **Partly.** It speeds the **container phase**: moov and sample tables are available after **small, early Range reads**, so parsing finishes sooner and first-frame decode can start earlier. It does **not** remove the heavy parts that often dominate on mobile: **ffmpeg.wasm (or codec) load**, **cold network/cache**, and **actually decoding frame 0**—especially at **4K**.
+
+**HTTP asset prewarm:** Root layout mounts `FfmpegVerificationAssetPrewarm`, which best-effort `fetch`es `/ffmpeg/ffmpeg-core.js` and `.wasm` so the browser cache is warmer before the verification worker runs `ff.load()`. Paths are defined in `src/lib/ffmpeg-verification-assets.ts`.
+
+**Implications for agents:** Prefer profiling and optimizations around **decode cost**, **worker/session reuse**, and **prewarm**; treat **moov-at-end** as an edge case (e.g. non-normalized uploads), not the primary bottleneck story for platform videos.
+
+---
+
 ## Dos and Don'ts
 
 ### Do

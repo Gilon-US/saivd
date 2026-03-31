@@ -3,6 +3,7 @@ import {useWatermarkVerification} from "../useWatermarkVerification";
 
 jest.mock("../../lib/wasm-watermark-verification-client", () => ({
   getFrameYFromWasm: jest.fn(),
+  ensureWasmVerificationSession: jest.fn(),
   disposeWasmVerificationSession: jest.fn(),
   prewarmWasmVerificationSession: jest.fn(),
   scheduleDisposeWasmVerificationSession: jest.fn(),
@@ -15,14 +16,19 @@ jest.mock("../../lib/watermark-verification", () => ({
   importPublicKeyFromPem: jest.fn(),
 }));
 
-import {getFrameYFromWasm} from "../../lib/wasm-watermark-verification-client";
-import { prewarmWasmVerificationSession } from "../../lib/wasm-watermark-verification-client";
+import {
+  ensureWasmVerificationSession,
+  getFrameYFromWasm,
+  prewarmWasmVerificationSession,
+} from "../../lib/wasm-watermark-verification-client";
 import {
   decodeNumericUserIdDiagnosticsFromLuma,
   fetchPublicKeyPem,
 } from "../../lib/watermark-verification";
 
 const mockedGetFrameYFromWasm = getFrameYFromWasm as jest.MockedFunction<typeof getFrameYFromWasm>;
+const mockedEnsureWasmVerificationSession =
+  ensureWasmVerificationSession as jest.MockedFunction<typeof ensureWasmVerificationSession>;
 const mockedPrewarmWasmVerificationSession =
   prewarmWasmVerificationSession as jest.MockedFunction<typeof prewarmWasmVerificationSession>;
 const mockedDecodeDiagnostics = decodeNumericUserIdDiagnosticsFromLuma as jest.MockedFunction<
@@ -50,6 +56,11 @@ describe("useWatermarkVerification bootstrap 3-frame consensus", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedPrewarmWasmVerificationSession.mockResolvedValue();
+    mockedEnsureWasmVerificationSession.mockResolvedValue({
+      nbSamples: 100,
+      width: 4,
+      height: 4,
+    });
     mockFrameCaptureSuccess();
     mockedFetchPublicKeyPem.mockRejectedValue(new Error("network"));
   });

@@ -1,6 +1,7 @@
 import type {Metadata} from "next";
 import {Geist, Geist_Mono} from "next/font/google";
 import {Toaster} from "@/components/ui/sonner";
+import {FfmpegVerificationAssetPrewarm} from "@/components/video/FfmpegVerificationAssetPrewarm";
 import {AuthProvider} from "@/contexts/AuthContext";
 import packageJson from "../../package.json";
 import "./globals.css";
@@ -29,6 +30,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased flex min-h-screen flex-col`} suppressHydrationWarning={true}>
         <AuthProvider>
+          <FfmpegVerificationAssetPrewarm />
           <main className="flex-1">{children}</main>
           <Toaster />
           <footer className="mt-auto py-2 text-center text-xs text-muted-foreground" role="contentinfo">
