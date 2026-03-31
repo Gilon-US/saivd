@@ -16,12 +16,27 @@ import {
 } from "@/lib/wasm-watermark-verification-client";
 
 export type WatermarkVerificationStatus = "idle" | "verifying" | "verified" | "failed";
+export type VerificationProgressPhase =
+  | "prewarm"
+  | "session_init"
+  | "moov_parse"
+  | "ffmpeg_load"
+  | "frame_decode"
+  | "key_fetch"
+  | "rsa_verify"
+  | "finalizing";
+export type VerificationProgress = {
+  phase: VerificationProgressPhase;
+  detail?: string;
+  ts: number;
+};
 
 type UseWatermarkVerificationOptions = {
   /** When true, run verification when the video has frame 0 available. */
   enabled: boolean;
   /** Callback when verification completes (success or failure). */
   onVerificationComplete?: (status: "verified" | "failed", userId: string | null) => void;
+  onVerificationProgress?: (progress: VerificationProgress) => void;
 };
 
 const SESSION_KEEPALIVE_TTL_MS = 45000;
@@ -42,7 +57,7 @@ export function useWatermarkVerification(
   videoUrl: string | null,
   options: UseWatermarkVerificationOptions
 ) {
-  const {enabled, onVerificationComplete} = options;
+  const {enabled, onVerificationComplete, onVerificationProgress} = options;
   const [status, setStatus] = useState<WatermarkVerificationStatus>("idle");
   const [verifiedUserId, setVerifiedUserId] = useState<string | null>(null);
   const publicKeyRef = useRef<CryptoKey | null>(null);
@@ -53,6 +68,8 @@ export function useWatermarkVerification(
   const verificationStartedRef = useRef(false);
   const inconclusiveGraceUsedRef = useRef(false);
   const prewarmStartedRef = useRef(false);
+  const onVerificationProgressRef = useRef<typeof onVerificationProgress>(onVerificationProgress);
+  const lastProgressRef = useRef<{phase: VerificationProgressPhase; detail?: string} | null>(null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const debugLog = (...args: any[]) => {
@@ -62,6 +79,21 @@ export function useWatermarkVerification(
   useEffect(() => {
     onVerificationCompleteRef.current = onVerificationComplete;
   }, [onVerificationComplete]);
+  useEffect(() => {
+    onVerificationProgressRef.current = onVerificationProgress;
+  }, [onVerificationProgress]);
+
+  const emitProgress = (phase: VerificationProgressPhase, detail?: string) => {
+    if (
+      lastProgressRef.current &&
+      lastProgressRef.current.phase === phase &&
+      lastProgressRef.current.detail === detail
+    ) {
+      return;
+    }
+    lastProgressRef.current = {phase, detail};
+    onVerificationProgressRef.current?.({phase, detail, ts: Date.now()});
+  };
 
   useEffect(() => {
     if (!enabled || !videoUrl) return;
@@ -69,6 +101,7 @@ export function useWatermarkVerification(
     prewarmStartedRef.current = true;
     verificationSessionKeyRef.current = videoUrl;
     const t0 = performance.now();
+    emitProgress("prewarm", "Warming verification engine");
     void prewarmWasmVerificationSession(videoUrl).finally(() => {
       console.log("[Frame0Decode] Prewarm complete", {
         prewarmMs: Math.round(performance.now() - t0),
@@ -90,6 +123,7 @@ export function useWatermarkVerification(
       inconclusiveGraceUsedRef.current = false;
       prewarmStartedRef.current = false;
       verifiedFrameIndicesRef.current = new Set();
+      lastProgressRef.current = null;
       scheduleDisposeWasmVerificationSession(SESSION_KEEPALIVE_TTL_MS);
       return;
     }
@@ -122,6 +156,9 @@ export function useWatermarkVerification(
 
     const runVerification = async () => {
       const initStart = performance.now();
+      emitProgress("session_init", "Preparing secure verification");
+      emitProgress("moov_parse", "Reading video structure");
+      emitProgress("ffmpeg_load", "Loading verification engine");
       let sessionMeta: Awaited<ReturnType<typeof ensureWasmVerificationSession>> = null;
       try {
         sessionMeta = await ensureWasmVerificationSession(videoUrl);
@@ -174,6 +211,7 @@ export function useWatermarkVerification(
       let strongFrame0Candidate: (typeof candidates)[number] | null = null;
 
       for (const frameIndex of frameIndexes) {
+        emitProgress("frame_decode", `Checking watermark on frame ${frameIndex}`);
         const frameStart = performance.now();
         const frameDecodeTimeoutMs =
           frameIndex === 0 ? frame0DecodeTimeoutMs : followupDecodeTimeoutMs;
@@ -312,6 +350,7 @@ export function useWatermarkVerification(
         frameDecodeMs: Math.round(performance.now() - decodeStart),
       });
       const keyFetchStart = performance.now();
+      emitProgress("key_fetch", "Retrieving signer key");
       let pem: string | null = null;
       try {
         debugLog("Fetching public key PEM", {numericUserId});
@@ -336,6 +375,7 @@ export function useWatermarkVerification(
       publicKeyRef.current = key;
 
       if (key) {
+        emitProgress("rsa_verify", "Validating authenticity signature");
         try {
           const result = await decodeAndVerifyFrameFromLuma(
             key,
@@ -354,6 +394,7 @@ export function useWatermarkVerification(
       }
 
       if (!mounted) return;
+      emitProgress("finalizing", "Final checks");
       const elapsed = Math.round(performance.now() - verifyStartTime);
       console.log("[Frame0Decode] Verification finished", { status: "verified", elapsedMs: elapsed });
       console.log("[Frame0Decode] Full video loads only after this (when <video> src is set). Verification used Range requests + WASM decode.");

@@ -3,7 +3,7 @@
 import {useEffect, useRef, useState, useCallback} from "react";
 import {X, Play, Pause, Volume2, VolumeX, Maximize} from "lucide-react";
 import {useFrameAnalysis, type FrameAnalysisFunction} from "@/hooks/useFrameAnalysis";
-import {useWatermarkVerification} from "@/hooks/useWatermarkVerification";
+import {useWatermarkVerification, type VerificationProgress, type VerificationProgressPhase} from "@/hooks/useWatermarkVerification";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
 import { prewarmWasmVerificationSession } from "@/lib/wasm-watermark-verification-client";
 
@@ -33,6 +33,8 @@ export function VideoPlayer({
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [verificationProgress, setVerificationProgress] = useState<VerificationProgress | null>(null);
+  const [microcopyIndex, setMicrocopyIndex] = useState(0);
 
   // Prevent playback until verification passes (for watermarked videos).
   // Only treat videos as playable when either:
@@ -54,7 +56,19 @@ export function VideoPlayer({
   useWatermarkVerification(videoRef, videoUrl ?? null, {
     enabled: verificationEnabled,
     onVerificationComplete,
+    onVerificationProgress: setVerificationProgress,
   });
+
+  useEffect(() => {
+    if (verificationStatus !== "verifying") {
+      setMicrocopyIndex(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setMicrocopyIndex((prev) => prev + 1);
+    }, 1700);
+    return () => window.clearInterval(id);
+  }, [verificationStatus, verificationProgress?.phase]);
 
   useEffect(() => {
     if (!isOpen || !enableFrameAnalysis || !videoUrl) return;
@@ -192,9 +206,15 @@ export function VideoPlayer({
           {/* Verification overlay */}
           {verificationStatus === "verifying" && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
-              <LoadingSpinner size="lg" />
-              <p className="mt-4 text-white text-center px-4 max-w-md">
-                We are verifying the video&apos;s authenticity. Your video will play shortly, please wait.
+              <div className="relative">
+                <div className="absolute inset-0 rounded-full border-2 border-white/20 animate-ping" />
+                <LoadingSpinner size="lg" />
+              </div>
+              <p className="mt-5 text-white text-center px-4 max-w-md font-medium">
+                {phaseHeadline(verificationProgress?.phase)}
+              </p>
+              <p className="mt-2 text-white/80 text-center px-4 max-w-lg text-sm">
+                {phaseMicrocopy(verificationProgress?.phase, microcopyIndex)}
               </p>
             </div>
           )}
@@ -288,4 +308,68 @@ function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+function phaseHeadline(phase?: VerificationProgressPhase): string {
+  switch (phase) {
+    case "session_init":
+      return "Preparing secure verification";
+    case "moov_parse":
+      return "Reading video structure";
+    case "ffmpeg_load":
+      return "Loading verification engine";
+    case "frame_decode":
+      return "Checking watermark on frame 0";
+    case "key_fetch":
+      return "Retrieving signer key";
+    case "rsa_verify":
+      return "Validating authenticity signature";
+    case "finalizing":
+      return "Final checks";
+    default:
+      return "Verifying authenticity";
+  }
+}
+
+function phaseMicrocopy(phase: VerificationProgressPhase | undefined, index: number): string {
+  const messages: Record<VerificationProgressPhase | "default", string[]> = {
+    prewarm: [
+      "Getting things ready for a faster start.",
+      "Warming the verification stack.",
+    ],
+    session_init: [
+      "Starting a secure verification session.",
+      "Preparing everything needed to validate this video.",
+    ],
+    moov_parse: [
+      "Inspecting video metadata and frame layout.",
+      "Mapping where verification data lives in frame 0.",
+    ],
+    ffmpeg_load: [
+      "Loading the decode engine on your device.",
+      "One-time setup can take a little longer on mobile.",
+    ],
+    frame_decode: [
+      "Decoding frame 0 and extracting watermark bits.",
+      "Checking embedded identity markers now.",
+    ],
+    key_fetch: [
+      "Fetching the creator verification key.",
+      "Contacting the key service securely.",
+    ],
+    rsa_verify: [
+      "Running cryptographic signature validation.",
+      "Confirming the decoded identity is authentic.",
+    ],
+    finalizing: [
+      "Finishing up and enabling playback.",
+      "Almost done.",
+    ],
+    default: [
+      "Your video will play automatically once verification completes.",
+      "Thanks for waiting while we verify authenticity.",
+    ],
+  };
+  const list = messages[phase ?? "default"];
+  return list[index % list.length];
 }

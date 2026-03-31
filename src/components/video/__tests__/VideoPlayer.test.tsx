@@ -170,6 +170,17 @@ describe('VideoPlayer', () => {
     expect(screen.queryByText('Analysis Alert')).not.toBeInTheDocument();
   });
 
+  it('shows staged verification overlay copy while verifying', () => {
+    render(
+      <VideoPlayer
+        {...defaultProps}
+        enableFrameAnalysis={true}
+        verificationStatus="verifying"
+      />
+    );
+    expect(screen.getByText(/Verifying authenticity|Preparing secure verification/i)).toBeInTheDocument();
+  });
+
   it('has proper accessibility attributes', () => {
     render(<VideoPlayer {...defaultProps} />);
     
