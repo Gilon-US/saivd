@@ -70,6 +70,10 @@ export function useWatermarkVerification(
   const prewarmStartedRef = useRef(false);
   const onVerificationProgressRef = useRef<typeof onVerificationProgress>(onVerificationProgress);
   const lastProgressRef = useRef<{phase: VerificationProgressPhase; detail?: string} | null>(null);
+  /** Counts concurrent follow-up (verified) tick decodes — >1 means overlapping async ticks. */
+  const followupTickDepthRef = useRef(0);
+  /** True only for the synchronous stretch after we call `video.pause()` from verification failure paths. */
+  const programmaticPauseForDiagRef = useRef(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const debugLog = (...args: any[]) => {
@@ -437,6 +441,47 @@ export function useWatermarkVerification(
     if (!video) return;
     let cancelled = false;
 
+    const pauseFromVerification = (reason: string) => {
+      debugLog("playback: calling video.pause()", {
+        reason,
+        currentTime: video.currentTime,
+        readyState: video.readyState,
+      });
+      programmaticPauseForDiagRef.current = true;
+      video.pause();
+    };
+
+    const onPause = () => {
+      const fromVerification = programmaticPauseForDiagRef.current;
+      programmaticPauseForDiagRef.current = false;
+      debugLog("playback: video 'pause' event", {
+        fromVerification,
+        currentTime: video.currentTime,
+        readyState: video.readyState,
+      });
+    };
+
+    const onWaiting = () => {
+      debugLog("playback: video 'waiting' (buffering)", {
+        currentTime: video.currentTime,
+        readyState: video.readyState,
+        networkState: video.networkState,
+        followupTickDepth: followupTickDepthRef.current,
+      });
+    };
+
+    const onStalled = () => {
+      debugLog("playback: video 'stalled'", {
+        currentTime: video.currentTime,
+        readyState: video.readyState,
+        networkState: video.networkState,
+      });
+    };
+
+    video.addEventListener("pause", onPause);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("stalled", onStalled);
+
     const tick = async () => {
       if (cancelled) return;
       if (video.paused || video.ended) return;
@@ -450,60 +495,96 @@ export function useWatermarkVerification(
       const checkpoint = Math.floor(currentFrame / 10) * 10;
       if (checkpoint <= 0 || verifiedFrameIndicesRef.current.has(checkpoint)) return;
 
+      followupTickDepthRef.current += 1;
+      const depth = followupTickDepthRef.current;
+      if (depth > 1) {
+        debugLog("playback: follow-up tick overlap (previous decode still in flight)", {
+          depth,
+          checkpoint,
+          currentTime: video.currentTime,
+        });
+      }
+
+      const tickT0 = performance.now();
       let wasmFrame: Awaited<ReturnType<typeof getFrameYFromWasm>> = null;
       try {
-        wasmFrame = await getFrameYFromWasm(videoUrl, checkpoint);
-      } catch {
-        wasmFrame = null;
-      }
-      if (!wasmFrame) {
-        if (inconclusiveGraceUsedRef.current) {
-          setStatus("failed");
-          video.pause();
-          if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
-            callbackFiredRef.current = true;
-            onVerificationCompleteRef.current("failed", null);
-          }
-        } else {
-          inconclusiveGraceUsedRef.current = true;
-          verifiedFrameIndicesRef.current.add(checkpoint);
+        const wasmT0 = performance.now();
+        try {
+          wasmFrame = await getFrameYFromWasm(videoUrl, checkpoint);
+        } catch {
+          wasmFrame = null;
         }
-        return;
-      }
-
-      const frameResult = await decodeAndVerifyFrameFromLuma(
-        key,
-        wasmFrame.yPlane,
-        wasmFrame.width,
-        wasmFrame.height
-      );
-      if (frameResult.verified) {
-        inconclusiveGraceUsedRef.current = false;
-        verifiedFrameIndicesRef.current.add(checkpoint);
-        return;
-      }
-
-      if (frameResult.numericUserId === null) {
-        if (inconclusiveGraceUsedRef.current) {
-          setStatus("failed");
-          video.pause();
-          if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
-            callbackFiredRef.current = true;
-            onVerificationCompleteRef.current("failed", null);
-          }
+        const wasmMs = Math.round(performance.now() - wasmT0);
+        if (wasmFrame) {
+          debugLog("playback: getFrameYFromWasm ok", {checkpoint, wasmMs, width: wasmFrame.width, height: wasmFrame.height});
         } else {
-          inconclusiveGraceUsedRef.current = true;
-          verifiedFrameIndicesRef.current.add(checkpoint);
+          debugLog("playback: getFrameYFromWasm failed/null", {checkpoint, wasmMs});
         }
-        return;
-      }
 
-      // Cryptographic mismatch -> immediate stop
-      setStatus("failed");
-      video.pause();
-      if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
-        callbackFiredRef.current = true;
-        onVerificationCompleteRef.current("failed", null);
+        if (!wasmFrame) {
+          if (inconclusiveGraceUsedRef.current) {
+            setStatus("failed");
+            pauseFromVerification("follow-up decode null after grace");
+            if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
+              callbackFiredRef.current = true;
+              onVerificationCompleteRef.current("failed", null);
+            }
+          } else {
+            inconclusiveGraceUsedRef.current = true;
+            verifiedFrameIndicesRef.current.add(checkpoint);
+          }
+          return;
+        }
+
+        const rsaT0 = performance.now();
+        const frameResult = await decodeAndVerifyFrameFromLuma(
+          key,
+          wasmFrame.yPlane,
+          wasmFrame.width,
+          wasmFrame.height
+        );
+        const rsaMs = Math.round(performance.now() - rsaT0);
+        debugLog("playback: decodeAndVerifyFrameFromLuma", {
+          checkpoint,
+          rsaMs,
+          verified: frameResult.verified,
+          numericUserId: frameResult.numericUserId,
+        });
+
+        if (frameResult.verified) {
+          inconclusiveGraceUsedRef.current = false;
+          verifiedFrameIndicesRef.current.add(checkpoint);
+          return;
+        }
+
+        if (frameResult.numericUserId === null) {
+          if (inconclusiveGraceUsedRef.current) {
+            setStatus("failed");
+            pauseFromVerification("inconclusive after grace");
+            if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
+              callbackFiredRef.current = true;
+              onVerificationCompleteRef.current("failed", null);
+            }
+          } else {
+            inconclusiveGraceUsedRef.current = true;
+            verifiedFrameIndicesRef.current.add(checkpoint);
+          }
+          return;
+        }
+
+        // Cryptographic mismatch -> immediate stop
+        setStatus("failed");
+        pauseFromVerification("cryptographic mismatch");
+        if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
+          callbackFiredRef.current = true;
+          onVerificationCompleteRef.current("failed", null);
+        }
+      } finally {
+        followupTickDepthRef.current -= 1;
+        const totalMs = Math.round(performance.now() - tickT0);
+        if (totalMs >= 40) {
+          debugLog("playback: follow-up tick finished", {checkpoint, totalMs, depthEnded: depth});
+        }
       }
     };
 
@@ -513,6 +594,9 @@ export function useWatermarkVerification(
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("stalled", onStalled);
     };
   }, [enabled, status, videoRef, videoUrl]);
 
