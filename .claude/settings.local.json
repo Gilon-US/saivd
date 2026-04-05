@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ffprobe -v quiet -print_format json -show_format -show_streams \"/Users/ben/Development/SAVD/CODE/savd-app/docs/95C0E148-DE71-4FB6-B72D-87480004D09E-watermarked.mp4\" 2>&1)",
+      "Bash(ffprobe -v quiet -print_format json -show_packets -select_streams v:0 \"/Users/ben/Development/SAVD/CODE/savd-app/docs/95C0E148-DE71-4FB6-B72D-87480004D09E-watermarked.mp4\" 2>&1 | python3 -c \"\nimport json, sys\ndata = json.load\\(sys.stdin\\)\npackets = data['packets']\nkeyframes = [p for p in packets if p.get\\('flags',''\\) == 'K_']\nprint\\(f'Total video packets: {len\\(packets\\)}'\\)\nprint\\(f'Keyframes: {len\\(keyframes\\)}'\\)\nif len\\(keyframes\\) > 1:\n    pts_vals = [float\\(p['pts_time']\\) for p in keyframes]\n    intervals = [pts_vals[i+1]-pts_vals[i] for i in range\\(len\\(pts_vals\\)-1\\)]\n    print\\(f'Keyframe interval range: {min\\(intervals\\):.3f}s - {max\\(intervals\\):.3f}s'\\)\n    print\\(f'Avg keyframe interval: {sum\\(intervals\\)/len\\(intervals\\):.3f}s'\\)\n    print\\('Keyframe timestamps:', [f\\\\\"{t:.2f}\\\\\" for t in pts_vals]\\)\n\" 2>&1)"
+    ]
+  }
+}

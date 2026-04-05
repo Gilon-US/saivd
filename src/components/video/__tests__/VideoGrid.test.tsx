@@ -2,10 +2,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { VideoGrid, Video } from '../VideoGrid';
 
-// Mock the useToast hook
+const toastMock = jest.fn();
 jest.mock('@/hooks/useToast', () => ({
   useToast: jest.fn(() => ({
-    toast: jest.fn(),
+    toast: toastMock,
   })),
 }));
 
@@ -17,7 +17,30 @@ jest.mock('next/image', () => ({
   },
 }));
 
+function mockFetchForVideoGrid() {
+  global.fetch = jest.fn((input: RequestInfo | URL) => {
+    const u =
+      typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+    if (u.includes('/api/videos/watermark/status')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ success: true, data: { jobs: [] } }),
+      } as Response);
+    }
+    return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+  });
+}
+
 describe('VideoGrid', () => {
+  beforeEach(() => {
+    toastMock.mockClear();
+    mockFetchForVideoGrid();
+  });
+
   const mockVideos: Video[] = [
     {
       id: '1',
@@ -48,6 +71,7 @@ describe('VideoGrid', () => {
     isLoading: false,
     error: null,
     onRefresh: jest.fn(),
+    onSilentRefresh: jest.fn(),
     onOpenUploadModal: jest.fn(),
   };
 
@@ -119,14 +143,8 @@ describe('VideoGrid', () => {
 
   describe('Delete functionality', () => {
     beforeEach(() => {
-      // Reset all mocks before each test
       jest.clearAllMocks();
-      // Mock fetch globally
-      global.fetch = jest.fn();
-    });
-
-    afterEach(() => {
-      jest.restoreAllMocks();
+      mockFetchForVideoGrid();
     });
 
     it('renders delete button for each video', () => {
@@ -144,9 +162,9 @@ describe('VideoGrid', () => {
       const deleteButton = screen.getByTitle('Delete "test-video.mp4"');
       fireEvent.click(deleteButton);
       
-      expect(screen.getByText('Delete Video')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Delete Video' })).toBeInTheDocument();
       expect(screen.getByText('Are you sure you want to delete this video?')).toBeInTheDocument();
-      expect(screen.getByText(/test-video\.mp4/)).toBeInTheDocument();
+      expect(screen.getAllByText('test-video.mp4').length).toBeGreaterThanOrEqual(1);
     });
 
     it('closes confirmation dialog when cancel is clicked', () => {
@@ -160,18 +178,24 @@ describe('VideoGrid', () => {
       const cancelButton = screen.getByText('Cancel');
       fireEvent.click(cancelButton);
       
-      expect(screen.queryByText('Delete Video')).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Delete Video' })).not.toBeInTheDocument();
     });
 
     it('calls delete API and refreshes grid on successful deletion', async () => {
       const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
-      mockFetch.mockResolvedValueOnce({
+      const statusResponse = {
+        ok: true,
+        json: async () => ({ success: true, data: { jobs: [] } }),
+      } as Response;
+      const deleteResponse = {
         ok: true,
         json: async () => ({
           success: true,
           data: { message: 'Video deleted successfully', id: '1' }
         }),
-      } as Response);
+      } as Response;
+      mockFetch.mockResolvedValueOnce(statusResponse);
+      mockFetch.mockResolvedValueOnce(deleteResponse);
 
       render(<VideoGrid {...mockProps} />);
       
@@ -180,7 +204,7 @@ describe('VideoGrid', () => {
       fireEvent.click(deleteButton);
       
       // Confirm deletion
-      const confirmButton = screen.getByText('Delete Video');
+      const confirmButton = screen.getByRole('button', { name: 'Delete Video' });
       fireEvent.click(confirmButton);
       
       await waitFor(() => {
@@ -193,19 +217,19 @@ describe('VideoGrid', () => {
 
     it('shows error message on failed deletion', async () => {
       const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
-      mockFetch.mockResolvedValueOnce({
+      const statusResponse = {
+        ok: true,
+        json: async () => ({ success: true, data: { jobs: [] } }),
+      } as Response;
+      const deleteResponse = {
         ok: false,
         json: async () => ({
           success: false,
           error: { message: 'Failed to delete video' }
         }),
-      } as Response);
-
-      const mockToast = jest.fn();
-      // Mock the useToast hook for this specific test
-      jest.doMock('@/hooks/useToast', () => ({
-        useToast: () => ({ toast: mockToast }),
-      }));
+      } as Response;
+      mockFetch.mockResolvedValueOnce(statusResponse);
+      mockFetch.mockResolvedValueOnce(deleteResponse);
 
       render(<VideoGrid {...mockProps} />);
       
@@ -214,11 +238,11 @@ describe('VideoGrid', () => {
       fireEvent.click(deleteButton);
       
       // Confirm deletion
-      const confirmButton = screen.getByText('Delete Video');
+      const confirmButton = screen.getByRole('button', { name: 'Delete Video' });
       fireEvent.click(confirmButton);
       
       await waitFor(() => {
-        expect(mockToast).toHaveBeenCalledWith({
+        expect(toastMock).toHaveBeenCalledWith({
           title: 'Delete failed',
           description: 'Failed to delete video',
           variant: 'error',
@@ -228,13 +252,33 @@ describe('VideoGrid', () => {
 
     it('disables buttons during deletion process', async () => {
       const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
-      // Mock a slow response to test loading state
-      mockFetch.mockImplementation(() => 
-        new Promise(resolve => setTimeout(() => resolve({
-          ok: true,
-          json: async () => ({ success: true, data: { message: 'Video deleted successfully', id: '1' } })
-        } as Response), 100))
-      );
+      mockFetch.mockImplementation((input: RequestInfo | URL) => {
+        const u =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (u.includes('/api/videos/watermark/status')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ success: true, data: { jobs: [] } }),
+          } as Response);
+        }
+        return new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                ok: true,
+                json: async () => ({
+                  success: true,
+                  data: { message: 'Video deleted successfully', id: '1' },
+                }),
+              } as Response),
+            100
+          )
+        );
+      });
 
       render(<VideoGrid {...mockProps} />);
       
@@ -243,12 +287,85 @@ describe('VideoGrid', () => {
       fireEvent.click(deleteButton);
       
       // Confirm deletion
-      const confirmButton = screen.getByText('Delete Video');
+      const confirmButton = screen.getByRole('button', { name: 'Delete Video' });
       fireEvent.click(confirmButton);
       
       // Check that buttons are disabled during deletion
       expect(screen.getByText('Deleting...')).toBeInTheDocument();
       expect(screen.getByText('Cancel')).toBeDisabled();
+    });
+  });
+
+  describe('Download original upload', () => {
+    let prevCreateObjectURL: typeof URL.createObjectURL | undefined;
+    let prevRevokeObjectURL: typeof URL.revokeObjectURL | undefined;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      prevCreateObjectURL = URL.createObjectURL;
+      prevRevokeObjectURL = URL.revokeObjectURL;
+      URL.createObjectURL = jest.fn(() => 'blob:mock-url');
+      URL.revokeObjectURL = jest.fn();
+
+      global.fetch = jest.fn((input: RequestInfo | URL) => {
+        const u =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (u.includes('/api/videos/watermark/status')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ success: true, data: { jobs: [] } }),
+          } as Response);
+        }
+        if (u.includes('variant=upload')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              data: { playbackUrl: 'https://wasabi.example/presigned' },
+            }),
+          } as Response);
+        }
+        if (u.includes('wasabi.example')) {
+          return Promise.resolve({
+            ok: true,
+            blob: async () => new Blob(['bytes'], { type: 'video/mp4' }),
+          } as Response);
+        }
+        return Promise.resolve({
+          ok: false,
+          json: async () => ({}),
+        } as Response);
+      });
+    });
+
+    afterEach(() => {
+      if (prevCreateObjectURL !== undefined) {
+        URL.createObjectURL = prevCreateObjectURL;
+      } else {
+        delete (URL as unknown as { createObjectURL?: unknown }).createObjectURL;
+      }
+      if (prevRevokeObjectURL !== undefined) {
+        URL.revokeObjectURL = prevRevokeObjectURL;
+      } else {
+        delete (URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL;
+      }
+    });
+
+    it('requests presigned upload variant then fetches the file', async () => {
+      render(<VideoGrid {...mockProps} videos={[mockVideos[0]]} />);
+
+      fireEvent.click(screen.getByTitle('Download original upload'));
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          expect.stringContaining('/api/videos/1/play?variant=upload')
+        );
+        expect(global.fetch).toHaveBeenCalledWith('https://wasabi.example/presigned');
+      });
     });
   });
 });

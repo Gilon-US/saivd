@@ -314,6 +314,60 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     }
   };
 
+  const handleDownloadOriginal = async (video: Video) => {
+    try {
+      if (!video.original_url) {
+        toast({
+          title: "Download unavailable",
+          description: "Original upload is not available for download.",
+          variant: "error",
+        });
+        return;
+      }
+
+      toast({
+        title: "Preparing download",
+        description: `Generating download link for "${video.filename}"...`,
+      });
+
+      const response = await fetch(`/api/videos/${video.id}/play?variant=upload`);
+      const data = await response.json();
+
+      if (!response.ok || !data.success || !data.data?.playbackUrl) {
+        throw new Error(data.error?.message || "Failed to generate download URL");
+      }
+
+      const presignedUrl = data.data.playbackUrl;
+      const videoResponse = await fetch(presignedUrl);
+      if (!videoResponse.ok) {
+        throw new Error("Failed to fetch video file");
+      }
+
+      const blob = await videoResponse.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = video.filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(blobUrl);
+
+      toast({
+        title: "Download started",
+        description: `Downloading "${video.filename}"...`,
+        variant: "success",
+      });
+    } catch (error) {
+      console.error("Error downloading original upload:", error);
+      toast({
+        title: "Download failed",
+        description: error instanceof Error ? error.message : "Failed to download video. Please try again.",
+        variant: "error",
+      });
+    }
+  };
+
   const handleCreateWatermark = async (video: Video) => {
     toast({
       title: "Creating watermarked version",
@@ -668,6 +722,20 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                   <div
                     className="w-60 max-w-[240px] aspect-video relative bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
                     onClick={() => handleVideoClick(video, "original")}>
+                    {video.original_url && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-1 left-1 h-7 w-7 rounded-full bg-white/80 hover:bg-white shadow-sm z-10"
+                        title="Download original upload"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownloadOriginal(video);
+                        }}>
+                        <Download className="h-3 w-3" />
+                      </Button>
+                    )}
                     {isOpeningVideo === video.id && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
                         <LoadingSpinner size="sm" />
