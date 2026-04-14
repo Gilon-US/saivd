@@ -32,6 +32,12 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
     };
   }
 
+  // Manager API enqueues at POST /watermark; queue_status/clear_queue use the same base URL.
+  const watermarkBaseUrl = watermarkServiceUrl.replace(/\/+$/, "");
+  const watermarkEnqueueUrl = watermarkBaseUrl.endsWith("/watermark")
+    ? watermarkBaseUrl
+    : `${watermarkBaseUrl}/watermark`;
+
   const supabase = createServiceRoleClient();
 
   const {data: video, error: videoError} = await supabase
@@ -184,7 +190,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
 
   let response: Response;
   try {
-    response = await fetch(watermarkServiceUrl, {
+    response = await fetch(watermarkEnqueueUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -196,7 +202,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
   } catch (error: unknown) {
     if (error instanceof Error && error.name === "AbortError") {
       console.error("[enqueueWatermark] External service request timed out", {
-        watermarkServiceUrl,
+        watermarkEnqueueUrl,
         timeoutMs,
       });
       return {
