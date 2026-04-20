@@ -43,8 +43,10 @@ function verifyNormalizeSignature(
 
 export async function POST(request: NextRequest) {
   try {
+    const requestId = `nwh_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const secret = process.env.NORMALIZE_CALLBACK_HMAC_SECRET;
     if (!secret) {
+      console.error("[Normalize Webhook] Missing callback secret", {requestId});
       return NextResponse.json(
         { error: "Webhook not configured" },
         { status: 500 }
@@ -54,6 +56,7 @@ export async function POST(request: NextRequest) {
     const url = new URL(request.url);
     const videoId = url.searchParams.get("videoId");
     if (!videoId || !videoId.trim()) {
+      console.warn("[Normalize Webhook] Missing videoId query parameter", {requestId});
       return NextResponse.json(
         { error: "Missing videoId query parameter" },
         { status: 400 }
@@ -63,9 +66,18 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await request.arrayBuffer();
     const rawBody = Buffer.from(arrayBuffer);
     const signature = request.headers.get(SIGNATURE_HEADER);
+    console.log("[Normalize Webhook] Callback received", {
+      requestId,
+      videoId: videoId.trim(),
+      bodyBytes: rawBody.length,
+      hasSignatureHeader: Boolean(signature),
+    });
 
     if (!verifyNormalizeSignature(rawBody, signature, secret)) {
-      console.warn("[Normalize Webhook] Rejected: invalid HMAC signature");
+      console.warn("[Normalize Webhook] Rejected: invalid HMAC signature", {
+        requestId,
+        videoId: videoId.trim(),
+      });
       return NextResponse.json(
         { error: "Invalid signature" },
         { status: 401 }
@@ -76,10 +88,22 @@ export async function POST(request: NextRequest) {
     try {
       payload = JSON.parse(rawBody.toString("utf-8")) as NormalizeCallbackPayload;
     } catch {
+      console.warn("[Normalize Webhook] Invalid JSON body", {
+        requestId,
+        videoId: videoId.trim(),
+      });
       return NextResponse.json({error: "Invalid JSON body"}, {status: 400});
     }
 
     const {status, message, output_location} = payload;
+    console.log("[Normalize Webhook] Parsed callback payload", {
+      requestId,
+      videoId: videoId.trim(),
+      status,
+      hasOutputLocation: Boolean(output_location),
+      message: message ?? null,
+      jobId: payload.job_id ?? null,
+    });
     const supabase = createServiceRoleClient();
     const trimmedVideoId = videoId.trim();
 
@@ -95,6 +119,7 @@ export async function POST(request: NextRequest) {
 
       if (updateError) {
         console.error("[Normalize Webhook] Failed to update progress", {
+          requestId,
           videoId,
           updateError,
         });
@@ -124,6 +149,7 @@ export async function POST(request: NextRequest) {
 
       if (updateError) {
         console.error("[Normalize Webhook] Failed to update on success", {
+          requestId,
           videoId,
           updateError,
         });
@@ -140,6 +166,7 @@ export async function POST(request: NextRequest) {
 
         if (fetchError || !currentVideo) {
           console.error("[Normalize Webhook] Failed to reload video before watermark enqueue", {
+            requestId,
             videoId,
             fetchError,
           });
@@ -147,18 +174,21 @@ export async function POST(request: NextRequest) {
           const enqueueResult = await enqueueWatermarkForVideo(trimmedVideoId);
           if (!enqueueResult.success) {
             console.error("[Normalize Webhook] Failed to enqueue watermark after normalize", {
+              requestId,
               videoId,
               code: enqueueResult.code,
               message: enqueueResult.message,
             });
           } else {
             console.log("[Normalize Webhook] Watermark enqueued after normalize", {
+              requestId,
               videoId,
               jobId: enqueueResult.jobId ?? "(none)",
             });
           }
         } else {
           console.log("[Normalize Webhook] Skipping watermark enqueue; already processing/processed", {
+            requestId,
             videoId,
             status: currentVideo.status,
             hasProcessedUrl: !!currentVideo.processed_url,
@@ -166,12 +196,14 @@ export async function POST(request: NextRequest) {
         }
       } catch (enqueueError) {
         console.error("[Normalize Webhook] Unexpected error while enqueueing watermark", {
+          requestId,
           videoId,
           enqueueError,
         });
       }
 
       console.log("[Normalize Webhook] Video normalized", {
+        requestId,
         videoId,
         output_location,
       });
@@ -190,12 +222,14 @@ export async function POST(request: NextRequest) {
 
       if (updateError) {
         console.error("[Normalize Webhook] Failed to update on failure", {
+          requestId,
           videoId,
           updateError,
         });
         return NextResponse.json({error: "Failed to update video"}, {status: 500});
       }
       console.log("[Normalize Webhook] Normalization failed", {
+        requestId,
         videoId,
         message: message ?? "(none)",
       });

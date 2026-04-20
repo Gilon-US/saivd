@@ -7,8 +7,10 @@ import {enqueueWatermarkForVideo} from "@/lib/enqueue-watermark";
 export async function POST(_request: NextRequest, context: {params: Promise<{id: string}>}) {
   try {
     const {id: videoId} = await context.params;
+    const requestId = `wm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     if (!videoId || typeof videoId !== "string" || !videoId.trim()) {
+      console.warn("[Watermark] Invalid request payload", {requestId, videoId});
       return NextResponse.json(
         {success: false, error: {code: "validation_error", message: "Video ID is required"}},
         {status: 400}
@@ -22,11 +24,17 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
     } = await supabase.auth.getUser();
 
     if (!user) {
+      console.warn("[Watermark] Unauthorized watermark request", {requestId, videoId});
       return NextResponse.json(
         {success: false, error: {code: "unauthorized", message: "Authentication required"}},
         {status: 401}
       );
     }
+    console.log("[Watermark] Received watermark request", {
+      requestId,
+      videoId,
+      userId: user.id,
+    });
 
     // Load video and ensure it belongs to the user (authorization check only).
     const {data: video, error: videoError} = await supabase
@@ -37,14 +45,31 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       .single();
 
     if (videoError || !video) {
-      console.error("[Watermark] Video not found or not owned by user", { videoId, videoError });
+      console.error("[Watermark] Video not found or not owned by user", {
+        requestId,
+        videoId,
+        userId: user.id,
+        videoError,
+      });
       return NextResponse.json({success: false, error: {code: "not_found", message: "Video not found"}}, {status: 404});
     }
 
+    console.log("[Watermark] Enqueuing watermark job", {
+      requestId,
+      videoId: video.id,
+      userId: user.id,
+    });
     const enqueueResult = await enqueueWatermarkForVideo(videoId.trim());
 
     if (!enqueueResult.success) {
       const {code, message} = enqueueResult;
+      console.error("[Watermark] Failed to enqueue watermark job", {
+        requestId,
+        videoId: video.id,
+        userId: user.id,
+        code,
+        message,
+      });
 
       if (code === "not_found") {
         return NextResponse.json(
@@ -88,6 +113,12 @@ export async function POST(_request: NextRequest, context: {params: Promise<{id:
       );
     }
 
+    console.log("[Watermark] Watermark job enqueued", {
+      requestId,
+      videoId: video.id,
+      userId: user.id,
+      jobId: enqueueResult.jobId ?? null,
+    });
     return NextResponse.json({
       success: true,
       data: {

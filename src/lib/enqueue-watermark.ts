@@ -15,7 +15,9 @@ type WatermarkAsyncResponse = {
 };
 
 export async function enqueueWatermarkForVideo(videoId: string): Promise<EnqueueResult> {
+  const requestId = `ewm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   if (!videoId || typeof videoId !== "string" || !videoId.trim()) {
+    console.warn("[enqueueWatermark] Invalid input", {requestId, videoId});
     return {
       success: false,
       code: "validation_error",
@@ -25,6 +27,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
 
   const watermarkServiceUrl = process.env.WATERMARK_SERVICE_URL;
   if (!watermarkServiceUrl) {
+    console.error("[enqueueWatermark] Missing WATERMARK_SERVICE_URL", {requestId, videoId});
     return {
       success: false,
       code: "config_error",
@@ -37,6 +40,14 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
   const watermarkEnqueueUrl = watermarkBaseUrl.endsWith("/watermark")
     ? watermarkBaseUrl
     : `${watermarkBaseUrl}/watermark`;
+  console.log("[enqueueWatermark] Starting watermark enqueue flow", {
+    requestId,
+    videoId,
+    endpoint: watermarkEnqueueUrl,
+    hasCallbackUrl: Boolean(process.env.WATERMARK_CALLBACK_URL || process.env.NEXT_PUBLIC_APP_URL),
+    hasCallbackSecret: Boolean(process.env.WATERMARK_CALLBACK_HMAC_SECRET),
+    timeoutMsEnv: process.env.WATERMARK_TIMEOUT_MS ?? null,
+  });
 
   const supabase = createServiceRoleClient();
 
@@ -47,7 +58,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
     .single();
 
   if (videoError || !video) {
-    console.error("[enqueueWatermark] Video not found", {videoId, videoError});
+    console.error("[enqueueWatermark] Video not found", {requestId, videoId, videoError});
     return {
       success: false,
       code: "not_found",
@@ -63,6 +74,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
 
   if (profileError || !profile || profile.numeric_user_id == null) {
     console.error("[enqueueWatermark] Missing profile or numeric_user_id", {
+      requestId,
       userId: video.user_id,
       profileError,
     });
@@ -114,6 +126,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
 
   if (!inputLocation) {
     console.error("[enqueueWatermark] Video missing inputLocation", {
+      requestId,
       videoId: video.id,
       original_url: video.original_url,
       normalized_url: video.normalized_url,
@@ -132,6 +145,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
   const numericUserIdForApi = Number(profile.numeric_user_id);
   if (!Number.isInteger(numericUserIdForApi)) {
     console.error("[enqueueWatermark] profile.numeric_user_id is not a valid integer", {
+      requestId,
       numeric_user_id: profile.numeric_user_id,
       type: typeof profile.numeric_user_id,
     });
@@ -149,6 +163,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
 
   if (!callbackUrl || !callbackUrl.startsWith("http")) {
     console.error("[enqueueWatermark] Callback URL not configured", {
+      requestId,
       hasWatermarkCallbackUrl: !!process.env.WATERMARK_CALLBACK_URL,
       hasAppUrl: !!appUrl,
     });
@@ -161,6 +176,10 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
   }
 
   if (!callbackHmacSecret) {
+    console.error("[enqueueWatermark] Missing WATERMARK_CALLBACK_HMAC_SECRET", {
+      requestId,
+      videoId: video.id,
+    });
     return {
       success: false,
       code: "config_error",
@@ -190,6 +209,14 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
 
   let response: Response;
   try {
+    console.log("[enqueueWatermark] Dispatching request to manager", {
+      requestId,
+      videoId: video.id,
+      endpoint: watermarkEnqueueUrl,
+      bucket: WASABI_BUCKET,
+      hasNormalizedInput: Boolean(video.normalized_url),
+      callbackHost: new URL(callbackUrl).host,
+    });
     response = await fetch(watermarkEnqueueUrl, {
       method: "POST",
       headers: {
@@ -202,6 +229,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
   } catch (error: unknown) {
     if (error instanceof Error && error.name === "AbortError") {
       console.error("[enqueueWatermark] External service request timed out", {
+        requestId,
         watermarkEnqueueUrl,
         timeoutMs,
       });
@@ -211,7 +239,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
         message: "Watermark service request timed out",
       };
     }
-    console.error("[enqueueWatermark] External service request failed", {error});
+    console.error("[enqueueWatermark] External service request failed", {requestId, error});
     return {
       success: false,
       code: "watermark_error",
@@ -239,7 +267,11 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
     };
   }
 
-  console.log("[enqueueWatermark] External API start response", {status: response.status, payload});
+  console.log("[enqueueWatermark] External API start response", {
+    requestId,
+    status: response.status,
+    payload,
+  });
 
   if (response.status === 400) {
     const detail = (payload as {detail?: string} | null)?.detail ?? rawText ?? "";
@@ -258,6 +290,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
 
   if (!response.ok || !payload || payload.status !== "processing" || !payload.path) {
     console.error("[enqueueWatermark] Service rejected or invalid response", {
+      requestId,
       status: response.status,
       payload,
     });
@@ -280,6 +313,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
 
   if (updateError || !updatedVideo) {
     console.error("[enqueueWatermark] Failed to update video status to processing", {
+      requestId,
       videoId: video.id,
       updateError,
     });
@@ -298,6 +332,7 @@ export async function enqueueWatermarkForVideo(videoId: string): Promise<Enqueue
         : null;
 
   console.log("[enqueueWatermark] Job enqueued", {
+    requestId,
     videoId: video.id,
     outputPath: payload.path,
     jobId: jobId ?? "(none)",

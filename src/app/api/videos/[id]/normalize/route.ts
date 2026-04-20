@@ -15,6 +15,7 @@ export async function POST(
 ) {
   try {
     const { id: videoId } = await context.params;
+    const requestId = `norm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     if (!videoId || typeof videoId !== "string" || !videoId.trim()) {
       return NextResponse.json(
@@ -31,7 +32,16 @@ export async function POST(
 
     const normalizeServiceUrl =
       process.env.WATERMARK_API_URL ?? process.env.WATERMARK_SERVICE_URL;
+    const normalizeServiceSource = process.env.WATERMARK_API_URL
+      ? "WATERMARK_API_URL"
+      : "WATERMARK_SERVICE_URL";
     if (!normalizeServiceUrl) {
+      console.error("[Normalize] Missing normalize service URL", {
+        requestId,
+        videoId,
+        hasWatermarkApiUrl: Boolean(process.env.WATERMARK_API_URL),
+        hasWatermarkServiceUrl: Boolean(process.env.WATERMARK_SERVICE_URL),
+      });
       return NextResponse.json(
         {
           success: false,
@@ -47,6 +57,10 @@ export async function POST(
 
     const callbackSecret = process.env.NORMALIZE_CALLBACK_HMAC_SECRET;
     if (!callbackSecret) {
+      console.error("[Normalize] Missing callback HMAC secret", {
+        requestId,
+        videoId,
+      });
       return NextResponse.json(
         {
           success: false,
@@ -65,6 +79,10 @@ export async function POST(
     } = await supabase.auth.getUser();
 
     if (!user) {
+      console.warn("[Normalize] Unauthorized normalize request", {
+        requestId,
+        videoId,
+      });
       return NextResponse.json(
         {
           success: false,
@@ -83,7 +101,9 @@ export async function POST(
 
     if (videoError || !video) {
       console.error("[Normalize] Video not found or not owned by user", {
+        requestId,
         videoId,
+        userId: user.id,
         videoError,
       });
       return NextResponse.json(
@@ -97,6 +117,12 @@ export async function POST(
 
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
     if (!appUrl || !appUrl.startsWith("http")) {
+      console.error("[Normalize] Invalid app URL configuration", {
+        requestId,
+        videoId,
+        appUrlPresent: Boolean(appUrl),
+        appUrlStartsWithHttp: appUrl.startsWith("http"),
+      });
       return NextResponse.json(
         {
           success: false,
@@ -111,6 +137,15 @@ export async function POST(
     }
 
     const callbackUrl = `${appUrl}/api/webhooks/normalize?videoId=${encodeURIComponent(videoId.trim())}`;
+    console.log("[Normalize] Starting normalize flow", {
+      requestId,
+      videoId: video.id,
+      userId: user.id,
+      normalizeServiceSource,
+      normalizeServiceBase: normalizeServiceUrl.replace(/\/+$/, ""),
+      callbackHost: new URL(callbackUrl).host,
+      hasCallbackSecret: Boolean(callbackSecret),
+    });
 
     // Mark normalization as in progress so UI/watermark can see it was started
     await supabase
@@ -122,6 +157,11 @@ export async function POST(
       })
       .eq("id", video.id)
       .eq("user_id", user.id);
+    console.log("[Normalize] Marked video as normalizing", {
+      requestId,
+      videoId: video.id,
+      userId: user.id,
+    });
 
     const body = {
       input_location: video.original_url,
@@ -132,6 +172,13 @@ export async function POST(
 
     const baseUrl = normalizeServiceUrl.replace(/\/+$/, "");
     const normalizeEndpoint = `${baseUrl}/normalize_video`;
+    console.log("[Normalize] Calling manager normalize endpoint", {
+      requestId,
+      videoId: video.id,
+      endpoint: normalizeEndpoint,
+      inputLocationPresent: Boolean(video.original_url),
+      bucket: WASABI_BUCKET,
+    });
 
     let response: Response;
     try {
@@ -142,7 +189,9 @@ export async function POST(
       });
     } catch (err) {
       console.error("[Normalize] Failed to call normalize service", {
+        requestId,
         videoId,
+        userId: user.id,
         endpoint: normalizeEndpoint,
         error: err,
       });
@@ -179,7 +228,10 @@ export async function POST(
       const message =
         payload?.detail ?? payload?.message ?? response.statusText;
       console.error("[Normalize] Service error", {
+        requestId,
         videoId,
+        userId: user.id,
+        endpoint: normalizeEndpoint,
         status: response.status,
         message,
       });
@@ -204,6 +256,15 @@ export async function POST(
       );
     }
 
+    console.log("[Normalize] Normalize request accepted by manager", {
+      requestId,
+      videoId: video.id,
+      userId: user.id,
+      endpoint: normalizeEndpoint,
+      managerStatusCode: response.status,
+      managerPayloadStatus: payload?.status ?? null,
+      hasOutputLocation: Boolean(payload?.output_location),
+    });
     return NextResponse.json({
       success: true,
       data: {

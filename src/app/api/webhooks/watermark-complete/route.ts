@@ -41,8 +41,10 @@ function verifySignature(
 
 export async function POST(request: NextRequest) {
   try {
+    const requestId = `wwh_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const secret = process.env.WATERMARK_CALLBACK_HMAC_SECRET;
     if (!secret) {
+      console.error("[Watermark Webhook] Missing callback secret", {requestId});
       return NextResponse.json(
         { error: "Webhook not configured" },
         { status: 500 }
@@ -52,9 +54,16 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await request.arrayBuffer();
     const rawBody = Buffer.from(arrayBuffer);
     const signature = request.headers.get(SIGNATURE_HEADER);
+    console.log("[Watermark Webhook] Callback received", {
+      requestId,
+      bodyBytes: rawBody.length,
+      hasSignatureHeader: Boolean(signature),
+    });
 
     if (!verifySignature(rawBody, signature, secret)) {
-      console.warn("[Watermark Webhook] Rejected: invalid HMAC signature");
+      console.warn("[Watermark Webhook] Rejected: invalid HMAC signature", {
+        requestId,
+      });
       return NextResponse.json(
         { error: "Invalid signature" },
         { status: 401 }
@@ -67,6 +76,15 @@ export async function POST(request: NextRequest) {
     const callbackUserId = body.user_id?.[0];
     const jobId = body.jobID?.[0];
     const message = body.message?.[0];
+    console.log("[Watermark Webhook] Parsed callback payload", {
+      requestId,
+      status: status ?? null,
+      jobId: jobId ?? null,
+      numericUserId: callbackUserId ?? null,
+      hasPath: Boolean(pathValue),
+      hasVideoId: Boolean(body.videoId?.[0]),
+      message: message ?? null,
+    });
 
     if (!callbackUserId) {
       return NextResponse.json(
@@ -77,6 +95,7 @@ export async function POST(request: NextRequest) {
 
     if (status !== "success") {
       console.log("[Watermark Webhook] Callback received (non-success)", {
+        requestId,
         status,
         jobId,
         numericUserId: callbackUserId,
@@ -86,6 +105,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("[Watermark Webhook] Processing success callback", {
+      requestId,
       jobId,
       numericUserId: callbackUserId,
       path: pathValue,
@@ -122,7 +142,10 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (profileError || !profile) {
-      console.warn("[Watermark Webhook] User not found for numeric_user_id", { numericUserId });
+      console.warn("[Watermark Webhook] User not found for numeric_user_id", {
+        requestId,
+        numericUserId,
+      });
       return NextResponse.json(
         { error: "User not found" },
         { status: 404 }
@@ -143,7 +166,11 @@ export async function POST(request: NextRequest) {
         .single();
       video = result.data;
       videoError = result.error;
-      console.log("[Watermark Webhook] Resolved video by videoId", { videoId: callbackVideoId, found: !!video });
+      console.log("[Watermark Webhook] Resolved video by videoId", {
+        requestId,
+        videoId: callbackVideoId,
+        found: !!video,
+      });
     }
 
     if (!video) {
@@ -157,12 +184,16 @@ export async function POST(request: NextRequest) {
       video = result.data;
       videoError = result.error;
       if (!useVideoIdLookup) {
-        console.log("[Watermark Webhook] Resolved video by original_url", { originalKey });
+        console.log("[Watermark Webhook] Resolved video by original_url", {
+          requestId,
+          originalKey,
+        });
       }
     }
 
     if (videoError || !video) {
       console.warn("[Watermark Webhook] Video not found", {
+        requestId,
         authUserId,
         numericUserId,
         videoIdUsed: useVideoIdLookup ? callbackVideoId : undefined,
@@ -190,6 +221,7 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error("[Watermark Webhook] Failed to update video", {
+        requestId,
         videoId: video.id,
         filename: video.filename,
         updateError,
@@ -201,6 +233,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("[Watermark Webhook] Video updated", {
+      requestId,
       videoId: video.id,
       filename: video.filename,
       processedPath: pathKey,
@@ -236,12 +269,14 @@ export async function POST(request: NextRequest) {
             .eq("user_id", authUserId);
 
           console.log("[Watermark Webhook] Completion email sent", {
+            requestId,
             videoId: video.id,
             filename: video.filename,
           });
         }
       } catch (emailError) {
         console.error("[Watermark Webhook] Failed to send completion email", {
+          requestId,
           videoId: video.id,
           filename: video.filename,
           error:
