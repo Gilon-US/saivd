@@ -44,3 +44,5 @@ supabase-local/volumes/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+*.mp4
