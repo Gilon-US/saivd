@@ -17,7 +17,7 @@
 | Technology | Version / Notes |
 |------------|-----------------|
 | Node.js | 18+ |
-| Next.js | 15.x (App Router, Turbopack) |
+| Next.js | 15.x (App Router; `npm run dev` uses Turbopack — use `npm run dev:callbacks` for webpack + ffmpeg worker parity) |
 | React | 19.x |
 | TypeScript | 5.x (strict mode) |
 | Tailwind CSS | 4.x |
@@ -144,7 +144,9 @@ Migrations live in `supabase/migrations/`. Use `createClient` (server) or servic
 
 | Command | Purpose |
 |---------|---------|
-| `npm run dev` | Start dev server (Turbopack) |
+| `npm run dev` | Start dev server (Turbopack) — avoid for full upload/normalize/watermark + `@ffmpeg/ffmpeg` UI paths |
+| `npm run dev:callbacks` | **Preferred for pipeline E2E:** ngrok + Next on webpack, public `NEXT_PUBLIC_APP_URL` for manager webhooks (see below) |
+| `npm run dev:callbacks:stop` | Stop ngrok left over from `dev:callbacks` (or use Ctrl+C in the start terminal) |
 | `npm run build` | Production build |
 | `npm run start` | Start production server |
 | `npm run lint` | Run ESLint |
@@ -200,6 +202,29 @@ Required for core functionality:
 - `NORMALIZE_CALLBACK_HMAC_SECRET` for normalize webhook (server-only)
 
 See `.env.local.example` and README for full list.
+
+---
+
+## Local development (callbacks via ngrok)
+
+**When to use:** End-to-end testing of upload → normalize → watermark with **real manager callbacks** to your machine. The app passes `callback_url` to the manager from server code; the URL must be **publicly reachable**, so `NEXT_PUBLIC_APP_URL` cannot be only `http://localhost:3000` for that flow.
+
+**What to run (from repo root `savd-app/`):**
+
+- **Start:** `npm run dev:callbacks` (runs [`scripts/local-dev-callbacks-start.sh`](scripts/local-dev-callbacks-start.sh))
+  - Starts **ngrok** tunnel to the local port (default `3000`), then **Next.js with webpack** (`npx next dev` — **not** `--turbopack`) and injects `NEXT_PUBLIC_APP_URL` and `WATERMARK_CALLBACK_URL` for that session.
+  - **Do not** use `npm run dev` when you need the same bundling as production for `@ffmpeg/ffmpeg` / watermark worker, or when testing the full callback pipeline; use `dev:callbacks` or `npm run build` / `npm run start`.
+- **Stop:** **Ctrl+C** in the same terminal (stops Next and ngrok), **or** `npm run dev:callbacks:stop` to kill **ngrok** if it was left running.
+
+**ngrok preflight (enforced by the start script):**
+
+- If `ngrok` is missing: a **prominent** error and exit; no silent failure.
+- **Optional install (macOS, opt-in only):** set `SAVD_DEV_INSTALL_NGROK=1` and have Homebrew — the script may run `brew install ngrok/ngrok/ngrok`. Otherwise install manually (see script output or [ngrok download](https://ngrok.com/download)).
+- If the CLI is not authenticated: run `ngrok config add-authtoken <token>` (from the [ngrok dashboard](https://dashboard.ngrok.com/)); the script uses `ngrok config check` when available, with fallback checks for `~/.config/ngrok/ngrok.yml` / `~/.ngrok2/ngrok.yml` on older CLIs.
+
+**`.env.local` for this mode:** Same secrets the manager expects: `NORMALIZE_CALLBACK_HMAC_SECRET`, `WATERMARK_CALLBACK_HMAC_SECRET`, `WATERMARK_SERVICE_URL` (or `WATERMARK_API_URL`), plus Supabase and Wasabi. The **public base URL** for callbacks is set by the script for the session (not your production `NEXT_PUBLIC_APP_URL` in `.env`).
+
+**State / git:** PIDs and logs go under `.local-dev-callbacks/` (gitignored).
 
 ---
 

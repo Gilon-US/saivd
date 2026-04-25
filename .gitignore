@@ -34,6 +34,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# local dev: ngrok + callbacks scripts (pids, logs)
+.local-dev-callbacks/
+
 # supabase local development (contains secrets)
 supabase-local/.env
 supabase-local/volumes/

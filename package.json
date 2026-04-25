@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:callbacks": "bash scripts/local-dev-callbacks-start.sh",
+    "dev:callbacks:stop": "bash scripts/local-dev-callbacks-stop.sh",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
