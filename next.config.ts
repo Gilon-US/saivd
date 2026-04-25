@@ -6,8 +6,12 @@ import path from "node:path";
  * Netlify does not support output: 'standalone' and will fail to serve pages correctly
  * (e.g. "Page Not Found"). Netlify uses its own Next.js runtime; leave output unset there.
  */
+const strictModeDisabledForSession = process.env.NEXT_DISABLE_STRICT_MODE === "1";
+
 const nextConfig: NextConfig = {
   ...(process.env.USE_STANDALONE_OUTPUT === "true" ? { output: "standalone" as const } : {}),
+  // Safe local override: callback dev launcher can disable Strict Mode for this process only.
+  reactStrictMode: !strictModeDisabledForSession,
   /** Needed for watermark verify worker deps (mp4box, @ffmpeg/ffmpeg) in client bundles */
   transpilePackages: ["@ffmpeg/ffmpeg", "@ffmpeg/util", "mp4box"],
   experimental: {

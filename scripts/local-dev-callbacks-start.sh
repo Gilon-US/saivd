@@ -200,10 +200,14 @@ PUB_URL="${PUB_URL%/}"
 
 export NEXT_PUBLIC_APP_URL="$PUB_URL"
 export WATERMARK_CALLBACK_URL="${PUB_URL}/api/webhooks/watermark-complete"
+# Dev-only safe pattern: disable React Strict Mode for this process to avoid duplicate-effect
+# behavior that can stall watermark verification in local callback E2E runs.
+export NEXT_DISABLE_STRICT_MODE=1
 
 echo ""
 note "Public app URL (this session): $BOLD$PUB_URL$NC"
 note "WATERMARK_CALLBACK_URL=$WATERMARK_CALLBACK_URL"
+note "NEXT_DISABLE_STRICT_MODE=$NEXT_DISABLE_STRICT_MODE (dev:callbacks only)"
 echo ""
 note "Starting Next.js (webpack) on port $DEV_PORT — not using Turbopack. Ctrl+C stops Next and ngrok."
 echo ""
