@@ -209,6 +209,8 @@ See `.env.local.example` and README for full list.
 
 **When to use:** End-to-end testing of upload → normalize → watermark with **real manager callbacks** to your machine. The app passes `callback_url` to the manager from server code; the URL must be **publicly reachable**, so `NEXT_PUBLIC_APP_URL` cannot be only `http://localhost:3000` for that flow.
 
+**Default rule for agents and developers:** for **full local end-to-end functionality** (upload + normalize + watermark + callback handling), use the callback pipeline launcher (`npm run dev:callbacks`). Treat `npm run dev` as a non-E2E convenience mode only.
+
 **What to run (from repo root `savd-app/`):**
 
 - **Start:** `npm run dev:callbacks` (runs [`scripts/local-dev-callbacks-start.sh`](scripts/local-dev-callbacks-start.sh))
