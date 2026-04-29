@@ -41,11 +41,9 @@ export function VideoPlayer({
   const [verificationProgress, setVerificationProgress] = useState<VerificationProgress | null>(null);
   const [microcopyIndex, setMicrocopyIndex] = useState(0);
 
-  // Prevent playback until verification passes (for watermarked videos).
-  // Only treat videos as playable when either:
-  // - verification has not been requested (null), or
-  // - verification has positively succeeded ("verified").
-  const isPlaybackAllowed = verificationStatus === null || verificationStatus === "verified";
+  // Allow playback while verification runs; block only on verification failure.
+  const isVerificationInProgress = verificationStatus === "verifying";
+  const isPlaybackBlocked = verificationStatus === "failed";
 
   // Frontend watermark verification: decode frame 0, fetch public key, verify; then verify frames 10, 20, ...
   const verificationEnabled =
@@ -92,8 +90,8 @@ export function VideoPlayer({
   const extractedUserId = verifiedUserId ?? extractNumericUserIdFromQrUrl(qrUrl);
   const creatorProfileUrl = extractedUserId ? `${CREATOR_APP_ORIGIN}/profile/${extractedUserId}` : null;
 
-  // Diagnostic: log when video src is withheld vs set (to trace full-video preload)
-  const videoSrcWithheld = enableFrameAnalysis && verificationStatus !== "verified";
+  // Diagnostic: src is always set now; verification no longer blocks playback start.
+  const videoSrcWithheld = false;
   useEffect(() => {
     console.log("[Frame0Decode] Video element src", {
       withheld: videoSrcWithheld,
@@ -115,9 +113,14 @@ export function VideoPlayer({
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (verificationStatus === "failed") {
+      setIsPlaying(false);
+    }
+  }, [verificationStatus]);
+
   const togglePlay = () => {
-    // Prevent playback if verification hasn't passed
-    if (!isPlaybackAllowed) {
+    if (isPlaybackBlocked) {
       return;
     }
 
@@ -200,7 +203,7 @@ export function VideoPlayer({
         <div className="relative bg-black rounded-lg overflow-hidden">
           <video
             ref={videoRef}
-            src={enableFrameAnalysis && verificationStatus !== "verified" ? undefined : videoUrl}
+            src={videoUrl}
             playsInline
             crossOrigin="anonymous"
             className="w-full aspect-video"
@@ -211,8 +214,8 @@ export function VideoPlayer({
           />
 
           {/* Verification overlay */}
-          {verificationStatus === "verifying" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
+          {isVerificationInProgress && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/35 z-20 pointer-events-none">
               <div className="relative">
                 <div className="absolute inset-0 rounded-full border-2 border-white/20 animate-ping" />
                 <LoadingSpinner size="lg" />
@@ -226,7 +229,7 @@ export function VideoPlayer({
             </div>
           )}
 
-          {verificationStatus === "failed" && (
+          {isPlaybackBlocked && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
               <div className="bg-red-500/20 border border-red-500 rounded-lg p-6 max-w-md mx-4">
                 <p className="text-white text-center text-lg font-medium">
@@ -238,7 +241,7 @@ export function VideoPlayer({
 
           {/* QR / Logo flip overlay – flips between QR code (front) and logo (back) every 6s.
               Shown when we have a verified user ID or frame analysis returns a QR URL. */}
-          {qrUrl && isPlaybackAllowed && (
+          {qrUrl && !isPlaybackBlocked && (
             <button
               type="button"
               onClick={() => {
@@ -270,8 +273,8 @@ export function VideoPlayer({
             </button>
           )}
 
-          {/* Custom controls - only shown when playback is allowed */}
-          {isPlaybackAllowed && (
+          {/* Custom controls - hidden only when playback is blocked after failed verification */}
+          {!isPlaybackBlocked && (
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
             {/* Seek bar */}
             <input

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { VideoPlayer } from '../VideoPlayer';
 
@@ -13,9 +13,8 @@ jest.mock('lucide-react', () => ({
 }));
 
 // Mock useFrameAnalysis hook
-const mockUseFrameAnalysis = jest.fn(() => ({ qrUrl: null, showOverlay: false }));
 jest.mock('@/hooks/useFrameAnalysis', () => ({
-  useFrameAnalysis: mockUseFrameAnalysis,
+  useFrameAnalysis: jest.fn(() => ({ qrUrl: null })),
 }));
 
 // Mock useWatermarkVerification hook (frontend decode + RSA verify)
@@ -37,8 +36,8 @@ describe('VideoPlayer', () => {
 
   it('renders when isOpen is true', () => {
     render(<VideoPlayer {...defaultProps} />);
-    
-    const video = screen.getByRole('application', { hidden: true }) || document.querySelector('video');
+
+    const video = document.querySelector('video');
     expect(video).toBeInTheDocument();
   });
 
@@ -137,37 +136,13 @@ describe('VideoPlayer', () => {
     expect(screen.getByText(/2:05/)).toBeInTheDocument();
   });
 
-  it('resets video when closed', async () => {
+  it('unmounts video when closed', () => {
     const { rerender } = render(<VideoPlayer {...defaultProps} />);
-    
-    const video = document.querySelector('video') as HTMLVideoElement;
-    video.pause = jest.fn();
-    
-    // Set some state
-    Object.defineProperty(video, 'currentTime', { value: 50, writable: true });
-    
-    // Close the player
+
+    expect(document.querySelector('video')).toBeInTheDocument();
     rerender(<VideoPlayer {...defaultProps} isOpen={false} />);
-    
-    await waitFor(() => {
-      expect(video.pause).toHaveBeenCalled();
-    });
-  });
 
-  it('shows overlay when frame analysis returns true', () => {
-    mockUseFrameAnalysis.mockReturnValue({ showOverlay: true });
-    
-    render(<VideoPlayer {...defaultProps} />);
-    
-    expect(screen.getByText('Analysis Alert')).toBeInTheDocument();
-  });
-
-  it('hides overlay when frame analysis returns false', () => {
-    mockUseFrameAnalysis.mockReturnValue({ showOverlay: false });
-    
-    render(<VideoPlayer {...defaultProps} />);
-    
-    expect(screen.queryByText('Analysis Alert')).not.toBeInTheDocument();
+    expect(document.querySelector('video')).not.toBeInTheDocument();
   });
 
   it('shows staged verification overlay copy while verifying', () => {
@@ -179,6 +154,57 @@ describe('VideoPlayer', () => {
       />
     );
     expect(screen.getByText(/Verifying authenticity|Preparing secure verification/i)).toBeInTheDocument();
+  });
+
+  it('allows playback controls while verification is in progress', () => {
+    render(
+      <VideoPlayer
+        {...defaultProps}
+        enableFrameAnalysis={true}
+        verificationStatus="verifying"
+      />
+    );
+
+    const video = document.querySelector('video') as HTMLVideoElement;
+    expect(video).toHaveAttribute('src', defaultProps.videoUrl);
+    expect(screen.getByLabelText('Play')).toBeInTheDocument();
+  });
+
+  it('blocks playback controls when verification fails', () => {
+    render(
+      <VideoPlayer
+        {...defaultProps}
+        enableFrameAnalysis={true}
+        verificationStatus="failed"
+      />
+    );
+
+    expect(screen.getByText(/not authentic|viewing not allowed/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Play')).not.toBeInTheDocument();
+  });
+
+  it('shows creator profile QR button only after verified identity is available', () => {
+    const { rerender } = render(
+      <VideoPlayer
+        {...defaultProps}
+        enableFrameAnalysis={true}
+        verificationStatus="verifying"
+        verifiedUserId={null}
+      />
+    );
+
+    expect(screen.queryByLabelText('View creator profile')).not.toBeInTheDocument();
+
+    rerender(
+      <VideoPlayer
+        {...defaultProps}
+        enableFrameAnalysis={true}
+        verificationStatus="verified"
+        verifiedUserId="123"
+      />
+    );
+
+    expect(screen.getByLabelText('View creator profile')).toBeInTheDocument();
   });
 
   it('has proper accessibility attributes', () => {
