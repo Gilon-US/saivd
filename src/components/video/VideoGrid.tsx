@@ -1,12 +1,13 @@
 "use client";
 import {Card, CardContent} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
-import {UploadIcon, RefreshCwIcon, TrashIcon, Download, QrCode} from "lucide-react";
+import {UploadIcon, RefreshCwIcon, TrashIcon, Download, QrCode, Share2Icon} from "lucide-react";
 import Image from "next/image";
 import {useToast} from "@/hooks/useToast";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
 import {DeleteConfirmDialog} from "./DeleteConfirmDialog";
 import {DeleteWatermarkedConfirmDialog} from "./DeleteWatermarkedConfirmDialog";
+import {ShareTransferDialog} from "./ShareTransferDialog";
 import {WatermarkStartNotification} from "./WatermarkStartNotification";
 import {VideoPlayer} from "./VideoPlayer";
 import {useState, useEffect, useRef, useCallback} from "react";
@@ -72,6 +73,12 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     isOpen: false,
     video: null,
     isDeleting: false,
+  });
+
+  // Cross-app share-to-viewer dialog. Single video at a time (v1).
+  const [shareDialog, setShareDialog] = useState<{isOpen: boolean; video: Video | null}>({
+    isOpen: false,
+    video: null,
   });
 
   const [watermarkStartNotification, setWatermarkStartNotification] = useState<{
@@ -689,14 +696,25 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                     Uploaded {new Date(video.upload_date).toLocaleDateString()}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
-                  onClick={() => handleDeleteClick(video)}
-                  title={`Delete "${video.filename}"`}>
-                  <TrashIcon className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                    onClick={() => setShareDialog({isOpen: true, video})}
+                    title={`Share "${video.filename}" to a viewer`}
+                    aria-label={`Share ${video.filename} to a viewer`}>
+                    <Share2Icon className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    onClick={() => handleDeleteClick(video)}
+                    title={`Delete "${video.filename}"`}>
+                    <TrashIcon className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
 
               {/* Video pair container */}
@@ -910,6 +928,14 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         onConfirm={handleDeleteWatermarkedConfirm}
         videoFilename={deleteWatermarkedDialog.video?.filename || ""}
         isDeleting={deleteWatermarkedDialog.isDeleting}
+      />
+
+      {/* Share-to-viewer dialog (one-time transfer link) */}
+      <ShareTransferDialog
+        isOpen={shareDialog.isOpen}
+        onClose={() => setShareDialog({isOpen: false, video: null})}
+        videoId={shareDialog.video?.id ?? null}
+        videoFilename={shareDialog.video?.filename ?? ""}
       />
 
       {/* Watermark start notification */}
