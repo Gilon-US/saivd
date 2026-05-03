@@ -1,0 +1,9 @@
+-- Bootstrap superuser is defined in application code: `src/lib/bootstrap-superuser.ts`
+-- (`BOOTSTRAP_SUPERUSER_EMAIL`). That account always has superuser privileges in the app
+-- and API without relying on `profiles.role` in the database.
+--
+-- The three `admin` seats are managed only via the app: Dashboard → Settings → Admins.
+-- Do not assign admin/superuser roles with ad-hoc SQL in production; use the Settings UI.
+--
+-- Optional: after first sign-in, you may still set `profiles.role = 'superuser'` for the
+-- bootstrap row for consistency with DB triggers/RPCs, but it is not required for access.

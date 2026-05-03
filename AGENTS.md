@@ -77,6 +77,7 @@ src/
 
 ### Do
 
+- When the user asks to **restart the server** (or **restart dev**), run **`npm run dev:callbacks:restart`** (alias: **`npm run dev:restart`**) — ngrok + Next.js webpack — **not** `npm run dev` unless they explicitly want Turbopack-only.
 - Use **functional components** and hooks.
 - Use **`createClient()`** from `@/utils/supabase/client` in client components; use `createClient()` from `@/utils/supabase/server` in API routes (async).
 - Protect API routes with `withAuth` from `@/lib/auth.ts` or inline `supabase.auth.getUser()`.
@@ -146,6 +147,8 @@ Migrations live in `supabase/migrations/`. Use `createClient` (server) or servic
 |---------|---------|
 | `npm run dev` | Start dev server (Turbopack) — avoid for full upload/normalize/watermark + `@ffmpeg/ffmpeg` UI paths |
 | `npm run dev:callbacks` | **Preferred for pipeline E2E:** ngrok + Next on webpack, public `NEXT_PUBLIC_APP_URL` for manager webhooks (see below) |
+| `npm run dev:callbacks:restart` | **Default “restart server” for this repo:** stop ngrok + free the dev port, then ngrok + Next webpack (same as `dev:callbacks`). Use whenever the user says “restart server” / “restart dev”. |
+| `npm run dev:restart` | Alias for `dev:callbacks:restart` (shorter; same behavior). |
 | `npm run dev:callbacks:stop` | Stop ngrok left over from `dev:callbacks` (or use Ctrl+C in the start terminal) |
 | `npm run build` | Production build |
 | `npm run start` | Start production server |
@@ -210,6 +213,8 @@ See `.env.local.example` and README for full list.
 **When to use:** End-to-end testing of upload → normalize → watermark with **real manager callbacks** to your machine. The app passes `callback_url` to the manager from server code; the URL must be **publicly reachable**, so `NEXT_PUBLIC_APP_URL` cannot be only `http://localhost:3000` for that flow.
 
 **Default rule for agents and developers:** for **full local end-to-end functionality** (upload + normalize + watermark + callback handling), use the callback pipeline launcher (`npm run dev:callbacks`). Treat `npm run dev` as a non-E2E convenience mode only.
+
+**Restart requests:** If the user (or task) says **restart server**, **restart dev**, **restart Next**, or similar, always use **`npm run dev:callbacks:restart`** or **`npm run dev:restart`** — never substitute plain **`npm run dev`** unless they explicitly ask for Turbopack-only.
 
 **What to run (from repo root `savd-app/`):**
 

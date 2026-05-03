@@ -1,5 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import {createClient} from "@/utils/supabase/server";
+import {resolvePhotoUrl} from "@/lib/wasabi-urls";
 
 /**
  * GET /api/profile/[userId]
@@ -51,12 +52,15 @@ export async function GET(_request: NextRequest, context: {params: Promise<{user
       return NextResponse.json({success: false, error: "User not found"}, {status: 404});
     }
 
+    // Resolve S3 key → presigned URL so callers always get a usable photo URL
+    const resolvedPhoto = await resolvePhotoUrl(profile.photo);
+
     // Success response with profile data
     // Add cache control headers to prevent stale data
     return NextResponse.json(
       {
         success: true,
-        data: profile,
+        data: {...profile, photo: resolvedPhoto},
       },
       {
         headers: {

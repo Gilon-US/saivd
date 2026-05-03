@@ -10,6 +10,23 @@ const strictModeDisabledForSession = process.env.NEXT_DISABLE_STRICT_MODE === "1
 
 const nextConfig: NextConfig = {
   ...(process.env.USE_STANDALONE_OUTPUT === "true" ? { output: "standalone" as const } : {}),
+  images: {
+    remotePatterns: [
+      {protocol: "https", hostname: "media.licdn.com", pathname: "/**"},
+      {protocol: "https", hostname: "static.licdn.com", pathname: "/**"},
+      {protocol: "https", hostname: "lh3.googleusercontent.com", pathname: "/**"},
+      {protocol: "https", hostname: "avatars.githubusercontent.com", pathname: "/**"},
+      // Wasabi S3-compatible storage (profile photos & videos)
+      // Using broad patterns to cover all bucket/region subdomain combinations
+      // e.g. saivd-app.s3.us-east-1.wasabisys.com
+      {protocol: "https", hostname: "*.wasabisys.com", pathname: "/**"},
+      {protocol: "https", hostname: "*.s3.wasabisys.com", pathname: "/**"},
+      {protocol: "https", hostname: "s3.wasabisys.com", pathname: "/**"},
+      {protocol: "https", hostname: "s3.us-east-1.wasabisys.com", pathname: "/**"},
+      {protocol: "https", hostname: "s3.us-west-1.wasabisys.com", pathname: "/**"},
+      {protocol: "https", hostname: "s3.eu-central-1.wasabisys.com", pathname: "/**"},
+    ],
+  },
   // Safe local override: callback dev launcher can disable Strict Mode for this process only.
   reactStrictMode: !strictModeDisabledForSession,
   /** Needed for watermark verify worker deps (mp4box, @ffmpeg/ffmpeg) in client bundles */

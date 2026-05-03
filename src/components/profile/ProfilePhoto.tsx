@@ -52,8 +52,13 @@ export function ProfilePhoto({
 
   const baseClasses = `${sizeClasses[size]} rounded-full mx-auto flex items-center justify-center ${className}`;
 
-  // Show fallback if no photo or image failed to load
-  if (!photo || imageError) {
+  // Only treat URLs with a proper scheme as displayable; bare S3 keys are not
+  const isDisplayable = !!photo && (
+    photo.startsWith("http://") || photo.startsWith("https://") || photo.startsWith("blob:") || photo.startsWith("/")
+  );
+
+  // Show fallback if no photo, non-displayable value, or image failed to load
+  if (!isDisplayable || imageError) {
     return (
       <div 
         className={`${baseClasses} bg-gradient-to-br from-blue-400 to-purple-500 shadow-lg`}
@@ -85,6 +90,9 @@ export function ProfilePhoto({
           setImageLoading(false);
         }}
         priority={size === 'lg' || size === 'xl'}
+        // Presigned Wasabi URLs contain X-Amz-* query params; skip Next.js optimization
+        // which would strip them and cause a 403/400.
+        unoptimized={photo.includes('X-Amz-') || photo.includes('wasabisys.com')}
         sizes={
           size === 'sm' ? '48px' :
           size === 'md' ? '64px' :

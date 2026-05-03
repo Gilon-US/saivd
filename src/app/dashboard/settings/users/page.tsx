@@ -38,7 +38,7 @@ interface PaginationMeta {
   totalPages: number;
 }
 
-export default function AdminUsersPage() {
+export default function SettingsUsersPage() {
   const {user} = useAuth();
   const {profile, loading: profileLoading, initialized} = useProfile();
   const router = useRouter();
@@ -148,7 +148,7 @@ export default function AdminUsersPage() {
         const result = await response.json();
 
         if (!response.ok || !result.success) {
-          setError(result.error || "Failed to load users");
+          setError(typeof result.error === "string" ? result.error : "Failed to load users");
           return;
         }
 
@@ -167,7 +167,7 @@ export default function AdminUsersPage() {
 
   if (!initialized || profileLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="flex items-center justify-center min-h-[40vh]">
         <LoadingSpinner size="lg" />
       </div>
     );
@@ -189,17 +189,17 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="container mx-auto space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold mb-1">Admin - Users</h1>
+        <h2 className="text-2xl font-semibold mb-1">Users</h2>
         <p className="text-gray-600 dark:text-gray-300 text-sm">
-          View and manage basic profile information for all users.
+          View and edit profile fields for all users (role changes are superuser-only).
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>User List</CardTitle>
+          <CardTitle>User list</CardTitle>
         </CardHeader>
         <CardContent>
           {roleError && <p className="mb-3 text-sm text-red-500">{roleError}</p>}
@@ -222,7 +222,7 @@ export default function AdminUsersPage() {
                       <button
                         onClick={() => handleSort("display_name")}
                         className="flex items-center gap-0.5 hover:text-foreground transition-colors">
-                        Display Name
+                        Display name
                         <SortIcon col="display_name" />
                       </button>
                     </th>
@@ -278,7 +278,7 @@ export default function AdminUsersPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => router.push(`/dashboard/admin/users/${userRow.id}`)}>
+                              onClick={() => router.push(`/dashboard/settings/users/${userRow.id}`)}>
                               Edit
                             </Button>
                             {isSuperuser && !isBootstrap && (

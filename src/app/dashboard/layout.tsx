@@ -4,6 +4,8 @@ import {ReactNode} from "react";
 import Link from "next/link";
 import {LogoutButton} from "@/components/auth/LogoutButton";
 import {ProfileProvider, useProfile} from "@/contexts/ProfileContext";
+import {useAuth} from "@/contexts/AuthContext";
+import {isStaffProfile} from "@/lib/app-role";
 import packageJson from "../../../package.json";
 
 interface DashboardLayoutProps {
@@ -11,8 +13,9 @@ interface DashboardLayoutProps {
 }
 
 function DashboardShell({children}: DashboardLayoutProps) {
+  const {user} = useAuth();
   const {profile} = useProfile();
-  const isAdmin = profile?.role === "admin";
+  const isStaff = isStaffProfile(profile, user?.email);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -32,7 +35,14 @@ function DashboardShell({children}: DashboardLayoutProps) {
                   className="px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
                   Profile
                 </Link>
-                {isAdmin && (
+                {isStaff && (
+                  <Link
+                    href="/dashboard/settings"
+                    className="px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                    Settings
+                  </Link>
+                )}
+                {isStaff && (
                   <Link
                     href="/dashboard/admin/users"
                     className="px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">

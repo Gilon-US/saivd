@@ -1,5 +1,6 @@
 import type {Metadata} from "next";
 import {Geist, Geist_Mono} from "next/font/google";
+import {ThemeProvider} from "next-themes";
 import {Toaster} from "@/components/ui/sonner";
 import {FfmpegVerificationAssetPrewarm} from "@/components/video/FfmpegVerificationAssetPrewarm";
 import {AuthProvider} from "@/contexts/AuthContext";
@@ -27,16 +28,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased flex min-h-screen flex-col`} suppressHydrationWarning={true}>
-        <AuthProvider>
-          <FfmpegVerificationAssetPrewarm />
-          <main className="flex-1">{children}</main>
-          <Toaster />
-          <footer className="mt-auto py-2 text-center text-xs text-muted-foreground" role="contentinfo">
-            v{packageJson.version}
-          </footer>
-        </AuthProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <AuthProvider>
+            <FfmpegVerificationAssetPrewarm />
+            <main className="flex-1">{children}</main>
+            <Toaster />
+            <footer className="mt-auto py-2 text-center text-xs text-muted-foreground" role="contentinfo">
+              v{packageJson.version}
+            </footer>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

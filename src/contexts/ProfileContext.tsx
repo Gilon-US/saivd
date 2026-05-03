@@ -3,6 +3,7 @@
 import {createContext, useContext, useState, useEffect, useCallback, ReactNode} from "react";
 import {useAuth} from "@/contexts/AuthContext";
 import {useToast} from "@/hooks/useToast";
+import type {AppRole} from "@/lib/app-role";
 
 // Define the profile type
 export interface Profile {
@@ -19,7 +20,7 @@ export interface Profile {
   youtube_url: string | null;
   tiktok_url: string | null;
   website_url: string | null;
-  role: string;
+  role: AppRole;
   created_at: string;
   updated_at: string;
 }
@@ -58,7 +59,7 @@ export function ProfileProvider({children}: {children: ReactNode}) {
       const result = await response.json();
 
       if (result.success) {
-        setProfile(result.data);
+        setProfile(result.data as Profile);
       } else {
         setError(result.error);
         toast({
@@ -101,7 +102,7 @@ export function ProfileProvider({children}: {children: ReactNode}) {
         const result = await response.json();
 
         if (result.success) {
-          setProfile(result.data);
+          setProfile(result.data as Profile);
           toast({
             title: "Profile updated",
             description: "Your profile has been updated successfully.",

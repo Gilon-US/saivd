@@ -1,7 +1,9 @@
 import {NextResponse} from "next/server";
+import {profileWithBootstrapSuperuserRole} from "@/lib/bootstrap-superuser";
 import {createClient} from "@/utils/supabase/server";
 import {generateKeyPairSync} from "crypto";
 import {generateAndUploadUserQrCode} from "@/lib/qr-codes";
+import {resolvePhotoUrl} from "@/lib/wasabi-urls";
 
 // GET /api/profile
 export async function GET() {
@@ -110,7 +112,8 @@ export async function GET() {
         const {rsa_public, rsa_private, ...safeCreatedProfile} = createdProfileWithKeys;
         void rsa_public;
         void rsa_private;
-        return NextResponse.json({success: true, data: safeCreatedProfile});
+        const resolvedPhoto = await resolvePhotoUrl(safeCreatedProfile.photo);
+        return NextResponse.json({success: true, data: profileWithBootstrapSuperuserRole({...safeCreatedProfile, photo: resolvedPhoto})});
       }
 
       console.error("Error fetching profile:", error);
@@ -157,7 +160,8 @@ export async function GET() {
     void rsa_public;
     void rsa_private;
 
-    return NextResponse.json({success: true, data: safeProfile});
+    const resolvedPhoto = await resolvePhotoUrl(safeProfile.photo);
+    return NextResponse.json({success: true, data: profileWithBootstrapSuperuserRole({...safeProfile, photo: resolvedPhoto})});
   } catch (error) {
     console.error("Unexpected error in GET /api/profile:", error);
     return NextResponse.json({success: false, error: "Server error"}, {status: 500});
@@ -275,7 +279,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({
       success: true,
-      data: profile,
+      data: profileWithBootstrapSuperuserRole(profile),
     });
   } catch (error) {
     console.error("Unexpected error in PUT /api/profile:", error);

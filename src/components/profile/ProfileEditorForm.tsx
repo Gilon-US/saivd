@@ -1,21 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import {useState, useEffect, useRef} from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useProfile } from "@/contexts/ProfileContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import Image from "next/image";
+import {useRouter} from "next/navigation";
+import {useProfile} from "@/contexts/ProfileContext";
+import {useAuth} from "@/contexts/AuthContext";
+import {Button} from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
+import {Label} from "@/components/ui/label";
+import {Alert, AlertDescription} from "@/components/ui/alert";
+import {LoadingSpinner} from "@/components/ui/loading-spinner";
+import {Upload, X, User} from "lucide-react";
 
 const BIO_MAX = 500;
 const DISPLAY_NAME_MIN = 2;
 const DISPLAY_NAME_MAX = 100;
+const MAX_PHOTO_BYTES = 50 * 1024; // 50 KB
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-function getProfileDefaults(profile: { display_name?: string | null; photo?: string | null; bio?: string | null; twitter_url?: string | null; instagram_url?: string | null; facebook_url?: string | null; youtube_url?: string | null; tiktok_url?: string | null; website_url?: string | null } | null) {
+function getProfileDefaults(profile: {display_name?: string | null; photo?: string | null; bio?: string | null; twitter_url?: string | null; instagram_url?: string | null; facebook_url?: string | null; youtube_url?: string | null; tiktok_url?: string | null; website_url?: string | null} | null) {
   return {
     displayName: profile?.display_name ?? "",
     photo: profile?.photo ?? "",
@@ -31,8 +35,8 @@ function getProfileDefaults(profile: { display_name?: string | null; photo?: str
 
 export function ProfileEditorForm() {
   const router = useRouter();
-  const { user } = useAuth();
-  const { profile, loading, error, updateProfile } = useProfile();
+  const {user} = useAuth();
+  const {profile, loading, error, updateProfile, refreshProfile} = useProfile();
 
   const defaults = getProfileDefaults(profile);
   const [displayName, setDisplayName] = useState(defaults.displayName);
@@ -47,11 +51,23 @@ export function ProfileEditorForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sync form state when profile loads or updates (e.g. after save or when navigating with profile already in context)
+  // Photo upload state
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Refresh on mount so we always get a fresh presigned photo URL
+  useEffect(() => {
+    refreshProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.display_name ?? "");
-      setPhoto(profile.photo ?? "");
+      // Only store the photo if it's a usable URL; bare S3 keys are not displayable
+      setPhoto(isDisplayableUrl(profile.photo) ? (profile.photo ?? "") : "");
       setBio(profile.bio ?? "");
       setTwitterUrl(profile.twitter_url ?? "");
       setInstagramUrl(profile.instagram_url ?? "");
@@ -61,6 +77,85 @@ export function ProfileEditorForm() {
       setWebsiteUrl(profile.website_url ?? "");
     }
   }, [profile]);
+
+  // Clean up local object URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (localPreview) URL.revokeObjectURL(localPreview);
+    };
+  }, [localPreview]);
+
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPhotoUploadError(null);
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setPhotoUploadError("Unsupported file type. Use JPEG, PNG, WebP, or GIF.");
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoUploadError("Image must be 50 KB or smaller.");
+      return;
+    }
+
+    // Show local preview immediately
+    const preview = URL.createObjectURL(file);
+    if (localPreview) URL.revokeObjectURL(localPreview);
+    setLocalPreview(preview);
+
+    setIsUploadingPhoto(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+
+      const res = await fetch("/api/profile/photo", {method: "POST", body: fd});
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        setPhotoUploadError(json.error ?? "Upload failed");
+        setLocalPreview(null);
+        return;
+      }
+
+      // Refresh profile to get the presigned URL back from the API
+      await refreshProfile();
+      // Clear local preview so the component switches to profile.photo (presigned URL)
+      setLocalPreview(null);
+    } catch {
+      setPhotoUploadError("Upload failed. Please try again.");
+      setLocalPreview(null);
+    } finally {
+      setIsUploadingPhoto(false);
+      // Reset file input so the same file can be re-selected if needed
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    setPhotoUploadError(null);
+    setLocalPreview(null);
+    setIsUploadingPhoto(true);
+    try {
+      const res = await fetch("/api/profile/photo", {method: "DELETE"});
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setPhotoUploadError(json.error ?? "Failed to remove photo");
+        return;
+      }
+      setPhoto("");
+      await refreshProfile();
+    } catch {
+      setPhotoUploadError("Failed to remove photo. Please try again.");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  // Guard: only show photo if it's a proper URL (not a bare S3 key)
+  const rawPhoto = localPreview ?? photo;
+  const displayedPhoto = isDisplayableUrl(rawPhoto) ? rawPhoto : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,15 +176,14 @@ export function ProfileEditorForm() {
     }
 
     const urlFields = [
-      { value: photo.trim(), name: "Photo URL" },
-      { value: twitterUrl.trim(), name: "Twitter URL" },
-      { value: instagramUrl.trim(), name: "Instagram URL" },
-      { value: facebookUrl.trim(), name: "Facebook URL" },
-      { value: youtubeUrl.trim(), name: "YouTube URL" },
-      { value: tiktokUrl.trim(), name: "TikTok URL" },
-      { value: websiteUrl.trim(), name: "Website URL" },
+      {value: twitterUrl.trim(), name: "Twitter URL"},
+      {value: instagramUrl.trim(), name: "Instagram URL"},
+      {value: facebookUrl.trim(), name: "Facebook URL"},
+      {value: youtubeUrl.trim(), name: "YouTube URL"},
+      {value: tiktokUrl.trim(), name: "TikTok URL"},
+      {value: websiteUrl.trim(), name: "Website URL"},
     ];
-    for (const { value, name } of urlFields) {
+    for (const {value, name} of urlFields) {
       if (value && !isValidUrl(value)) {
         setFormError(`${name} must be a valid URL`);
         return;
@@ -100,7 +194,6 @@ export function ProfileEditorForm() {
     try {
       await updateProfile({
         display_name: trimmedDisplayName,
-        photo: photo.trim() || null,
         bio: bio.trim() || null,
         twitter_url: twitterUrl.trim() || null,
         instagram_url: instagramUrl.trim() || null,
@@ -130,9 +223,7 @@ export function ProfileEditorForm() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Edit profile</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">
-            Update your profile details and links
-          </p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Update your profile details and links</p>
         </div>
         <Button variant="outline" asChild>
           <Link href="/dashboard/profile">Cancel</Link>
@@ -142,13 +233,7 @@ export function ProfileEditorForm() {
       <form onSubmit={handleSubmit} className="space-y-4 max-w-2xl">
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={user?.email ?? ""}
-            disabled
-            aria-readonly="true"
-          />
+          <Input id="email" type="email" value={user?.email ?? ""} disabled aria-readonly="true" />
           <p className="text-xs text-muted-foreground">Email cannot be changed</p>
         </div>
 
@@ -168,19 +253,65 @@ export function ProfileEditorForm() {
           />
         </div>
 
+        {/* Photo upload */}
         <div className="space-y-2">
-          <Label htmlFor="photo">Photo URL</Label>
-          <Input
-            id="photo"
-            type="url"
-            value={photo}
-            onChange={(e) => setPhoto(e.target.value)}
-            placeholder="https://example.com/your-photo.jpg"
-            disabled={isSubmitting}
-          />
-          <p className="text-xs text-muted-foreground">
-            URL to an image hosted elsewhere
-          </p>
+          <Label>Profile photo</Label>
+          <div className="flex items-center gap-4">
+            {/* Avatar preview */}
+            <div className="relative w-20 h-20 rounded-full border-2 border-border overflow-hidden bg-muted flex items-center justify-center shrink-0">
+              {displayedPhoto ? (
+                <Image
+                  src={displayedPhoto}
+                  alt="Profile photo"
+                  fill
+                  className="object-cover"
+                  unoptimized={displayedPhoto.startsWith("blob:") || displayedPhoto.includes("wasabisys.com") || displayedPhoto.includes("X-Amz-")}
+                />
+              ) : (
+                <User className="w-8 h-8 text-muted-foreground" />
+              )}
+              {isUploadingPhoto && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <LoadingSpinner size="sm" />
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={handlePhotoFileChange}
+                disabled={isUploadingPhoto || isSubmitting}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isUploadingPhoto || isSubmitting}
+                onClick={() => fileInputRef.current?.click()}>
+                <Upload className="w-4 h-4 mr-2" />
+                {displayedPhoto ? "Change photo" : "Upload photo"}
+              </Button>
+              {displayedPhoto && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={isUploadingPhoto || isSubmitting}
+                  onClick={handleRemovePhoto}
+                  className="text-destructive hover:text-destructive">
+                  <X className="w-4 h-4 mr-2" />
+                  Remove photo
+                </Button>
+              )}
+              <p className="text-xs text-muted-foreground">JPEG, PNG, WebP or GIF · max 50 KB</p>
+            </div>
+          </div>
+          {photoUploadError && <p className="text-sm text-destructive">{photoUploadError}</p>}
         </div>
 
         <div className="space-y-2">
@@ -285,7 +416,7 @@ export function ProfileEditorForm() {
         )}
 
         <div className="flex gap-3">
-          <Button type="submit" disabled={isSubmitting || loading}>
+          <Button type="submit" disabled={isSubmitting || loading || isUploadingPhoto}>
             {isSubmitting ? (
               <>
                 <LoadingSpinner size="sm" className="mr-2" />
@@ -311,4 +442,10 @@ function isValidUrl(s: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Returns true only for URLs that can safely be passed to <Image src>. */
+function isDisplayableUrl(s: string | null | undefined): boolean {
+  if (!s) return false;
+  return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("blob:") || s.startsWith("/");
 }

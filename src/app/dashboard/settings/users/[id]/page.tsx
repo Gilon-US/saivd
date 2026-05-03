@@ -38,7 +38,7 @@ interface AdminUserFormValues {
   website_url: string;
 }
 
-export default function AdminUserDetailPage() {
+export default function SettingsUserDetailPage() {
   const {user} = useAuth();
   const {profile, loading: profileLoading, initialized} = useProfile();
   const router = useRouter();
@@ -82,7 +82,7 @@ export default function AdminUserDetailPage() {
         const result = await response.json();
 
         if (!response.ok || !result.success) {
-          setError(result.error || "Failed to load user");
+          setError(typeof result.error === "string" ? result.error : "Failed to load user");
           return;
         }
 
@@ -147,7 +147,7 @@ export default function AdminUserDetailPage() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        setError(result.error || "Failed to update user");
+        setError(typeof result.error === "string" ? result.error : "Failed to update user");
         return;
       }
 
@@ -169,7 +169,7 @@ export default function AdminUserDetailPage() {
 
   if (!initialized || profileLoading || loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="flex items-center justify-center min-h-[40vh]">
         <LoadingSpinner size="lg" />
       </div>
     );
@@ -195,7 +195,7 @@ export default function AdminUserDetailPage() {
       <div className="max-w-2xl mx-auto">
         <Card>
           <CardHeader>
-            <CardTitle>User Not Found</CardTitle>
+            <CardTitle>User not found</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-gray-600 dark:text-gray-300">The requested user could not be found.</p>
@@ -206,30 +206,30 @@ export default function AdminUserDetailPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-3xl">
-      <div className="flex items-center justify-between mb-4">
+    <div className="max-w-3xl mx-auto space-y-4">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold mb-1">Edit User Profile</h1>
-          <p className="text-gray-600 dark:text-gray-300 text-sm">Edit basic profile information for this user.</p>
+          <h2 className="text-2xl font-semibold mb-1">Edit user</h2>
+          <p className="text-gray-600 dark:text-gray-300 text-sm">Editable fields only; role changes use the Admins tab (superuser).</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push("/dashboard/admin/users")}>
-            Back to Users
+          <Button variant="outline" onClick={() => router.push("/dashboard/settings/users")}>
+            Back to users
           </Button>
           <Button variant="secondary" onClick={handlePreview} disabled={!userDetail?.numeric_user_id}>
-            Preview Public Profile
+            Preview public profile
           </Button>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Profile Details</CardTitle>
+          <CardTitle>Profile details</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
-              <Label className="text-xs font-semibold uppercase text-gray-500">Numeric User ID</Label>
+              <Label className="text-xs font-semibold uppercase text-gray-500">Numeric user ID</Label>
               <p className="mt-1 text-sm text-gray-800 dark:text-gray-100">
                 {userDetail.numeric_user_id ?? "(not assigned)"}
               </p>
@@ -237,6 +237,10 @@ export default function AdminUserDetailPage() {
             <div>
               <Label className="text-xs font-semibold uppercase text-gray-500">Email</Label>
               <p className="mt-1 text-sm text-gray-800 dark:text-gray-100">{userDetail.email}</p>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold uppercase text-gray-500">Role</Label>
+              <p className="mt-1 text-sm uppercase tracking-wide">{userDetail.role}</p>
             </div>
           </div>
 
@@ -254,7 +258,7 @@ export default function AdminUserDetailPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="display_name">Display Name</Label>
+              <Label htmlFor="display_name">Display name</Label>
               <Input
                 id="display_name"
                 value={formValues.display_name}
@@ -331,11 +335,11 @@ export default function AdminUserDetailPage() {
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={() => router.push("/dashboard/admin/users")}>
+              <Button type="button" variant="outline" onClick={() => router.push("/dashboard/settings/users")}>
                 Cancel
               </Button>
               <Button type="submit" disabled={saving}>
-                {saving ? "Saving..." : "Save Changes"}
+                {saving ? "Saving..." : "Save changes"}
               </Button>
             </div>
           </form>
