@@ -5,7 +5,7 @@ import {useRouter} from "next/navigation";
 import {useProfile} from "@/contexts/ProfileContext";
 import {useAuth} from "@/contexts/AuthContext";
 import {effectiveProfileRole, isStaffProfile, isSuperuserProfile} from "@/lib/app-role";
-import {BOOTSTRAP_SUPERUSER_EMAIL, isBootstrapSuperuserEmail} from "@/lib/bootstrap-superuser";
+import {BOOTSTRAP_SUPERUSER_EMAIL} from "@/lib/bootstrap-superuser";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
@@ -31,7 +31,6 @@ export default function SettingsAdminsPage() {
   const {profile, loading: profileLoading, initialized, refreshProfile} = useProfile();
   const router = useRouter();
   const [data, setData] = useState<AdminsPayload | null>(null);
-  const [users, setUsers] = useState<ProfileSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -44,18 +43,14 @@ export default function SettingsAdminsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [admRes, usersRes] = await Promise.all([fetch("/api/admin/admins"), fetch("/api/admin/users?limit=100")]);
+      const admRes = await fetch("/api/admin/admins");
       const admJson = await admRes.json();
-      const usersJson = await usersRes.json();
       if (!admRes.ok || !admJson.success) {
         setError(typeof admJson.error === "string" ? admJson.error : "Failed to load admins");
         setData({superuser: null, admins: [], adminCount: 0, adminCap: 3});
         return;
       }
       setData(admJson.data as AdminsPayload);
-      if (usersRes.ok && usersJson.success) {
-        setUsers((usersJson.data as ProfileSummary[]) || []);
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -124,20 +119,13 @@ export default function SettingsAdminsPage() {
     return null;
   }
 
-  const promotable = users.filter(
-    (u) =>
-      u.role !== "admin" &&
-      u.role !== "superuser" &&
-      !isBootstrapSuperuserEmail(u.email)
-  );
-
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold mb-1">Admins</h2>
         <p className="text-gray-600 dark:text-gray-300 text-sm">
-          Superuser can promote or demote admins (max {data.adminCap}). You are signed in as{" "}
-          <span className="font-medium">{profile?.email ?? user?.email}</span> ({effectiveProfileRole(profile, user?.email)}).
+          Superuser can promote or demote admins (max {data.adminCap}). Signed in as{" "}
+          <span className="font-medium">{effectiveProfileRole(profile, user?.email)}</span>.
         </p>
       </div>
 
@@ -204,44 +192,6 @@ export default function SettingsAdminsPage() {
         </CardContent>
       </Card>
 
-      {isSuperuser && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Promote to admin</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-              Users listed from the first page of directory (up to 100). If someone is missing, use Admin → Users or
-              raise the API limit later.
-            </p>
-            {data.adminCount >= data.adminCap ? (
-              <p className="text-sm text-amber-700 dark:text-amber-400">
-                Admin cap is {data.adminCap}. Demote an admin before promoting another.
-              </p>
-            ) : promotable.length === 0 ? (
-              <p className="text-sm text-gray-600 dark:text-gray-300">No eligible users on this page.</p>
-            ) : (
-              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-                {promotable.map((u) => (
-                  <li key={u.id} className="py-3 flex items-center justify-between gap-2">
-                    <div className="text-sm">
-                      <div className="font-medium">{u.display_name || u.email}</div>
-                      <div className="text-gray-500">{u.email}</div>
-                    </div>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      disabled={busyId === u.id || data.adminCount >= data.adminCap}
-                      onClick={() => void postRole(u.id, "admin")}>
-                      {busyId === u.id ? "…" : "Promote to admin"}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

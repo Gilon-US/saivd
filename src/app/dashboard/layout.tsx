@@ -42,16 +42,17 @@ function DashboardShell({children}: DashboardLayoutProps) {
                     Settings
                   </Link>
                 )}
-                {isStaff && (
-                  <Link
-                    href="/dashboard/admin/users"
-                    className="px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
-                    Admin
-                  </Link>
-                )}
               </nav>
             </div>
-            <div>
+            <div className="flex items-center gap-4">
+              <div className="hidden md:flex flex-col items-end text-sm leading-tight">
+                <span className="font-medium text-gray-900 dark:text-gray-100">
+                  {profile?.display_name ?? user?.email ?? ""}
+                </span>
+                {profile?.display_name && (
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">{profile.email ?? user?.email}</span>
+                )}
+              </div>
               <LogoutButton variant="ghost" size="sm" showIcon={true} />
             </div>
           </div>
