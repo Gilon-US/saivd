@@ -8,8 +8,11 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {ImageIcon, TrashIcon, UploadIcon} from "lucide-react";
+import {ImageIcon, ShieldCheckIcon, ShieldAlertIcon, TrashIcon, UploadIcon} from "lucide-react";
 import type {ImageRecord} from "@/hooks/useImages";
+import {useImageWatermarkVerification} from "@/hooks/useImageWatermarkVerification";
+
+const SAIVD_API_ORIGIN = process.env.NEXT_PUBLIC_SAIVD_API_URL?.replace(/\/+$/, "") ?? "https://saivd.netlify.app";
 
 type ImageGridProps = {
   images: ImageRecord[];
@@ -36,6 +39,18 @@ function ImageCard({image, onDelete}: {image: ImageRecord; onDelete: (id: string
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState(false);
 
+  // Prefer the watermarked PNG; fall back to the original if watermarking
+  // hasn't finished (status='processing') or has failed.
+  const displayUrl = image.processed_url ?? image.original_url;
+  const watermarkAvailable = Boolean(image.processed_url);
+
+  // Verification only runs while the lightbox is open AND we have a
+  // processed PNG to verify. Closed lightbox -> hook idles.
+  const verification = useImageWatermarkVerification(
+    lightbox && watermarkAvailable ? displayUrl : null,
+    {enabled: lightbox && watermarkAvailable},
+  );
+
   const handleDelete = async () => {
     setDeleting(true);
     setDeleteError(null);
@@ -57,10 +72,10 @@ function ImageCard({image, onDelete}: {image: ImageRecord; onDelete: (id: string
           className="w-full aspect-square bg-gray-100 dark:bg-gray-900 relative block cursor-zoom-in"
           onClick={() => setLightbox(true)}
           aria-label={`View ${image.filename}`}>
-          {image.original_url ? (
+          {displayUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={image.original_url}
+              src={displayUrl}
               alt={image.filename}
               className="w-full h-full object-cover"
               loading="lazy"
@@ -69,6 +84,25 @@ function ImageCard({image, onDelete}: {image: ImageRecord; onDelete: (id: string
             <div className="w-full h-full flex items-center justify-center text-gray-400">
               <ImageIcon className="w-10 h-10" />
             </div>
+          )}
+
+          {/* Status corner badge — derived from image.status, not from
+              client-side verification (which runs only when the lightbox
+              is open). */}
+          {image.status === "processing" && (
+            <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+              <LoadingSpinner size="sm" /> Processing
+            </span>
+          )}
+          {image.status === "processed" && (
+            <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-md bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-medium text-white">
+              <ShieldCheckIcon className="h-3 w-3" /> Watermarked
+            </span>
+          )}
+          {image.status === "failed" && (
+            <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-md bg-amber-600/90 px-1.5 py-0.5 text-[10px] font-medium text-white" title={image.watermark_error ?? "watermark failed"}>
+              <ShieldAlertIcon className="h-3 w-3" /> Failed
+            </span>
           )}
         </button>
 
@@ -105,18 +139,97 @@ function ImageCard({image, onDelete}: {image: ImageRecord; onDelete: (id: string
         </div>
       </div>
 
-      {/* Lightbox */}
-      {lightbox && image.original_url && (
+      {/* Lightbox — verification-aware. The image element sits inside a
+          `relative inline-block` container so the absolutely-positioned QR
+          badge anchors to the image's bounding box. Matches
+          saivd-viewer/src/components/video/VideoPlayer.tsx:236-268. */}
+      {lightbox && displayUrl && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
           onClick={() => setLightbox(false)}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={image.original_url}
-            alt={image.filename}
-            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
+          <div
+            className="relative inline-block max-w-full max-h-full"
+            onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={displayUrl}
+              alt={image.filename}
+              className="block max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            />
+
+            {/* QR / Logo flip overlay — only when verification has succeeded.
+                JSX + classes mirror VideoPlayer.tsx so the badge animates and
+                renders identically on video and image. */}
+            {verification.verifiedUserId !== null && !verification.isVerificationFailed && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (verification.verifiedUserId !== null) {
+                    window.open(
+                      `${SAIVD_API_ORIGIN}/profile/${verification.verifiedUserId}`,
+                      "_blank",
+                      "noopener,noreferrer",
+                    );
+                  }
+                }}
+                aria-label="View creator profile"
+                className="absolute top-2 right-2 sm:top-4 sm:right-4 z-20 qr-logo-flip-container cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 rounded-md">
+                <div className="qr-logo-flip-card">
+                  <div className="qr-logo-flip-face qr-logo-flip-face-front">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`${SAIVD_API_ORIGIN}/profile/${verification.verifiedUserId}/qr`}
+                      alt="Creator QR code"
+                      className="w-16 h-16 object-contain rounded-md shadow-md"
+                    />
+                  </div>
+                  <div className="qr-logo-flip-face qr-logo-flip-face-back">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src="/images/saivd-logo.png"
+                      alt="Brand logo"
+                      className="w-16 h-16 object-contain rounded-md shadow-md"
+                    />
+                  </div>
+                </div>
+              </button>
+            )}
+
+            {/* Verifying spinner overlay — small, top-left corner. */}
+            {verification.verificationStatus === "verifying" && (
+              <div className="absolute top-2 left-2 sm:top-4 sm:left-4 z-20 flex items-center gap-2 rounded-md bg-black/60 px-2 py-1 text-xs text-white">
+                <LoadingSpinner size="sm" /> Verifying…
+              </div>
+            )}
+
+            {/* Failed verification banner. Shown only when verification
+                returned a definite failure (not when watermark isn't
+                available yet). */}
+            {watermarkAvailable && verification.isVerificationFailed && (
+              <div className="absolute bottom-2 left-2 right-2 sm:bottom-4 sm:left-4 sm:right-4 z-20 rounded-md bg-amber-600/90 px-3 py-2 text-xs text-white">
+                <div className="font-medium">Watermark verification failed</div>
+                <div className="opacity-90">
+                  {verification.failReason === "invalid_signature"
+                    ? "Signature does not match the public key."
+                    : verification.failReason === "fetch_failed"
+                      ? "Could not fetch the public key."
+                      : verification.failReason === "no_watermark"
+                        ? "No watermark detected."
+                        : "Image could not be decoded."}
+                </div>
+              </div>
+            )}
+
+            {/* "Original — not watermarked yet" hint while status='processing'
+                or watermark hasn't completed. Shown over the original_url
+                fallback. */}
+            {!watermarkAvailable && image.status === "processing" && (
+              <div className="absolute top-2 left-2 sm:top-4 sm:left-4 z-20 flex items-center gap-2 rounded-md bg-black/60 px-2 py-1 text-xs text-white">
+                <LoadingSpinner size="sm" /> Watermarking…
+              </div>
+            )}
+          </div>
+
           <button
             onClick={() => setLightbox(false)}
             className="absolute top-4 right-4 text-white text-2xl font-bold bg-black/40 rounded-full w-10 h-10 flex items-center justify-center hover:bg-black/60"

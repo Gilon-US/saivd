@@ -5,8 +5,17 @@ export type ImageRecord = {
   user_id: string;
   filename: string;
   original_url: string | null;
+  // Phase 2 watermark fields. Null until /api/images/confirm completes the
+  // sync watermark step (~1-3s after upload). Migration:
+  // supabase/migrations/20260528120000_images_watermark_fields.sql
+  processed_url: string | null;
+  width: number | null;
+  height: number | null;
+  watermark_error: string | null;
+  watermarked_at: string | null;
   file_size: number | null;
   content_type: string | null;
+  // Application-enforced enum: uploaded | processing | processed | failed.
   status: string;
   created_at: string;
   updated_at: string;
