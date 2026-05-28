@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
       (images ?? []).map(async (img) => ({
         ...img,
         original_url: await resolvePhotoUrl(img.original_url),
+        processed_url: img.processed_url ? await resolvePhotoUrl(img.processed_url) : null,
       }))
     );
 

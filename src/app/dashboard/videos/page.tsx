@@ -74,7 +74,7 @@ export default function VideosPage() {
           <p className="text-gray-500 dark:text-gray-400">
             {activeTab === "videos"
               ? "View and manage your uploaded videos"
-              : "View your uploaded images — original files only, no watermarking"}
+              : "View and manage your uploaded images — original and watermarked versions"}
           </p>
         </div>
         <div className="flex space-x-2 shrink-0">

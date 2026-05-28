@@ -1,22 +1,8 @@
-/**
- * React hook for in-browser verification of a single watermarked image.
- *
- * Given an image URL (typically the resolved `processed_url` returned by
- * /api/images), this hook:
- *   1. Loads the image into an `ImageBitmap` at intrinsic resolution.
- *   2. Runs {@link verifyImageWatermark} against it (decode + RSA verify).
- *   3. Exposes a discriminated-union `state` so the caller can render
- *      `verifying`, `ok` (with `numericUserId` for the QR badge), or `failed`.
- *
- * Mirrors the surface of `useWatermarkVerification` (the video hook) at
- * the property level — `verifiedUserId`, `isPlaybackBlocked`,
- * `verificationStatus` — so the QR-overlay JSX in ImageGrid can be a
- * near-direct copy of the video player's snippet.
- */
 "use client";
 
 import {useEffect, useRef, useState} from "react";
 
+import {imageProcessedVerificationUrl} from "@/lib/image-verification-url";
 import {
   type ImageVerificationFailReason,
   type ImageVerificationResult,
@@ -26,27 +12,25 @@ import {
 export type ImageVerificationStatus = "idle" | "verifying" | "verified" | "failed";
 
 export type UseImageWatermarkVerification = {
-  /** numeric_user_id from the watermark, or null if not yet verified / failed. */
   verifiedUserId: number | null;
-  /** True when verification has finished AND failed. Caller may hide the
-   *  image or show a "not authentic" badge. */
   isVerificationFailed: boolean;
-  /** Coarse status for spinners / log labels. */
   verificationStatus: ImageVerificationStatus;
-  /** Reason for failure when isVerificationFailed is true. */
   failReason: ImageVerificationFailReason | null;
-  /** Full result, in case the caller wants details. */
   result: ImageVerificationResult | null;
 };
 
+/**
+ * Verify a watermarked image via same-origin GET /api/images/[id]/processed
+ * (adapted from useWatermarkVerification — video uses WASM + play URL; images
+ * use a server proxy so createImageBitmap is not blocked by Wasabi CORS).
+ */
 export function useImageWatermarkVerification(
-  imageUrl: string | null | undefined,
-  options?: {
-    /** Whether to actually run verification. If false, the hook stays idle. */
-    enabled?: boolean;
-  },
+  imageId: string | null | undefined,
+  options?: {enabled?: boolean},
 ): UseImageWatermarkVerification {
   const enabled = options?.enabled ?? true;
+  const verifyUrl = imageId?.trim() ? imageProcessedVerificationUrl(imageId.trim()) : null;
+
   const [state, setState] = useState<ImageVerificationStatus>("idle");
   const [result, setResult] = useState<ImageVerificationResult | null>(null);
   const cancelRef = useRef<{cancelled: boolean}>({cancelled: false});
@@ -56,7 +40,7 @@ export function useImageWatermarkVerification(
     cancelRef.current = {cancelled: false};
     const tag = cancelRef.current;
 
-    if (!enabled || !imageUrl) {
+    if (!enabled || !verifyUrl) {
       setState("idle");
       setResult(null);
       return;
@@ -68,12 +52,14 @@ export function useImageWatermarkVerification(
 
     (async () => {
       try {
-        // Fetch as blob then createImageBitmap so we get intrinsic-resolution
-        // pixels (a styled <img> may be downscaled, which breaks row sums).
-        const res = await fetch(imageUrl, {credentials: "include"});
+        const res = await fetch(verifyUrl, {credentials: "include"});
         if (!res.ok) {
           if (tag.cancelled) return;
-          setResult({ok: false, reason: "fetch_failed", detail: `${res.status}`});
+          setResult({
+            ok: false,
+            reason: "fetch_failed",
+            detail: `image_fetch_failed: ${res.status}`,
+          });
           setState("failed");
           return;
         }
@@ -91,7 +77,11 @@ export function useImageWatermarkVerification(
         setState(verification.ok ? "verified" : "failed");
       } catch (e) {
         if (tag.cancelled) return;
-        setResult({ok: false, reason: "malformed", detail: e instanceof Error ? e.message : String(e)});
+        setResult({
+          ok: false,
+          reason: "malformed",
+          detail: e instanceof Error ? e.message : String(e),
+        });
         setState("failed");
       } finally {
         bmp?.close();
@@ -102,7 +92,7 @@ export function useImageWatermarkVerification(
       tag.cancelled = true;
       bmp?.close();
     };
-  }, [imageUrl, enabled]);
+  }, [verifyUrl, enabled]);
 
   const verifiedUserId = result?.ok ? result.numericUserId : null;
   const isVerificationFailed = state === "failed";
