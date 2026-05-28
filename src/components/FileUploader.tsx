@@ -13,6 +13,7 @@ type FileUploaderProps = {
   maxFiles?: number;
   onFilesSelected: (files: File[]) => void;
   className?: string;
+  invalidTypeMessage?: string;
 };
 
 export default function FileUploader({
@@ -23,6 +24,7 @@ export default function FileUploader({
   maxFiles = 1,
   onFilesSelected,
   className = '',
+  invalidTypeMessage = 'Invalid file type. Please upload a supported file.',
 }: FileUploaderProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +36,7 @@ export default function FileUploader({
       if (rejection.errors[0].code === 'file-too-large') {
         setError(`File is too large. Maximum size is ${maxSize / (1024 * 1024)}MB.`);
       } else if (rejection.errors[0].code === 'file-invalid-type') {
-        setError('Invalid file type. Please upload a video file.');
+        setError(invalidTypeMessage);
       } else {
         setError(rejection.errors[0].message);
       }
@@ -49,7 +51,7 @@ export default function FileUploader({
     
     // Call parent callback
     onFilesSelected(acceptedFiles);
-  }, [maxSize, onFilesSelected]);
+  }, [maxSize, onFilesSelected, invalidTypeMessage]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

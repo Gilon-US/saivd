@@ -1,11 +1,10 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { UploadModal } from '../UploadModal';
 
-// Mock the VideoUploader component
-jest.mock('../VideoUploader', () => ({
-  VideoUploader: ({ onUploadComplete }: { onUploadComplete: (data: { key: string; filename: string; originalUrl: string; thumbnailUrl: string }) => void }) => (
-    <button onClick={() => onUploadComplete({ key: 'test', filename: 'test.mp4', originalUrl: 'test-url', thumbnailUrl: 'test-thumbnail' })}>
-      Mock VideoUploader
+jest.mock('@/components/media/MediaUploader', () => ({
+  MediaUploader: ({ onUploadComplete }: { onUploadComplete: (data: { kind: 'video'; result: { filename: string } }) => void }) => (
+    <button onClick={() => onUploadComplete({ kind: 'video', result: { filename: 'test.mp4' } })}>
+      Mock MediaUploader
     </button>
   ),
 }));
@@ -24,14 +23,14 @@ describe('UploadModal', () => {
   it('renders when isOpen is true', () => {
     render(<UploadModal {...mockProps} />);
 
-    expect(screen.getByText('Upload Video')).toBeInTheDocument();
-    expect(screen.getByText('Mock VideoUploader')).toBeInTheDocument();
+    expect(screen.getByText('Upload Media')).toBeInTheDocument();
+    expect(screen.getByText('Mock MediaUploader')).toBeInTheDocument();
   });
 
   it('does not render when isOpen is false', () => {
     render(<UploadModal {...mockProps} isOpen={false} />);
 
-    expect(screen.queryByText('Upload Video')).not.toBeInTheDocument();
+    expect(screen.queryByText('Upload Media')).not.toBeInTheDocument();
   });
 
   it('calls onClose when header close button is clicked', () => {
@@ -44,16 +43,12 @@ describe('UploadModal', () => {
   it('calls onUploadComplete and onClose when upload completes', () => {
     render(<UploadModal {...mockProps} />);
 
-    fireEvent.click(screen.getByText('Mock VideoUploader'));
+    fireEvent.click(screen.getByText('Mock MediaUploader'));
 
     expect(mockProps.onUploadComplete).toHaveBeenCalledWith({
-      key: 'test',
-      filename: 'test.mp4',
-      originalUrl: 'test-url',
-      thumbnailUrl: 'test-thumbnail',
+      kind: 'video',
+      result: { filename: 'test.mp4' },
     });
     expect(mockProps.onClose).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText('Upload Successful!')).not.toBeInTheDocument();
-    expect(screen.getByText('Mock VideoUploader')).toBeInTheDocument();
   });
 });

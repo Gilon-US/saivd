@@ -5,6 +5,7 @@ import {usePathname} from "next/navigation";
 import {cn} from "@/lib/utils";
 
 const tabs = [
+  {href: "/dashboard/settings/general", label: "General"},
   {href: "/dashboard/settings/users", label: "Users"},
   {href: "/dashboard/settings/admins", label: "Admins"},
   {href: "/dashboard/settings/activity", label: "Activity"},

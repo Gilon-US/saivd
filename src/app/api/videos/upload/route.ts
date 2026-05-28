@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
-import { wasabiClient, WASABI_BUCKET, MAX_FILE_SIZE, ALLOWED_VIDEO_TYPES, URL_EXPIRATION_SECONDS } from '@/lib/wasabi';
+import { wasabiClient, WASABI_BUCKET, URL_EXPIRATION_SECONDS } from '@/lib/wasabi';
+import { getMaxVideoSizeBytes, getAllowedVideoTypes } from '@/lib/app-settings';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -95,28 +96,35 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // Read settings from DB (both fall back gracefully if table not yet migrated)
+    const [allowedVideoTypes, maxFileSize] = await Promise.all([
+      getAllowedVideoTypes(),
+      getMaxVideoSizeBytes(),
+    ]);
+
     // Validate file type
-    if (!ALLOWED_VIDEO_TYPES.includes(contentType)) {
+    if (!allowedVideoTypes.includes(contentType)) {
       return NextResponse.json(
         { 
           success: false, 
           error: { 
             code: 'validation_error', 
-            message: `Invalid file type. Supported types: ${ALLOWED_VIDEO_TYPES.join(', ')}` 
+            message: `Invalid file type. Supported types: ${allowedVideoTypes.join(', ')}` 
           } 
         },
         { status: 400 }
       );
     }
-    
+    const maxFileSizeMb = Math.round(maxFileSize / (1024 * 1024));
+
     // Validate file size
-    if (filesize > MAX_FILE_SIZE) {
+    if (filesize > maxFileSize) {
       return NextResponse.json(
         { 
           success: false, 
           error: { 
             code: 'validation_error', 
-            message: `File too large. Maximum size: ${MAX_FILE_SIZE / (1024 * 1024)}MB` 
+            message: `File too large. Maximum size: ${maxFileSizeMb} MB` 
           } 
         },
         { status: 400 }
@@ -137,7 +145,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': contentType,
       },
       Conditions: [
-        ['content-length-range', 0, MAX_FILE_SIZE],
+        ['content-length-range', 0, maxFileSize],
         ['starts-with', '$Content-Type', contentType.split('/')[0]],
       ],
       Expires: URL_EXPIRATION_SECONDS,

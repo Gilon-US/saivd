@@ -1,11 +1,11 @@
-import { useCallback } from 'react';
+import { useCallback, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
 type ToastVariant = 'default' | 'success' | 'error' | 'warning' | 'info';
 
 interface ToastOptions {
   title?: string;
-  description?: string;
+  description?: ReactNode;
   variant?: ToastVariant;
   duration?: number;
 }

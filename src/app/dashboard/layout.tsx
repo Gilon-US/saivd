@@ -31,6 +31,16 @@ function DashboardShell({children}: DashboardLayoutProps) {
                   Dashboard
                 </Link>
                 <Link
+                  href="/dashboard/videos"
+                  className="px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                  Videos
+                </Link>
+                <Link
+                  href="/dashboard/images"
+                  className="px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                  Images
+                </Link>
+                <Link
                   href="/dashboard/profile"
                   className="px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
                   Profile
