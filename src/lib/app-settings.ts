@@ -6,6 +6,22 @@ const DEFAULTS: Record<string, string> = {
   allowed_video_types: "video/mp4,video/quicktime,video/x-msvideo,video/webm",
   max_image_size_mb: "10",
   allowed_image_types: "image/jpeg,image/png,image/webp,image/gif",
+  unauthenticated_media_headline: "Unauthenticated Media",
+  unauthenticated_media_subhead: "This content could not be verified.",
+  unauthenticated_media_body:
+    "It may have been photographed, screen-recorded, edited, or shared without the creator's authorization. SAIVD verifies authenticity at the source — when that link is missing, we can't confirm who published it.",
+  unauthenticated_media_cta_label: "Learn about SAIVD",
+  unauthenticated_media_cta_url: "https://www.saivd.io/",
+  unauthenticated_media_tagline: "Trace it. Trust it.",
+};
+
+export type SettingType = "integer" | "csv" | "text" | "textarea" | "url" | "optional_text";
+
+export type SettingDef = {
+  key: string;
+  label: string;
+  description: string;
+  type: SettingType;
 };
 
 /** All video MIME types the platform can ever support (superset used for the checkbox list). */
@@ -29,7 +45,7 @@ export const ALL_IMAGE_TYPES: {mime: string; label: string; ext: string}[] = [
 ];
 
 /** All recognised setting keys and their human-readable labels. */
-export const SETTING_DEFS: {key: string; label: string; description: string; type: "integer" | "csv"}[] = [
+export const SETTING_DEFS: SettingDef[] = [
   {
     key: "max_video_size_mb",
     label: "Max video upload size (MB)",
@@ -54,7 +70,74 @@ export const SETTING_DEFS: {key: string; label: string; description: string; typ
     description: "Image MIME types accepted for upload. At least one must be selected.",
     type: "csv",
   },
+  {
+    key: "unauthenticated_media_headline",
+    label: "Headline",
+    description: "Main title on the unauthenticated media page.",
+    type: "text",
+  },
+  {
+    key: "unauthenticated_media_subhead",
+    label: "Subhead",
+    description: "One-line summary below the headline.",
+    type: "text",
+  },
+  {
+    key: "unauthenticated_media_body",
+    label: "Body",
+    description: "Explanation shown when a presentation QR scan fails.",
+    type: "textarea",
+  },
+  {
+    key: "unauthenticated_media_cta_label",
+    label: "Button label",
+    description: "Label for the primary call-to-action button.",
+    type: "text",
+  },
+  {
+    key: "unauthenticated_media_cta_url",
+    label: "Button URL",
+    description: "Destination for the primary button (https URLs only).",
+    type: "url",
+  },
+  {
+    key: "unauthenticated_media_tagline",
+    label: "Footer tagline",
+    description: "Optional footer line; leave empty to hide.",
+    type: "optional_text",
+  },
 ];
+
+const HTTPS_URL_PATTERN = /^https:\/\/.+/i;
+
+/** Validate a setting value for PUT /api/admin/settings. Returns an error message or null. */
+export function validateSettingValue(key: string, value: string): string | null {
+  const def = SETTING_DEFS.find((d) => d.key === key);
+  if (!def) return `Unknown setting key: ${key}`;
+
+  const trimmed = value.trim();
+
+  if (def.type === "optional_text") {
+    return null;
+  }
+
+  if (trimmed === "") {
+    return `Value for ${key} must be a non-empty string`;
+  }
+
+  if (def.type === "integer") {
+    const n = parseInt(trimmed, 10);
+    if (isNaN(n) || n <= 0) {
+      return `${def.label} must be a positive integer`;
+    }
+  }
+
+  if (def.type === "url" && !HTTPS_URL_PATTERN.test(trimmed)) {
+    return `${def.label} must be a valid https URL`;
+  }
+
+  return null;
+}
 
 /** Read a single setting from the DB; falls back to DEFAULTS on any error. */
 export async function getSetting(key: string): Promise<string> {
@@ -108,4 +191,9 @@ export async function getAllowedImageTypes(): Promise<string[]> {
   const raw = await getSetting("allowed_image_types");
   const types = raw.split(",").map((t) => t.trim()).filter(Boolean);
   return types.length > 0 ? types : DEFAULTS.allowed_image_types.split(",");
+}
+
+/** Default value for a setting key (used when DB row is absent). */
+export function getSettingDefault(key: string): string {
+  return DEFAULTS[key] ?? "";
 }

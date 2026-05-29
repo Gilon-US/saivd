@@ -1,7 +1,7 @@
 import {NextRequest, NextResponse} from "next/server";
 import {createServiceRoleClient} from "@/utils/supabase/service";
 import {requireSuperuser} from "@/utils/auth-roles";
-import {SETTING_DEFS} from "@/lib/app-settings";
+import {SETTING_DEFS, validateSettingValue} from "@/lib/app-settings";
 
 // GET /api/admin/settings — superuser: returns all settings with metadata
 export async function GET() {
@@ -45,16 +45,12 @@ export async function PUT(request: NextRequest) {
       if (!validKeys.has(key)) {
         return NextResponse.json({success: false, error: {code: "validation_error", message: `Unknown setting key: ${key}`}}, {status: 400});
       }
-      if (typeof value !== "string" || value.trim() === "") {
-        return NextResponse.json({success: false, error: {code: "validation_error", message: `Value for ${key} must be a non-empty string`}}, {status: 400});
+      if (typeof value !== "string") {
+        return NextResponse.json({success: false, error: {code: "validation_error", message: `Value for ${key} must be a string`}}, {status: 400});
       }
-      // Validate integer type
-      const def = SETTING_DEFS.find((d) => d.key === key)!;
-      if (def.type === "integer") {
-        const n = parseInt(value, 10);
-        if (isNaN(n) || n <= 0) {
-          return NextResponse.json({success: false, error: {code: "validation_error", message: `${def.label} must be a positive integer`}}, {status: 400});
-        }
+      const validationError = validateSettingValue(key, value);
+      if (validationError) {
+        return NextResponse.json({success: false, error: {code: "validation_error", message: validationError}}, {status: 400});
       }
     }
 

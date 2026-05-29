@@ -4,7 +4,7 @@ import {useCallback, useEffect, useState, type Dispatch, type SetStateAction} fr
 import {useProfile} from "@/contexts/ProfileContext";
 import {useAuth} from "@/contexts/AuthContext";
 import {isSuperuserProfile} from "@/lib/app-role";
-import {ALL_VIDEO_TYPES, ALL_IMAGE_TYPES} from "@/lib/app-settings";
+import {ALL_VIDEO_TYPES, ALL_IMAGE_TYPES, getSettingDefault, type SettingType} from "@/lib/app-settings";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
@@ -16,10 +16,19 @@ interface SettingRow {
   key: string;
   label: string;
   description: string;
-  type: "integer" | "csv";
+  type: SettingType;
   value: string | null;
   updated_at: string | null;
 }
+
+const UNAUTHENTICATED_MEDIA_KEYS = [
+  "unauthenticated_media_headline",
+  "unauthenticated_media_subhead",
+  "unauthenticated_media_body",
+  "unauthenticated_media_cta_label",
+  "unauthenticated_media_cta_url",
+  "unauthenticated_media_tagline",
+] as const;
 
 export default function SettingsGeneralPage() {
   const {user} = useAuth();
@@ -39,6 +48,17 @@ export default function SettingsGeneralPage() {
   const [saveImageError, setSaveImageError] = useState<string | null>(null);
   const [savedVideo, setSavedVideo] = useState(false);
   const [savedImage, setSavedImage] = useState(false);
+  const [unauthenticatedCopy, setUnauthenticatedCopy] = useState({
+    headline: "",
+    subhead: "",
+    body: "",
+    ctaLabel: "",
+    ctaUrl: "",
+    tagline: "",
+  });
+  const [savingUnauthenticated, setSavingUnauthenticated] = useState(false);
+  const [saveUnauthenticatedError, setSaveUnauthenticatedError] = useState<string | null>(null);
+  const [savedUnauthenticated, setSavedUnauthenticated] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +88,21 @@ export default function SettingsGeneralPage() {
       const imageTypes = (imageTypesSetting?.value ?? "image/jpeg,image/png,image/webp,image/gif")
         .split(",").map((t) => t.trim()).filter(Boolean);
       setSelectedImageTypes(new Set(imageTypes));
+
+      setUnauthenticatedCopy({
+        headline: rows.find((r) => r.key === "unauthenticated_media_headline")?.value
+          ?? getSettingDefault("unauthenticated_media_headline"),
+        subhead: rows.find((r) => r.key === "unauthenticated_media_subhead")?.value
+          ?? getSettingDefault("unauthenticated_media_subhead"),
+        body: rows.find((r) => r.key === "unauthenticated_media_body")?.value
+          ?? getSettingDefault("unauthenticated_media_body"),
+        ctaLabel: rows.find((r) => r.key === "unauthenticated_media_cta_label")?.value
+          ?? getSettingDefault("unauthenticated_media_cta_label"),
+        ctaUrl: rows.find((r) => r.key === "unauthenticated_media_cta_url")?.value
+          ?? getSettingDefault("unauthenticated_media_cta_url"),
+        tagline: rows.find((r) => r.key === "unauthenticated_media_tagline")?.value
+          ?? getSettingDefault("unauthenticated_media_tagline"),
+      });
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed to load settings");
     } finally {
@@ -179,10 +214,70 @@ export default function SettingsGeneralPage() {
     }
   };
 
+  const handleSaveUnauthenticated = async () => {
+    setSavingUnauthenticated(true);
+    setSaveUnauthenticatedError(null);
+    setSavedUnauthenticated(false);
+
+    const trimmed = {
+      headline: unauthenticatedCopy.headline.trim(),
+      subhead: unauthenticatedCopy.subhead.trim(),
+      body: unauthenticatedCopy.body.trim(),
+      ctaLabel: unauthenticatedCopy.ctaLabel.trim(),
+      ctaUrl: unauthenticatedCopy.ctaUrl.trim(),
+      tagline: unauthenticatedCopy.tagline.trim(),
+    };
+
+    if (!trimmed.headline || !trimmed.subhead || !trimmed.body || !trimmed.ctaLabel || !trimmed.ctaUrl) {
+      setSaveUnauthenticatedError("Headline, subhead, body, button label, and button URL are required.");
+      setSavingUnauthenticated(false);
+      return;
+    }
+    if (!/^https:\/\/.+/i.test(trimmed.ctaUrl)) {
+      setSaveUnauthenticatedError("Button URL must start with https://");
+      setSavingUnauthenticated(false);
+      return;
+    }
+
+    try {
+      const updates = [
+        {key: "unauthenticated_media_headline", value: trimmed.headline},
+        {key: "unauthenticated_media_subhead", value: trimmed.subhead},
+        {key: "unauthenticated_media_body", value: trimmed.body},
+        {key: "unauthenticated_media_cta_label", value: trimmed.ctaLabel},
+        {key: "unauthenticated_media_cta_url", value: trimmed.ctaUrl},
+        {key: "unauthenticated_media_tagline", value: trimmed.tagline},
+      ];
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(updates),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setSaveUnauthenticatedError(json.error?.message ?? json.error ?? "Failed to save");
+        return;
+      }
+      setSavedUnauthenticated(true);
+      await load();
+      setTimeout(() => setSavedUnauthenticated(false), 3000);
+    } catch (e) {
+      setSaveUnauthenticatedError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSavingUnauthenticated(false);
+    }
+  };
+
   const typesUpdatedAt = settings.find((r) => r.key === "allowed_video_types")?.updated_at;
   const sizeUpdatedAt = settings.find((r) => r.key === "max_video_size_mb")?.updated_at;
   const imageTypesUpdatedAt = settings.find((r) => r.key === "allowed_image_types")?.updated_at;
   const imageSizeUpdatedAt = settings.find((r) => r.key === "max_image_size_mb")?.updated_at;
+  const unauthenticatedUpdatedAt = UNAUTHENTICATED_MEDIA_KEYS.map((key) =>
+    settings.find((r) => r.key === key)?.updated_at,
+  )
+    .filter(Boolean)
+    .sort()
+    .pop();
 
   if (!initialized || profileLoading || loading) {
     return (
@@ -239,7 +334,7 @@ export default function SettingsGeneralPage() {
                 value={maxSizeMb}
                 onChange={(e) => setMaxSizeMb(e.target.value)}
                 className="w-36"
-                disabled={savingVideo || savingImage}
+                disabled={savingVideo || savingImage || savingUnauthenticated}
               />
               <span className="text-sm text-gray-500">MB</span>
             </div>
@@ -268,12 +363,12 @@ export default function SettingsGeneralPage() {
                       checked
                         ? "border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-900"
                         : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
-                    } ${savingVideo || savingImage || isLast ? "opacity-60 cursor-not-allowed" : ""}`}>
+                    } ${savingVideo || savingImage || savingUnauthenticated || isLast ? "opacity-60 cursor-not-allowed" : ""}`}>
                     <input
                       type="checkbox"
                       className="sr-only"
                       checked={checked}
-                      disabled={savingVideo || savingImage || isLast}
+                      disabled={savingVideo || savingImage || savingUnauthenticated || isLast}
                       onChange={() => toggleType(mime)}
                     />
                     <span className="font-semibold w-10 shrink-0">{label}</span>
@@ -298,7 +393,7 @@ export default function SettingsGeneralPage() {
             </Alert>
           )}
 
-          <Button onClick={handleSaveVideo} disabled={savingVideo || savingImage}>
+          <Button onClick={handleSaveVideo} disabled={savingVideo || savingImage || savingUnauthenticated}>
             {savingVideo ? (
               <>
                 <LoadingSpinner size="sm" className="mr-2" />
@@ -329,7 +424,7 @@ export default function SettingsGeneralPage() {
                 value={maxImageSizeMb}
                 onChange={(e) => setMaxImageSizeMb(e.target.value)}
                 className="w-36"
-                disabled={savingVideo || savingImage}
+                disabled={savingVideo || savingImage || savingUnauthenticated}
               />
               <span className="text-sm text-gray-500">MB</span>
             </div>
@@ -358,12 +453,12 @@ export default function SettingsGeneralPage() {
                       checked
                         ? "border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-900"
                         : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
-                    } ${savingVideo || savingImage || isLast ? "opacity-60 cursor-not-allowed" : ""}`}>
+                    } ${savingVideo || savingImage || savingUnauthenticated || isLast ? "opacity-60 cursor-not-allowed" : ""}`}>
                     <input
                       type="checkbox"
                       className="sr-only"
                       checked={checked}
-                      disabled={savingVideo || savingImage || isLast}
+                      disabled={savingVideo || savingImage || savingUnauthenticated || isLast}
                       onChange={() => toggleImageType(mime)}
                     />
                     <span className="font-semibold w-10 shrink-0">{label}</span>
@@ -388,7 +483,7 @@ export default function SettingsGeneralPage() {
             </Alert>
           )}
 
-          <Button onClick={handleSaveImage} disabled={savingVideo || savingImage}>
+          <Button onClick={handleSaveImage} disabled={savingVideo || savingImage || savingUnauthenticated}>
             {savingImage ? (
               <>
                 <LoadingSpinner size="sm" className="mr-2" />
@@ -399,6 +494,117 @@ export default function SettingsGeneralPage() {
             )}
           </Button>
 
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Unauthenticated media page</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Copy shown when a presentation QR scan fails (expired, invalid, or unverified). Changes apply on the
+            next visit to <code className="text-xs">/presentation/expired</code>.
+          </p>
+
+          <div className="space-y-1">
+            <Label htmlFor="unauthenticated_media_headline">Headline</Label>
+            <Input
+              id="unauthenticated_media_headline"
+              value={unauthenticatedCopy.headline}
+              onChange={(e) => setUnauthenticatedCopy((prev) => ({...prev, headline: e.target.value}))}
+              disabled={savingUnauthenticated || savingVideo || savingImage}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="unauthenticated_media_subhead">Subhead</Label>
+            <Input
+              id="unauthenticated_media_subhead"
+              value={unauthenticatedCopy.subhead}
+              onChange={(e) => setUnauthenticatedCopy((prev) => ({...prev, subhead: e.target.value}))}
+              disabled={savingUnauthenticated || savingVideo || savingImage}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="unauthenticated_media_body">Body</Label>
+            <textarea
+              id="unauthenticated_media_body"
+              rows={5}
+              value={unauthenticatedCopy.body}
+              onChange={(e) => setUnauthenticatedCopy((prev) => ({...prev, body: e.target.value}))}
+              disabled={savingUnauthenticated || savingVideo || savingImage}
+              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="unauthenticated_media_cta_label">Button label</Label>
+            <Input
+              id="unauthenticated_media_cta_label"
+              value={unauthenticatedCopy.ctaLabel}
+              onChange={(e) => setUnauthenticatedCopy((prev) => ({...prev, ctaLabel: e.target.value}))}
+              disabled={savingUnauthenticated || savingVideo || savingImage}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="unauthenticated_media_cta_url">Button URL</Label>
+            <Input
+              id="unauthenticated_media_cta_url"
+              type="url"
+              value={unauthenticatedCopy.ctaUrl}
+              onChange={(e) => setUnauthenticatedCopy((prev) => ({...prev, ctaUrl: e.target.value}))}
+              disabled={savingUnauthenticated || savingVideo || savingImage}
+              placeholder="https://www.saivd.io/"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400">Must be an https URL.</p>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="unauthenticated_media_tagline">Footer tagline (optional)</Label>
+            <Input
+              id="unauthenticated_media_tagline"
+              value={unauthenticatedCopy.tagline}
+              onChange={(e) => setUnauthenticatedCopy((prev) => ({...prev, tagline: e.target.value}))}
+              disabled={savingUnauthenticated || savingVideo || savingImage}
+              placeholder="Trace it. Trust it."
+            />
+          </div>
+
+          {unauthenticatedUpdatedAt && (
+            <p className="text-xs text-gray-400">Last updated: {new Date(unauthenticatedUpdatedAt).toLocaleString()}</p>
+          )}
+
+          {saveUnauthenticatedError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveUnauthenticatedError}</AlertDescription>
+            </Alert>
+          )}
+          {savedUnauthenticated && (
+            <Alert>
+              <AlertDescription>Unauthenticated media page settings saved successfully.</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={handleSaveUnauthenticated} disabled={savingUnauthenticated || savingVideo || savingImage}>
+              {savingUnauthenticated ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  Saving…
+                </>
+              ) : (
+                "Save changes"
+              )}
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/presentation/expired" target="_blank" rel="noopener noreferrer">
+                Preview page
+              </a>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
