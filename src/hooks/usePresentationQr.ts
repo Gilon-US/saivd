@@ -63,9 +63,14 @@ export function usePresentationQr({
   }, [dynamicEnabled, enabled, numericUserId, mediaKind, mediaId, mintEndpoint]);
 
   useEffect(() => {
-    if (!dynamicEnabled || !enabled || numericUserId === null || !mediaId) {
+    if (!dynamicEnabled || numericUserId === null || !mediaId) {
       setQrDataUrl(null);
       setScanUrl(null);
+      return;
+    }
+
+    if (!enabled) {
+      // Pause mint/rotation but keep the last dynamic QR visible (e.g. video paused).
       return;
     }
 

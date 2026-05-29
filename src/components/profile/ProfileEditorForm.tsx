@@ -12,6 +12,12 @@ import {Label} from "@/components/ui/label";
 import {Alert, AlertDescription} from "@/components/ui/alert";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
 import {Upload, X, User} from "lucide-react";
+import {QrOverlayPositionPicker} from "@/components/presentation/QrOverlayPositionPicker";
+import {
+  DEFAULT_QR_OVERLAY_POSITION,
+  parseQrOverlayPosition,
+  type QrOverlayPosition,
+} from "@/lib/presentation-qr/position";
 
 const BIO_MAX = 500;
 const DISPLAY_NAME_MIN = 2;
@@ -19,11 +25,12 @@ const DISPLAY_NAME_MAX = 100;
 const MAX_PHOTO_BYTES = 50 * 1024; // 50 KB
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-function getProfileDefaults(profile: {display_name?: string | null; photo?: string | null; bio?: string | null; twitter_url?: string | null; instagram_url?: string | null; facebook_url?: string | null; youtube_url?: string | null; tiktok_url?: string | null; website_url?: string | null} | null) {
+function getProfileDefaults(profile: {display_name?: string | null; photo?: string | null; bio?: string | null; qr_overlay_position?: string | null; twitter_url?: string | null; instagram_url?: string | null; facebook_url?: string | null; youtube_url?: string | null; tiktok_url?: string | null; website_url?: string | null} | null) {
   return {
     displayName: profile?.display_name ?? "",
     photo: profile?.photo ?? "",
     bio: profile?.bio ?? "",
+    qrOverlayPosition: parseQrOverlayPosition(profile?.qr_overlay_position),
     twitterUrl: profile?.twitter_url ?? "",
     instagramUrl: profile?.instagram_url ?? "",
     facebookUrl: profile?.facebook_url ?? "",
@@ -48,6 +55,9 @@ export function ProfileEditorForm() {
   const [youtubeUrl, setYoutubeUrl] = useState(defaults.youtubeUrl);
   const [tiktokUrl, setTiktokUrl] = useState(defaults.tiktokUrl);
   const [websiteUrl, setWebsiteUrl] = useState(defaults.websiteUrl);
+  const [qrOverlayPosition, setQrOverlayPosition] = useState<QrOverlayPosition>(
+    defaults.qrOverlayPosition ?? DEFAULT_QR_OVERLAY_POSITION,
+  );
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -75,6 +85,7 @@ export function ProfileEditorForm() {
       setYoutubeUrl(profile.youtube_url ?? "");
       setTiktokUrl(profile.tiktok_url ?? "");
       setWebsiteUrl(profile.website_url ?? "");
+      setQrOverlayPosition(parseQrOverlayPosition(profile.qr_overlay_position));
     }
   }, [profile]);
 
@@ -201,6 +212,7 @@ export function ProfileEditorForm() {
         youtube_url: youtubeUrl.trim() || null,
         tiktok_url: tiktokUrl.trim() || null,
         website_url: websiteUrl.trim() || null,
+        qr_overlay_position: qrOverlayPosition,
       });
       router.push("/dashboard/profile");
     } catch {
@@ -329,6 +341,15 @@ export function ProfileEditorForm() {
           <p className="text-xs text-muted-foreground">
             {bio.length}/{BIO_MAX} characters
           </p>
+        </div>
+
+        <div className="border-t border-border pt-4">
+          <QrOverlayPositionPicker
+            value={qrOverlayPosition}
+            onChange={setQrOverlayPosition}
+            disabled={isSubmitting}
+            idPrefix="profile-qr-overlay"
+          />
         </div>
 
         <div className="border-t border-border pt-4 space-y-4">

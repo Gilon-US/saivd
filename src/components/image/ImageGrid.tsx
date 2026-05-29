@@ -13,6 +13,8 @@ import {Download, ImageIcon, QrCode, Share2Icon, TrashIcon, UploadIcon} from "lu
 import type {ImageRecord} from "@/hooks/useImages";
 import {useImageWatermarkVerification} from "@/hooks/useImageWatermarkVerification";
 import {PresentationQrFlipButton} from "@/components/presentation/PresentationQrFlipButton";
+import {useProfile} from "@/contexts/ProfileContext";
+import {parseQrOverlayPosition} from "@/lib/presentation-qr/position";
 import {
   imageOriginalDownloadUrl,
   imageProcessedDownloadUrl,
@@ -66,6 +68,8 @@ function ImageLightbox({
   variant: LightboxVariant;
   onClose: () => void;
 }) {
+  const {profile} = useProfile();
+  const qrOverlayPosition = parseQrOverlayPosition(profile?.qr_overlay_position);
   const watermarkedReady = variant === "watermarked" && image.status === "processed" && Boolean(image.processed_url);
   const url =
     watermarkedReady
@@ -98,6 +102,7 @@ function ImageLightbox({
             mediaKind="image"
             mediaId={image.id}
             enabled
+            position={qrOverlayPosition}
           />
         )}
 

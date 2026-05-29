@@ -30,7 +30,7 @@ export async function GET(_request: NextRequest, context: {params: Promise<{user
     // Fetch public profile data - only safe fields
     const {data: profile, error} = await supabase
       .from("profiles")
-      .select("id, display_name, bio, photo, created_at, numeric_user_id, twitter_url, instagram_url, facebook_url, youtube_url, tiktok_url, website_url")
+      .select("id, display_name, bio, photo, created_at, numeric_user_id, qr_overlay_position, twitter_url, instagram_url, facebook_url, youtube_url, tiktok_url, website_url")
       .eq("numeric_user_id", numericUserId)
       .single();
 

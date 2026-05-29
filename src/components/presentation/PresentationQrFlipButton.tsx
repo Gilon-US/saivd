@@ -1,6 +1,12 @@
 "use client";
 
 import {usePresentationQr, type PresentationMediaKind} from "@/hooks/usePresentationQr";
+import {
+  DEFAULT_QR_OVERLAY_POSITION,
+  getQrOverlayPositionClasses,
+  type QrOverlayPosition,
+} from "@/lib/presentation-qr/position";
+import {cn} from "@/lib/utils";
 
 const CREATOR_APP_ORIGIN =
   process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") ??
@@ -12,6 +18,9 @@ type PresentationQrFlipButtonProps = {
   mediaKind: PresentationMediaKind;
   mediaId: string;
   enabled: boolean;
+  position?: QrOverlayPosition;
+  /** Lift bottom corners above video control bar */
+  elevateAboveBottomControls?: boolean;
   className?: string;
   mintEndpoint?: string;
   profileOrigin?: string;
@@ -23,6 +32,8 @@ export function PresentationQrFlipButton({
   mediaKind,
   mediaId,
   enabled,
+  position = DEFAULT_QR_OVERLAY_POSITION,
+  elevateAboveBottomControls = false,
   className = "",
   mintEndpoint = "/api/presentation/mint",
   profileOrigin = CREATOR_APP_ORIGIN,
@@ -48,7 +59,11 @@ export function PresentationQrFlipButton({
         window.open(target, "_blank", "noopener,noreferrer");
       }}
       aria-label="View creator profile"
-      className={`absolute top-2 right-2 sm:top-4 sm:right-4 z-20 qr-logo-flip-container cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 rounded-md ${className}`}>
+      className={cn(
+        "absolute z-20 qr-logo-flip-container cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 rounded-md",
+        getQrOverlayPositionClasses(position, {elevateAboveBottomControls}),
+        className,
+      )}>
       <div className="qr-logo-flip-card">
         <div className="qr-logo-flip-face qr-logo-flip-face-front">
           {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -4,6 +4,7 @@ import {createContext, useContext, useState, useEffect, useCallback, ReactNode} 
 import {useAuth} from "@/contexts/AuthContext";
 import {useToast} from "@/hooks/useToast";
 import type {AppRole} from "@/lib/app-role";
+import type {QrOverlayPosition} from "@/lib/presentation-qr/position";
 
 // Define the profile type
 export interface Profile {
@@ -20,6 +21,7 @@ export interface Profile {
   youtube_url: string | null;
   tiktok_url: string | null;
   website_url: string | null;
+  qr_overlay_position: QrOverlayPosition;
   role: AppRole;
   created_at: string;
   updated_at: string;

@@ -4,6 +4,7 @@ import {createClient} from "@/utils/supabase/server";
 import {generateKeyPairSync} from "crypto";
 import {generateAndUploadUserQrCode} from "@/lib/qr-codes";
 import {resolvePhotoUrl} from "@/lib/wasabi-urls";
+import {isQrOverlayPosition} from "@/lib/presentation-qr/position";
 
 // GET /api/profile
 export async function GET() {
@@ -36,6 +37,7 @@ export async function GET() {
         youtube_url,
         tiktok_url,
         website_url,
+        qr_overlay_position,
         role,
         rsa_public,
         rsa_private,
@@ -94,6 +96,7 @@ export async function GET() {
             youtube_url,
             tiktok_url,
             website_url,
+            qr_overlay_position,
             role,
             rsa_public,
             rsa_private,
@@ -205,6 +208,7 @@ export async function PUT(request: Request) {
       youtube_url,
       tiktok_url,
       website_url,
+      qr_overlay_position,
     } = body;
 
     if (display_name !== undefined) {
@@ -226,6 +230,13 @@ export async function PUT(request: Request) {
     if (bio !== undefined && bio != null && String(bio).length > 500) {
       return NextResponse.json(
         {success: false, error: "Bio cannot exceed 500 characters"},
+        {status: 400}
+      );
+    }
+
+    if (qr_overlay_position !== undefined && !isQrOverlayPosition(qr_overlay_position)) {
+      return NextResponse.json(
+        {success: false, error: "Invalid QR overlay position"},
         {status: 400}
       );
     }
@@ -262,13 +273,14 @@ export async function PUT(request: Request) {
     if (youtube_url !== undefined) updatePayload.youtube_url = youtube_url == null ? null : String(youtube_url).trim() || null;
     if (tiktok_url !== undefined) updatePayload.tiktok_url = tiktok_url == null ? null : String(tiktok_url).trim() || null;
     if (website_url !== undefined) updatePayload.website_url = website_url == null ? null : String(website_url).trim() || null;
+    if (qr_overlay_position !== undefined) updatePayload.qr_overlay_position = qr_overlay_position;
 
     const {data: profile, error} = await supabase
       .from("profiles")
       .update(updatePayload)
       .eq("id", user.id)
       .select(
-        "id, email, display_name, avatar_url, photo, bio, numeric_user_id, twitter_url, instagram_url, facebook_url, youtube_url, tiktok_url, website_url, role, created_at, updated_at"
+        "id, email, display_name, avatar_url, photo, bio, numeric_user_id, twitter_url, instagram_url, facebook_url, youtube_url, tiktok_url, website_url, qr_overlay_position, role, created_at, updated_at"
       )
       .single();
 

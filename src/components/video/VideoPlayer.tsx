@@ -7,6 +7,12 @@ import {useWatermarkVerification, type VerificationProgress, type VerificationPr
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
 import {PresentationQrFlipButton} from "@/components/presentation/PresentationQrFlipButton";
 import { prewarmWasmVerificationSession } from "@/lib/wasm-watermark-verification-client";
+import {useProfile} from "@/contexts/ProfileContext";
+import {
+  getQrOverlayPositionClasses,
+  parseQrOverlayPosition,
+} from "@/lib/presentation-qr/position";
+import {cn} from "@/lib/utils";
 
 const CREATOR_APP_ORIGIN =
   process.env.NEXT_PUBLIC_SITE_URL ??
@@ -34,6 +40,8 @@ export function VideoPlayer({
   verifiedUserId,
   onVerificationComplete,
 }: VideoPlayerProps) {
+  const {profile} = useProfile();
+  const qrOverlayPosition = parseQrOverlayPosition(profile?.qr_overlay_position);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -251,8 +259,9 @@ export function VideoPlayer({
               numericUserId={presentationNumericId}
               mediaKind="video"
               mediaId={videoId}
-              enabled={isOpen && isPlaying}
-              className="top-2 left-2 sm:top-4 sm:left-4"
+              enabled={isOpen && !isPlaybackBlocked}
+              position={qrOverlayPosition}
+              elevateAboveBottomControls
             />
           )}
 
@@ -266,7 +275,10 @@ export function VideoPlayer({
               }}
               disabled={!creatorProfileUrl}
               aria-label="View creator profile"
-              className="absolute top-2 left-2 sm:top-4 sm:left-4 z-20 qr-logo-flip-container cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 rounded-md">
+              className={cn(
+                "absolute z-20 qr-logo-flip-container cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 rounded-md",
+                getQrOverlayPositionClasses(qrOverlayPosition, {elevateAboveBottomControls: true}),
+              )}>
               <div className="qr-logo-flip-card">
                 <div className="qr-logo-flip-face qr-logo-flip-face-front">
                   {/* eslint-disable-next-line @next/next/no-img-element */}

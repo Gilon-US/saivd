@@ -22,6 +22,12 @@ jest.mock('@/hooks/useWatermarkVerification', () => ({
   useWatermarkVerification: jest.fn(),
 }));
 
+jest.mock('@/contexts/ProfileContext', () => ({
+  useProfile: () => ({
+    profile: {qr_overlay_position: 'top-right'},
+  }),
+}));
+
 describe('VideoPlayer', () => {
   const mockOnClose = jest.fn();
   const defaultProps = {
@@ -201,6 +207,7 @@ describe('VideoPlayer', () => {
         enableFrameAnalysis={true}
         verificationStatus="verified"
         verifiedUserId="123"
+        videoId="test-video-id"
       />
     );
 
