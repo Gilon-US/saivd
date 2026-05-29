@@ -12,6 +12,7 @@ import {
 import {Download, ImageIcon, QrCode, Share2Icon, TrashIcon, UploadIcon} from "lucide-react";
 import type {ImageRecord} from "@/hooks/useImages";
 import {useImageWatermarkVerification} from "@/hooks/useImageWatermarkVerification";
+import {PresentationQrFlipButton} from "@/components/presentation/PresentationQrFlipButton";
 import {
   imageOriginalDownloadUrl,
   imageProcessedDownloadUrl,
@@ -37,8 +38,6 @@ async function downloadBlob(blob: Blob, filename: string) {
   document.body.removeChild(anchor);
   URL.revokeObjectURL(blobUrl);
 }
-
-const SAIVD_API_ORIGIN = process.env.NEXT_PUBLIC_SAIVD_API_URL?.replace(/\/+$/, "") ?? "https://saivd.netlify.app";
 
 type ImageGridProps = {
   images: ImageRecord[];
@@ -94,38 +93,12 @@ function ImageLightbox({
         />
 
         {variant === "watermarked" && verification.verifiedUserId !== null && !verification.isVerificationFailed && (
-          <button
-            type="button"
-            onClick={() => {
-              if (verification.verifiedUserId !== null) {
-                window.open(
-                  `${SAIVD_API_ORIGIN}/profile/${verification.verifiedUserId}`,
-                  "_blank",
-                  "noopener,noreferrer",
-                );
-              }
-            }}
-            aria-label="View creator profile"
-            className="absolute top-2 right-2 sm:top-4 sm:right-4 z-20 qr-logo-flip-container cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 rounded-md">
-            <div className="qr-logo-flip-card">
-              <div className="qr-logo-flip-face qr-logo-flip-face-front">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`${SAIVD_API_ORIGIN}/profile/${verification.verifiedUserId}/qr`}
-                  alt="Creator QR code"
-                  className="w-16 h-16 object-contain rounded-md shadow-md"
-                />
-              </div>
-              <div className="qr-logo-flip-face qr-logo-flip-face-back">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/images/saivd-logo.png"
-                  alt="Brand logo"
-                  className="w-16 h-16 object-contain rounded-md shadow-md"
-                />
-              </div>
-            </div>
-          </button>
+          <PresentationQrFlipButton
+            numericUserId={verification.verifiedUserId}
+            mediaKind="image"
+            mediaId={image.id}
+            enabled
+          />
         )}
 
         {variant === "watermarked" && verification.verificationStatus === "verifying" && (

@@ -66,6 +66,7 @@ export async function updateSession(request: NextRequest) {
     !pathname.startsWith("/api/profile") && // Public profile API
     !pathname.startsWith("/api/users/") && // Public user QR API
     !pathname.startsWith("/api/public/") && // Token-protected public endpoints (e.g. cross-app transfers)
+    !pathname.startsWith("/api/presentation/") && // Time-bound presentation QR mint (rate-limited, no session)
     !pathname.startsWith("/api/webhooks/"); // Webhooks use HMAC/secret auth, no user session
 
   // Redirect if accessing protected route without authentication

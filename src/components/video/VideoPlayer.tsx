@@ -5,6 +5,7 @@ import {X, Play, Pause, Volume2, VolumeX, Maximize} from "lucide-react";
 import {useFrameAnalysis, type FrameAnalysisFunction} from "@/hooks/useFrameAnalysis";
 import {useWatermarkVerification, type VerificationProgress, type VerificationProgressPhase} from "@/hooks/useWatermarkVerification";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
+import {PresentationQrFlipButton} from "@/components/presentation/PresentationQrFlipButton";
 import { prewarmWasmVerificationSession } from "@/lib/wasm-watermark-verification-client";
 
 const CREATOR_APP_ORIGIN =
@@ -85,10 +86,14 @@ export function VideoPlayer({
   }, [enableFrameAnalysis]);
   const {qrUrl: frameAnalysisQrUrl} = useFrameAnalysis(videoRef, isPlaying, analysisFunction, enableFrameAnalysis && videoId ? videoId : undefined);
 
-  // Use verified user ID for QR code if available, otherwise use frame analysis QR URL
-  const qrUrl = verifiedUserId ? `/profile/${verifiedUserId}/qr` : frameAnalysisQrUrl;
-  const extractedUserId = verifiedUserId ?? extractNumericUserIdFromQrUrl(qrUrl);
+  // Use verified user ID for presentation QR when available; frame analysis fallback is static profile QR.
+  const extractedUserId = verifiedUserId ?? extractNumericUserIdFromQrUrl(frameAnalysisQrUrl);
   const creatorProfileUrl = extractedUserId ? `${CREATOR_APP_ORIGIN}/profile/${extractedUserId}` : null;
+  const presentationNumericId = extractedUserId ? Number(extractedUserId) : null;
+  const showPresentationQr =
+    Boolean(presentationNumericId && videoId && verifiedUserId && !isPlaybackBlocked);
+  const showLegacyQr =
+    Boolean(!verifiedUserId && frameAnalysisQrUrl && !isPlaybackBlocked);
 
   // Diagnostic: src is always set now; verification no longer blocks playback start.
   const videoSrcWithheld = false;
@@ -241,7 +246,17 @@ export function VideoPlayer({
 
           {/* QR / Logo flip overlay – flips between QR code (front) and logo (back) every 6s.
               Shown when we have a verified user ID or frame analysis returns a QR URL. */}
-          {qrUrl && !isPlaybackBlocked && (
+          {showPresentationQr && presentationNumericId && videoId && (
+            <PresentationQrFlipButton
+              numericUserId={presentationNumericId}
+              mediaKind="video"
+              mediaId={videoId}
+              enabled={isOpen && isPlaying}
+              className="top-2 left-2 sm:top-4 sm:left-4"
+            />
+          )}
+
+          {showLegacyQr && frameAnalysisQrUrl && (
             <button
               type="button"
               onClick={() => {
@@ -256,7 +271,7 @@ export function VideoPlayer({
                 <div className="qr-logo-flip-face qr-logo-flip-face-front">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={qrUrl}
+                    src={frameAnalysisQrUrl}
                     alt="Creator QR code"
                     className="w-16 h-16 object-contain rounded-md shadow-md"
                   />
