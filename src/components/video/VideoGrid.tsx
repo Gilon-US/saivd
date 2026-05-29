@@ -926,7 +926,8 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         isOpen={deleteWatermarkedDialog.isOpen}
         onClose={handleDeleteWatermarkedCancel}
         onConfirm={handleDeleteWatermarkedConfirm}
-        videoFilename={deleteWatermarkedDialog.video?.filename || ""}
+        assetKind="video"
+        assetFilename={deleteWatermarkedDialog.video?.filename || ""}
         isDeleting={deleteWatermarkedDialog.isDeleting}
       />
 
@@ -934,8 +935,9 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       <ShareTransferDialog
         isOpen={shareDialog.isOpen}
         onClose={() => setShareDialog({isOpen: false, video: null})}
-        videoId={shareDialog.video?.id ?? null}
-        videoFilename={shareDialog.video?.filename ?? ""}
+        assetKind="video"
+        assetId={shareDialog.video?.id ?? null}
+        assetFilename={shareDialog.video?.filename ?? ""}
       />
 
       {/* Watermark start notification */}

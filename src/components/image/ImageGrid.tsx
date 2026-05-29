@@ -9,11 +9,34 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {ImageIcon, QrCode, TrashIcon, UploadIcon} from "lucide-react";
+import {Download, ImageIcon, QrCode, Share2Icon, TrashIcon, UploadIcon} from "lucide-react";
 import type {ImageRecord} from "@/hooks/useImages";
 import {useImageWatermarkVerification} from "@/hooks/useImageWatermarkVerification";
-import {imageProcessedVerificationUrl} from "@/lib/image-verification-url";
+import {
+  imageOriginalDownloadUrl,
+  imageProcessedDownloadUrl,
+  imageProcessedVerificationUrl,
+} from "@/lib/image-verification-url";
 import {useToast} from "@/hooks/useToast";
+import {ShareTransferDialog} from "@/components/video/ShareTransferDialog";
+import {DeleteWatermarkedConfirmDialog} from "@/components/video/DeleteWatermarkedConfirmDialog";
+
+function watermarkedDownloadFilename(filename: string): string {
+  const dot = filename.lastIndexOf(".");
+  if (dot <= 0) return `${filename}-watermarked.png`;
+  return `${filename.slice(0, dot)}-watermarked${filename.slice(dot)}`;
+}
+
+async function downloadBlob(blob: Blob, filename: string) {
+  const blobUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = blobUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(blobUrl);
+}
 
 const SAIVD_API_ORIGIN = process.env.NEXT_PUBLIC_SAIVD_API_URL?.replace(/\/+$/, "") ?? "https://saivd.netlify.app";
 
@@ -146,10 +169,14 @@ function ImagePairCard({
   image,
   onDelete,
   onRefresh,
+  onShare,
+  onDeleteWatermarked,
 }: {
   image: ImageRecord;
   onDelete: (id: string) => Promise<void>;
   onRefresh: () => void;
+  onShare: (image: ImageRecord) => void;
+  onDeleteWatermarked: (image: ImageRecord) => void;
 }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -193,6 +220,82 @@ function ImagePairCard({
 
   const isProcessing = image.status === "processing" || isWatermarking;
 
+  const handleDownloadOriginal = async () => {
+    try {
+      if (!image.original_url) {
+        toast({
+          title: "Download unavailable",
+          description: "Original upload is not available for download.",
+          variant: "error",
+        });
+        return;
+      }
+
+      toast({
+        title: "Preparing download",
+        description: `Downloading "${image.filename}"...`,
+      });
+
+      const response = await fetch(imageOriginalDownloadUrl(image.id), {credentials: "include"});
+      if (!response.ok) {
+        throw new Error("Failed to fetch original image");
+      }
+
+      await downloadBlob(await response.blob(), image.filename);
+
+      toast({
+        title: "Download started",
+        description: `"${image.filename}"`,
+        variant: "success",
+      });
+    } catch (error) {
+      console.error("Error downloading original image:", error);
+      toast({
+        title: "Download failed",
+        description: error instanceof Error ? error.message : "Failed to download image. Please try again.",
+        variant: "error",
+      });
+    }
+  };
+
+  const handleDownloadWatermarked = async () => {
+    try {
+      if (!image.processed_url || image.status !== "processed") {
+        toast({
+          title: "Download unavailable",
+          description: "Watermarked version is not available for download.",
+          variant: "error",
+        });
+        return;
+      }
+
+      toast({
+        title: "Preparing download",
+        description: `Downloading watermarked "${image.filename}"...`,
+      });
+
+      const response = await fetch(imageProcessedDownloadUrl(image.id), {credentials: "include"});
+      if (!response.ok) {
+        throw new Error("Failed to fetch watermarked image");
+      }
+
+      await downloadBlob(await response.blob(), watermarkedDownloadFilename(image.filename));
+
+      toast({
+        title: "Download started",
+        description: watermarkedDownloadFilename(image.filename),
+        variant: "success",
+      });
+    } catch (error) {
+      console.error("Error downloading watermarked image:", error);
+      toast({
+        title: "Download failed",
+        description: error instanceof Error ? error.message : "Failed to download image. Please try again.",
+        variant: "error",
+      });
+    }
+  };
+
   const handleDelete = async () => {
     setDeleting(true);
     setDeleteError(null);
@@ -222,7 +325,17 @@ function ImagePairCard({
                 {image.file_size ? ` · ${formatFileSize(image.file_size)}` : ""}
               </p>
             </div>
-            <AlertDialog>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                onClick={() => onShare(image)}
+                title={`Share "${image.filename}" to a viewer`}
+                aria-label={`Share ${image.filename} to a viewer`}>
+                <Share2Icon className="h-4 w-4" />
+              </Button>
+              <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button
                   variant="ghost"
@@ -251,6 +364,7 @@ function ImagePairCard({
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            </div>
           </div>
           {deleteError && <p className="text-xs text-destructive mb-2">{deleteError}</p>}
 
@@ -263,12 +377,32 @@ function ImagePairCard({
                   <span className="text-xs text-gray-500 dark:text-gray-400">Ready</span>
                 )}
               </div>
-              <button
-                type="button"
+              <div
                 className={`${panelClass} block cursor-zoom-in hover:opacity-90 transition-opacity`}
                 onClick={() => image.original_url && setLightbox("original")}
-                aria-label={`View original ${image.filename}`}
-                disabled={!image.original_url}>
+                onKeyDown={(e) => {
+                  if ((e.key === "Enter" || e.key === " ") && image.original_url) {
+                    e.preventDefault();
+                    setLightbox("original");
+                  }
+                }}
+                role="button"
+                tabIndex={image.original_url ? 0 : -1}
+                aria-label={`View original ${image.filename}`}>
+                {image.original_url && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-1 left-1 h-7 w-7 rounded-full bg-white/80 hover:bg-white shadow-sm z-10"
+                    title="Download original upload"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleDownloadOriginal();
+                    }}>
+                    <Download className="h-3 w-3" />
+                  </Button>
+                )}
                 {image.original_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -282,7 +416,7 @@ function ImagePairCard({
                     <ImageIcon className="w-8 h-8 text-gray-400" />
                   </div>
                 )}
-              </button>
+              </div>
             </div>
 
             {/* Watermarked */}
@@ -323,19 +457,45 @@ function ImagePairCard({
                 </Button>
 
                 {image.status === "processed" && image.processed_url && !isWatermarking ? (
-                  <button
-                    type="button"
-                    className="w-full h-full cursor-zoom-in hover:opacity-90 transition-opacity"
-                    onClick={() => setLightbox("watermarked")}
-                    aria-label={`View watermarked ${image.filename}`}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={image.processed_url}
-                      alt={`${image.filename} — Watermarked`}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  </button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-1 left-1 h-7 w-7 rounded-full bg-white/80 hover:bg-white shadow-sm z-10"
+                      title="Download watermarked image"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleDownloadWatermarked();
+                      }}>
+                      <Download className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute bottom-1 right-1 h-7 w-7 rounded-full bg-white/80 hover:bg-white shadow-sm z-10 text-gray-600 hover:text-red-500"
+                      title="Delete watermarked image"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteWatermarked(image);
+                      }}>
+                      <TrashIcon className="h-3 w-3" />
+                    </Button>
+                    <button
+                      type="button"
+                      className="w-full h-full cursor-zoom-in hover:opacity-90 transition-opacity"
+                      onClick={() => setLightbox("watermarked")}
+                      aria-label={`View watermarked ${image.filename}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={image.processed_url}
+                        alt={`${image.filename} — Watermarked`}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    </button>
+                  </>
                 ) : isProcessing ? (
                   <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700 animate-pulse">
                     <LoadingSpinner size="sm" />
@@ -371,6 +531,84 @@ function ImagePairCard({
 }
 
 export function ImageGrid({images, isLoading, error, onRefresh, onOpenUploadModal, onDelete}: ImageGridProps) {
+  const {toast} = useToast();
+  const [shareDialog, setShareDialog] = useState<{isOpen: boolean; image: ImageRecord | null}>({
+    isOpen: false,
+    image: null,
+  });
+  const [deleteWatermarkedDialog, setDeleteWatermarkedDialog] = useState<{
+    isOpen: boolean;
+    image: ImageRecord | null;
+    isDeleting: boolean;
+  }>({
+    isOpen: false,
+    image: null,
+    isDeleting: false,
+  });
+
+  const handleDeleteWatermarkedClick = (image: ImageRecord) => {
+    if (!image.processed_url || image.status !== "processed") {
+      toast({
+        title: "Delete unavailable",
+        description: "Watermarked version is not available for deletion.",
+        variant: "error",
+      });
+      return;
+    }
+
+    setDeleteWatermarkedDialog({
+      isOpen: true,
+      image,
+      isDeleting: false,
+    });
+  };
+
+  const handleDeleteWatermarkedCancel = () => {
+    setDeleteWatermarkedDialog({
+      isOpen: false,
+      image: null,
+      isDeleting: false,
+    });
+  };
+
+  const handleDeleteWatermarkedConfirm = async () => {
+    if (!deleteWatermarkedDialog.image) return;
+
+    setDeleteWatermarkedDialog((prev) => ({...prev, isDeleting: true}));
+
+    try {
+      const response = await fetch(`/api/images/${deleteWatermarkedDialog.image.id}/watermarked`, {
+        method: "DELETE",
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error?.message || "Failed to delete watermarked image");
+      }
+
+      toast({
+        title: "Watermarked image deleted",
+        description: `Watermarked version of "${deleteWatermarkedDialog.image.filename}" has been deleted successfully.`,
+        variant: "success",
+      });
+
+      setDeleteWatermarkedDialog({
+        isOpen: false,
+        image: null,
+        isDeleting: false,
+      });
+      onRefresh();
+    } catch (error) {
+      console.error("Error deleting watermarked image:", error);
+      toast({
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Failed to delete watermarked image. Please try again.",
+        variant: "error",
+      });
+      setDeleteWatermarkedDialog((prev) => ({...prev, isDeleting: false}));
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[40vh]">
@@ -410,10 +648,36 @@ export function ImageGrid({images, isLoading, error, onRefresh, onOpenUploadModa
   }
 
   return (
-    <div className="flex flex-wrap gap-6 justify-start">
-      {images.map((img) => (
-        <ImagePairCard key={img.id} image={img} onDelete={onDelete} onRefresh={onRefresh} />
-      ))}
-    </div>
+    <>
+      <div className="flex flex-wrap gap-6 justify-start">
+        {images.map((img) => (
+          <ImagePairCard
+            key={img.id}
+            image={img}
+            onDelete={onDelete}
+            onRefresh={onRefresh}
+            onShare={(image) => setShareDialog({isOpen: true, image})}
+            onDeleteWatermarked={handleDeleteWatermarkedClick}
+          />
+        ))}
+      </div>
+
+      <DeleteWatermarkedConfirmDialog
+        isOpen={deleteWatermarkedDialog.isOpen}
+        onClose={handleDeleteWatermarkedCancel}
+        onConfirm={handleDeleteWatermarkedConfirm}
+        assetKind="image"
+        assetFilename={deleteWatermarkedDialog.image?.filename ?? ""}
+        isDeleting={deleteWatermarkedDialog.isDeleting}
+      />
+
+      <ShareTransferDialog
+        isOpen={shareDialog.isOpen}
+        onClose={() => setShareDialog({isOpen: false, image: null})}
+        assetKind="image"
+        assetId={shareDialog.image?.id ?? null}
+        assetFilename={shareDialog.image?.filename ?? ""}
+      />
+    </>
   );
 }
