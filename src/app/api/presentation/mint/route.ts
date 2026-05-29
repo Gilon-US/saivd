@@ -1,6 +1,8 @@
 import {NextRequest, NextResponse} from "next/server";
 import {getCreatorAppBaseUrl, isPresentationQrEnabled, PRESENTATION_QR_TTL_SECONDS} from "@/lib/presentation-qr/constants";
-import {buildScanUrl, mintPresentationToken, type PresentationMediaKind} from "@/lib/presentation-qr/token";
+import {buildPresentationScanUrl} from "@/lib/presentation-qr/code";
+import {mintUniquePresentationCode} from "@/lib/presentation-qr/store";
+import type {PresentationMediaKind} from "@/lib/presentation-qr/token";
 
 const rateBucket = new Map<string, {count: number; resetAt: number}>();
 const RATE_LIMIT = 120;
@@ -59,9 +61,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const token = mintPresentationToken({numericUserId, mediaKind, mediaId});
+    const code = await mintUniquePresentationCode(
+      {uid: numericUserId, kind: mediaKind, mid: mediaId},
+      PRESENTATION_QR_TTL_SECONDS,
+    );
     const baseUrl = getCreatorAppBaseUrl();
-    const scanUrl = buildScanUrl(token, baseUrl);
+    const scanUrl = buildPresentationScanUrl(code, baseUrl);
     const expiresAt = new Date(Date.now() + PRESENTATION_QR_TTL_SECONDS * 1000).toISOString();
 
     return NextResponse.json({
