@@ -468,7 +468,7 @@ function ImagePairCard({
                       aria-label={`View watermarked ${image.filename}`}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={image.processed_url}
+                        src={imageProcessedVerificationUrl(image.id)}
                         alt={`${image.filename} — Watermarked`}
                         className="w-full h-full object-cover"
                         loading="lazy"
