@@ -19,6 +19,7 @@ import {
   imageOriginalDownloadUrl,
   imageProcessedDownloadUrl,
   imageProcessedVerificationUrl,
+  imageStandardizedPreviewUrl,
 } from "@/lib/image-verification-url";
 import {useToast} from "@/hooks/useToast";
 import {ShareTransferDialog} from "@/components/video/ShareTransferDialog";
@@ -74,7 +75,7 @@ function ImageLightbox({
   const url =
     watermarkedReady
       ? imageProcessedVerificationUrl(image.id)
-      : image.original_url;
+      : imageStandardizedPreviewUrl(image.id);
 
   const verification = useImageWatermarkVerification(image.id, {
     enabled: watermarkedReady,
@@ -347,10 +348,10 @@ function ImagePairCard({
           {deleteError && <p className="text-xs text-destructive mb-2">{deleteError}</p>}
 
           <div className="flex gap-4 justify-start items-start">
-            {/* Original */}
+            {/* Original (sRGB preview — same standardization as watermark, minus embed) */}
             <div className="space-y-2 flex-shrink-0">
               <div className="flex items-center gap-2">
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Original</h4>
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Original (sRGB)</h4>
                 {image.original_url && (
                   <span className="text-xs text-gray-500 dark:text-gray-400">Ready</span>
                 )}
@@ -384,8 +385,8 @@ function ImagePairCard({
                 {image.original_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={image.original_url}
-                    alt={`${image.filename} — Original`}
+                    src={imageStandardizedPreviewUrl(image.id)}
+                    alt={`${image.filename} — Original (sRGB preview)`}
                     className="w-full h-full object-cover"
                     loading="lazy"
                   />
