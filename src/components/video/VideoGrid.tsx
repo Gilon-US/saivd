@@ -637,8 +637,32 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     }
   };
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8">
+        <LoadingSpinner size="lg" />
+        <p className="mt-4 text-gray-500 dark:text-gray-400">Loading videos...</p>
+      </div>
+    );
+  }
+
+  // Error state (before empty — failed fetch must not look like "no videos")
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 text-center bg-white dark:bg-gray-800 rounded-lg shadow">
+        <h2 className="text-xl font-semibold text-red-500 mb-2">Error loading videos</h2>
+        <p className="text-gray-500 dark:text-gray-400 mb-6">{error}</p>
+        <Button onClick={onRefresh} variant="outline">
+          <RefreshCwIcon className="mr-2 h-4 w-4" />
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
   // Empty state when no videos are available
-  if (!isLoading && videos.length === 0) {
+  if (videos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center bg-white dark:bg-gray-800 rounded-lg shadow">
         <div className="mb-4 p-4 bg-gray-100 dark:bg-gray-700 rounded-full">
@@ -651,30 +675,6 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         <Button onClick={onOpenUploadModal}>
           <UploadIcon className="mr-2 h-4 w-4" />
           Upload your first video
-        </Button>
-      </div>
-    );
-  }
-
-  // Loading state
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center p-8">
-        <LoadingSpinner size="lg" />
-        <p className="mt-4 text-gray-500 dark:text-gray-400">Loading videos...</p>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center p-8 text-center bg-white dark:bg-gray-800 rounded-lg shadow">
-        <h2 className="text-xl font-semibold text-red-500 mb-2">Error loading videos</h2>
-        <p className="text-gray-500 dark:text-gray-400 mb-6">{error}</p>
-        <Button onClick={onRefresh} variant="outline">
-          <RefreshCwIcon className="mr-2 h-4 w-4" />
-          Try again
         </Button>
       </div>
     );

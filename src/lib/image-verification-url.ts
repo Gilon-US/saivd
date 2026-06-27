@@ -6,8 +6,10 @@ export function imageOriginalDownloadUrl(imageId: string): string {
 }
 
 /** Pre-watermark sRGB standardization preview (fair compare vs watermarked PNG). */
-export function imageStandardizedPreviewUrl(imageId: string): string {
-  return `/api/images/${imageId}/standardized-preview`;
+export function imageStandardizedPreviewUrl(imageId: string, conversionRevision?: string): string {
+  const base = `/api/images/${imageId}/standardized-preview`;
+  if (!conversionRevision) return base;
+  return `${base}?rev=${encodeURIComponent(conversionRevision)}`;
 }
 
 /** Watermarked PNG bytes — verifier, lightbox, and watermarked download. */

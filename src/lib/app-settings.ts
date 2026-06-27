@@ -13,9 +13,26 @@ const DEFAULTS: Record<string, string> = {
   unauthenticated_media_cta_label: "Learn about SAIVD",
   unauthenticated_media_cta_url: "https://www.saivd.io/",
   unauthenticated_media_tagline: "Trace it. Trust it.",
+  image_color_standardize: "vivid",
+  image_color_chroma_boost: "1.20",
+  image_color_brightness: "1.06",
+  image_color_warmth: "1.04",
+  image_display_brightness: "1.0",
+  image_display_contrast: "1.0",
+  image_display_saturation: "1.0",
+  image_display_warmth: "0",
 };
 
-export type SettingType = "integer" | "csv" | "text" | "textarea" | "url" | "optional_text";
+export const IMAGE_COLOR_STANDARDIZE_MODES = [
+  "legacy",
+  "relative",
+  "v2",
+  "saturation",
+  "saturation_v2",
+  "vivid",
+] as const;
+
+export type SettingType = "integer" | "float" | "csv" | "text" | "textarea" | "url" | "optional_text" | "select";
 
 export type SettingDef = {
   key: string;
@@ -106,6 +123,55 @@ export const SETTING_DEFS: SettingDef[] = [
     description: "Optional footer line; leave empty to hide.",
     type: "optional_text",
   },
+  {
+    key: "image_color_standardize",
+    label: "Color standardization mode",
+    description:
+      "ICC→sRGB pipeline before watermarking. Affects new watermarks and the Original (sRGB) preview. Re-watermark existing images after changes.",
+    type: "select",
+  },
+  {
+    key: "image_color_chroma_boost",
+    label: "Chroma boost (wide-gamut sources)",
+    description: "Saturation multiplier for ICC-tagged sources in vivid mode. Range 1.0–1.25.",
+    type: "float",
+  },
+  {
+    key: "image_color_brightness",
+    label: "Pre-watermark brightness",
+    description: "Lift shadows/exposure before embed. Range 0.85–1.20 (1.0 = neutral).",
+    type: "float",
+  },
+  {
+    key: "image_color_warmth",
+    label: "Pre-watermark warmth",
+    description: "Red/yellow bias after sRGB conversion. Range 1.0–1.15 (1.0 = neutral).",
+    type: "float",
+  },
+  {
+    key: "image_display_brightness",
+    label: "Dashboard brightness",
+    description: "CSS preview only — does not change stored files. Range 0.8–1.3 (1.0 = neutral).",
+    type: "float",
+  },
+  {
+    key: "image_display_contrast",
+    label: "Dashboard contrast",
+    description: "CSS preview only. Range 0.8–1.3 (1.0 = neutral).",
+    type: "float",
+  },
+  {
+    key: "image_display_saturation",
+    label: "Dashboard saturation",
+    description: "CSS preview only. Range 0.8–1.5 (1.0 = neutral).",
+    type: "float",
+  },
+  {
+    key: "image_display_warmth",
+    label: "Dashboard warmth (sepia %)",
+    description: "CSS preview only. 0 = off, 40 = strong warm tint.",
+    type: "float",
+  },
 ];
 
 const HTTPS_URL_PATTERN = /^https:\/\/.+/i;
@@ -129,6 +195,40 @@ export function validateSettingValue(key: string, value: string): string | null 
     const n = parseInt(trimmed, 10);
     if (isNaN(n) || n <= 0) {
       return `${def.label} must be a positive integer`;
+    }
+  }
+
+  if (def.type === "float") {
+    const n = parseFloat(trimmed);
+    if (isNaN(n)) {
+      return `${def.label} must be a number`;
+    }
+    if (key === "image_color_chroma_boost" && (n < 1.0 || n > 1.25)) {
+      return "Chroma boost must be between 1.0 and 1.25";
+    }
+    if (key === "image_color_brightness" && (n < 0.85 || n > 1.2)) {
+      return "Pre-watermark brightness must be between 0.85 and 1.20";
+    }
+    if (key === "image_color_warmth" && (n < 1.0 || n > 1.15)) {
+      return "Pre-watermark warmth must be between 1.0 and 1.15";
+    }
+    if (key === "image_display_brightness" && (n < 0.8 || n > 1.3)) {
+      return "Dashboard brightness must be between 0.8 and 1.3";
+    }
+    if (key === "image_display_contrast" && (n < 0.8 || n > 1.3)) {
+      return "Dashboard contrast must be between 0.8 and 1.3";
+    }
+    if (key === "image_display_saturation" && (n < 0.8 || n > 1.5)) {
+      return "Dashboard saturation must be between 0.8 and 1.5";
+    }
+    if (key === "image_display_warmth" && (n < 0 || n > 40)) {
+      return "Dashboard warmth must be between 0 and 40";
+    }
+  }
+
+  if (def.type === "select" && key === "image_color_standardize") {
+    if (!IMAGE_COLOR_STANDARDIZE_MODES.includes(trimmed as (typeof IMAGE_COLOR_STANDARDIZE_MODES)[number])) {
+      return `Color mode must be one of: ${IMAGE_COLOR_STANDARDIZE_MODES.join(", ")}`;
     }
   }
 

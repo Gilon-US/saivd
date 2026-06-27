@@ -1,6 +1,8 @@
 import {NextRequest, NextResponse} from "next/server";
 import {createClient} from "@/utils/supabase/server";
 import {WASABI_BUCKET} from "@/lib/wasabi";
+import {conversionSettingsToColorParams} from "@/lib/image-color-settings";
+import {getImageConversionSettings} from "@/lib/image-conversion-settings";
 
 function buildStandardizePreviewEndpoint(): string | null {
   const base = (process.env.WATERMARK_SERVICE_URL ?? "").replace(/\/+$/, "");
@@ -63,6 +65,8 @@ export async function GET(_request: NextRequest, context: {params: Promise<{id: 
       );
     }
 
+    const colorParams = conversionSettingsToColorParams(await getImageConversionSettings());
+
     const timeoutMs = Number(process.env.WATERMARK_TIMEOUT_MS ?? 30_000);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -75,6 +79,7 @@ export async function GET(_request: NextRequest, context: {params: Promise<{id: 
         body: JSON.stringify({
           input_location: image.original_url,
           bucket: WASABI_BUCKET,
+          color_params: colorParams,
         }),
         signal: controller.signal,
       });

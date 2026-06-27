@@ -11,6 +11,8 @@
 import {generateKeyPairSync} from "crypto";
 import {createServiceRoleClient} from "@/utils/supabase/service";
 import {WASABI_BUCKET} from "@/lib/wasabi";
+import {conversionSettingsToColorParams} from "@/lib/image-color-settings";
+import {getImageConversionSettings} from "@/lib/image-conversion-settings";
 
 export type WatermarkImageErrorCode =
   | "validation_error"
@@ -161,6 +163,7 @@ export async function watermarkImageSync(args: {
     user_id: numericUserId,
     output_format: "png" as const,
     async_request: false,
+    color_params: conversionSettingsToColorParams(await getImageConversionSettings()),
   };
 
   let response: Response;

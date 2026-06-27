@@ -4,7 +4,7 @@ import {useCallback, useEffect, useState, type Dispatch, type SetStateAction} fr
 import {useProfile} from "@/contexts/ProfileContext";
 import {useAuth} from "@/contexts/AuthContext";
 import {isSuperuserProfile} from "@/lib/app-role";
-import {ALL_VIDEO_TYPES, ALL_IMAGE_TYPES, getSettingDefault, type SettingType} from "@/lib/app-settings";
+import {ALL_VIDEO_TYPES, ALL_IMAGE_TYPES, getSettingDefault, IMAGE_COLOR_STANDARDIZE_MODES, type SettingType} from "@/lib/app-settings";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
@@ -59,6 +59,24 @@ export default function SettingsGeneralPage() {
   const [savingUnauthenticated, setSavingUnauthenticated] = useState(false);
   const [saveUnauthenticatedError, setSaveUnauthenticatedError] = useState<string | null>(null);
   const [savedUnauthenticated, setSavedUnauthenticated] = useState(false);
+  const [imageColorStandardize, setImageColorStandardize] = useState("vivid");
+  const [imageChromaBoost, setImageChromaBoost] = useState("1.20");
+  const [imageBrightness, setImageBrightness] = useState("1.06");
+  const [imageWarmth, setImageWarmth] = useState("1.04");
+  const [displayBrightness, setDisplayBrightness] = useState("1.0");
+  const [displayContrast, setDisplayContrast] = useState("1.0");
+  const [displaySaturation, setDisplaySaturation] = useState("1.0");
+  const [displayWarmth, setDisplayWarmth] = useState("0");
+  const [savingImageConversion, setSavingImageConversion] = useState(false);
+  const [savingImageDisplay, setSavingImageDisplay] = useState(false);
+  const [saveImageConversionError, setSaveImageConversionError] = useState<string | null>(null);
+  const [saveImageDisplayError, setSaveImageDisplayError] = useState<string | null>(null);
+  const [savedImageConversion, setSavedImageConversion] = useState(false);
+  const [savedImageDisplay, setSavedImageDisplay] = useState(false);
+
+  const notifyImagePreferencesChanged = () => {
+    window.dispatchEvent(new Event("saivd:image-preferences-changed"));
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,6 +121,39 @@ export default function SettingsGeneralPage() {
         tagline: rows.find((r) => r.key === "unauthenticated_media_tagline")?.value
           ?? getSettingDefault("unauthenticated_media_tagline"),
       });
+
+      setImageColorStandardize(
+        rows.find((r) => r.key === "image_color_standardize")?.value
+          ?? getSettingDefault("image_color_standardize"),
+      );
+      setImageChromaBoost(
+        rows.find((r) => r.key === "image_color_chroma_boost")?.value
+          ?? getSettingDefault("image_color_chroma_boost"),
+      );
+      setImageBrightness(
+        rows.find((r) => r.key === "image_color_brightness")?.value
+          ?? getSettingDefault("image_color_brightness"),
+      );
+      setImageWarmth(
+        rows.find((r) => r.key === "image_color_warmth")?.value
+          ?? getSettingDefault("image_color_warmth"),
+      );
+      setDisplayBrightness(
+        rows.find((r) => r.key === "image_display_brightness")?.value
+          ?? getSettingDefault("image_display_brightness"),
+      );
+      setDisplayContrast(
+        rows.find((r) => r.key === "image_display_contrast")?.value
+          ?? getSettingDefault("image_display_contrast"),
+      );
+      setDisplaySaturation(
+        rows.find((r) => r.key === "image_display_saturation")?.value
+          ?? getSettingDefault("image_display_saturation"),
+      );
+      setDisplayWarmth(
+        rows.find((r) => r.key === "image_display_warmth")?.value
+          ?? getSettingDefault("image_display_warmth"),
+      );
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed to load settings");
     } finally {
@@ -268,6 +319,70 @@ export default function SettingsGeneralPage() {
     }
   };
 
+  const handleSaveImageConversion = async () => {
+    setSavingImageConversion(true);
+    setSaveImageConversionError(null);
+    setSavedImageConversion(false);
+    try {
+      const updates = [
+        {key: "image_color_standardize", value: imageColorStandardize.trim()},
+        {key: "image_color_chroma_boost", value: imageChromaBoost.trim()},
+        {key: "image_color_brightness", value: imageBrightness.trim()},
+        {key: "image_color_warmth", value: imageWarmth.trim()},
+      ];
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(updates),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setSaveImageConversionError(json.error?.message ?? json.error ?? "Failed to save");
+        return;
+      }
+      setSavedImageConversion(true);
+      notifyImagePreferencesChanged();
+      await load();
+      setTimeout(() => setSavedImageConversion(false), 3000);
+    } catch (e) {
+      setSaveImageConversionError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSavingImageConversion(false);
+    }
+  };
+
+  const handleSaveImageDisplay = async () => {
+    setSavingImageDisplay(true);
+    setSaveImageDisplayError(null);
+    setSavedImageDisplay(false);
+    try {
+      const updates = [
+        {key: "image_display_brightness", value: displayBrightness.trim()},
+        {key: "image_display_contrast", value: displayContrast.trim()},
+        {key: "image_display_saturation", value: displaySaturation.trim()},
+        {key: "image_display_warmth", value: displayWarmth.trim()},
+      ];
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(updates),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setSaveImageDisplayError(json.error?.message ?? json.error ?? "Failed to save");
+        return;
+      }
+      setSavedImageDisplay(true);
+      notifyImagePreferencesChanged();
+      await load();
+      setTimeout(() => setSavedImageDisplay(false), 3000);
+    } catch (e) {
+      setSaveImageDisplayError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSavingImageDisplay(false);
+    }
+  };
+
   const typesUpdatedAt = settings.find((r) => r.key === "allowed_video_types")?.updated_at;
   const sizeUpdatedAt = settings.find((r) => r.key === "max_video_size_mb")?.updated_at;
   const imageTypesUpdatedAt = settings.find((r) => r.key === "allowed_image_types")?.updated_at;
@@ -278,6 +393,29 @@ export default function SettingsGeneralPage() {
     .filter(Boolean)
     .sort()
     .pop();
+  const imageConversionUpdatedAt = [
+    "image_color_standardize",
+    "image_color_chroma_boost",
+    "image_color_brightness",
+    "image_color_warmth",
+  ]
+    .map((key) => settings.find((r) => r.key === key)?.updated_at)
+    .filter(Boolean)
+    .sort()
+    .pop();
+  const imageDisplayUpdatedAt = [
+    "image_display_brightness",
+    "image_display_contrast",
+    "image_display_saturation",
+    "image_display_warmth",
+  ]
+    .map((key) => settings.find((r) => r.key === key)?.updated_at)
+    .filter(Boolean)
+    .sort()
+    .pop();
+
+  const settingsBusy =
+    savingVideo || savingImage || savingUnauthenticated || savingImageConversion || savingImageDisplay;
 
   if (!initialized || profileLoading || loading) {
     return (
@@ -494,6 +632,196 @@ export default function SettingsGeneralPage() {
             )}
           </Button>
 
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Image pre-watermark conversion</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Controls the real pixel pipeline before watermark embed. Affects new uploads, re-watermarks, and the
+            Original (sRGB) preview. Existing watermarked files must be re-watermarked to pick up changes.
+          </p>
+
+          <div className="space-y-1">
+            <Label htmlFor="image_color_standardize">Color mode</Label>
+            <select
+              id="image_color_standardize"
+              value={imageColorStandardize}
+              onChange={(e) => setImageColorStandardize(e.target.value)}
+              disabled={settingsBusy}
+              className="flex h-9 w-full max-w-xs rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs">
+              {IMAGE_COLOR_STANDARDIZE_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              ICC→sRGB strategy. <span className="font-medium">vivid</span> is recommended for iPhone / Display P3 photos.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1">
+              <Label htmlFor="image_color_chroma_boost">Chroma boost</Label>
+              <Input
+                id="image_color_chroma_boost"
+                type="number"
+                step="0.01"
+                min={1}
+                max={1.25}
+                value={imageChromaBoost}
+                onChange={(e) => setImageChromaBoost(e.target.value)}
+                disabled={settingsBusy}
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400">1.0–1.25 (ICC sources, vivid mode)</p>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="image_color_brightness">Brightness</Label>
+              <Input
+                id="image_color_brightness"
+                type="number"
+                step="0.01"
+                min={0.85}
+                max={1.2}
+                value={imageBrightness}
+                onChange={(e) => setImageBrightness(e.target.value)}
+                disabled={settingsBusy}
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400">0.85–1.20 (1.0 = neutral)</p>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="image_color_warmth">Warmth</Label>
+              <Input
+                id="image_color_warmth"
+                type="number"
+                step="0.01"
+                min={1}
+                max={1.15}
+                value={imageWarmth}
+                onChange={(e) => setImageWarmth(e.target.value)}
+                disabled={settingsBusy}
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400">1.0–1.15 (1.0 = neutral)</p>
+            </div>
+          </div>
+
+          {imageConversionUpdatedAt && (
+            <p className="text-xs text-gray-400">Last updated: {new Date(imageConversionUpdatedAt).toLocaleString()}</p>
+          )}
+          {saveImageConversionError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveImageConversionError}</AlertDescription>
+            </Alert>
+          )}
+          {savedImageConversion && (
+            <Alert>
+              <AlertDescription>Image conversion settings saved. Re-watermark images to update stored files.</AlertDescription>
+            </Alert>
+          )}
+          <Button onClick={handleSaveImageConversion} disabled={settingsBusy}>
+            {savingImageConversion ? (
+              <>
+                <LoadingSpinner size="sm" className="mr-2" />
+                Saving…
+              </>
+            ) : (
+              "Save conversion settings"
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Image dashboard display</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            CSS preview tuning on My Images only. Does not change stored files or downloads.
+          </p>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="image_display_brightness">Brightness</Label>
+              <Input
+                id="image_display_brightness"
+                type="number"
+                step="0.01"
+                min={0.8}
+                max={1.3}
+                value={displayBrightness}
+                onChange={(e) => setDisplayBrightness(e.target.value)}
+                disabled={settingsBusy}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="image_display_contrast">Contrast</Label>
+              <Input
+                id="image_display_contrast"
+                type="number"
+                step="0.01"
+                min={0.8}
+                max={1.3}
+                value={displayContrast}
+                onChange={(e) => setDisplayContrast(e.target.value)}
+                disabled={settingsBusy}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="image_display_saturation">Saturation</Label>
+              <Input
+                id="image_display_saturation"
+                type="number"
+                step="0.01"
+                min={0.8}
+                max={1.5}
+                value={displaySaturation}
+                onChange={(e) => setDisplaySaturation(e.target.value)}
+                disabled={settingsBusy}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="image_display_warmth">Warmth (sepia %)</Label>
+              <Input
+                id="image_display_warmth"
+                type="number"
+                step={1}
+                min={0}
+                max={40}
+                value={displayWarmth}
+                onChange={(e) => setDisplayWarmth(e.target.value)}
+                disabled={settingsBusy}
+              />
+            </div>
+          </div>
+
+          {imageDisplayUpdatedAt && (
+            <p className="text-xs text-gray-400">Last updated: {new Date(imageDisplayUpdatedAt).toLocaleString()}</p>
+          )}
+          {saveImageDisplayError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveImageDisplayError}</AlertDescription>
+            </Alert>
+          )}
+          {savedImageDisplay && (
+            <Alert>
+              <AlertDescription>Display settings saved. Refresh My Images to preview.</AlertDescription>
+            </Alert>
+          )}
+          <Button onClick={handleSaveImageDisplay} disabled={settingsBusy}>
+            {savingImageDisplay ? (
+              <>
+                <LoadingSpinner size="sm" className="mr-2" />
+                Saving…
+              </>
+            ) : (
+              "Save display settings"
+            )}
+          </Button>
         </CardContent>
       </Card>
 

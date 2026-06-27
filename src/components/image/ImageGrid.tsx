@@ -1,6 +1,6 @@
 "use client";
 
-import {useState} from "react";
+import {useState, useCallback} from "react";
 import {Card, CardContent} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
@@ -24,6 +24,7 @@ import {
 import {useToast} from "@/hooks/useToast";
 import {ShareTransferDialog} from "@/components/video/ShareTransferDialog";
 import {DeleteWatermarkedConfirmDialog} from "@/components/video/DeleteWatermarkedConfirmDialog";
+import {useImageDisplayPreferences} from "@/hooks/useImageDisplayPreferences";
 
 function watermarkedDownloadFilename(filename: string): string {
   const dot = filename.lastIndexOf(".");
@@ -64,10 +65,14 @@ function ImageLightbox({
   image,
   variant,
   onClose,
+  displayFilter,
+  conversionRevision,
 }: {
   image: ImageRecord;
   variant: LightboxVariant;
   onClose: () => void;
+  displayFilter?: string;
+  conversionRevision?: string;
 }) {
   const {profile} = useProfile();
   const qrOverlayPosition = parseQrOverlayPosition(profile?.qr_overlay_position);
@@ -75,7 +80,9 @@ function ImageLightbox({
   const url =
     watermarkedReady
       ? imageProcessedVerificationUrl(image.id)
-      : imageStandardizedPreviewUrl(image.id);
+      : imageStandardizedPreviewUrl(image.id, conversionRevision);
+
+  const imgStyle = displayFilter ? {filter: displayFilter} : undefined;
 
   const verification = useImageWatermarkVerification(image.id, {
     enabled: watermarkedReady,
@@ -95,6 +102,7 @@ function ImageLightbox({
           src={url}
           alt={`${image.filename} — ${variant}`}
           className="block max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+          style={imgStyle}
         />
 
         {variant === "watermarked" && verification.verifiedUserId !== null && !verification.isVerificationFailed && (
@@ -150,12 +158,16 @@ function ImagePairCard({
   onRefresh,
   onShare,
   onDeleteWatermarked,
+  displayFilter,
+  conversionRevision,
 }: {
   image: ImageRecord;
   onDelete: (id: string) => Promise<void>;
   onRefresh: () => void;
   onShare: (image: ImageRecord) => void;
   onDeleteWatermarked: (image: ImageRecord) => void;
+  displayFilter?: string;
+  conversionRevision?: string;
 }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -290,6 +302,9 @@ function ImagePairCard({
   const panelClass =
     "w-44 sm:w-52 max-w-[208px] aspect-square relative bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden";
 
+  const imgStyle = displayFilter ? {filter: displayFilter} : undefined;
+  const previewUrl = imageStandardizedPreviewUrl(image.id, conversionRevision);
+
   return (
     <>
       <Card className="overflow-hidden flex-shrink-0 w-fit min-w-0">
@@ -385,10 +400,11 @@ function ImagePairCard({
                 {image.original_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={imageStandardizedPreviewUrl(image.id)}
+                    src={previewUrl}
                     alt={`${image.filename} — Original (sRGB preview)`}
                     className="w-full h-full object-cover"
                     loading="lazy"
+                    style={imgStyle}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gray-200 dark:bg-gray-700">
@@ -472,6 +488,7 @@ function ImagePairCard({
                         alt={`${image.filename} — Watermarked`}
                         className="w-full h-full object-cover"
                         loading="lazy"
+                        style={imgStyle}
                       />
                     </button>
                   </>
@@ -504,13 +521,22 @@ function ImagePairCard({
         </CardContent>
       </Card>
 
-      {lightbox && <ImageLightbox image={image} variant={lightbox} onClose={() => setLightbox(null)} />}
+      {lightbox && (
+        <ImageLightbox
+          image={image}
+          variant={lightbox}
+          onClose={() => setLightbox(null)}
+          displayFilter={displayFilter}
+          conversionRevision={conversionRevision}
+        />
+      )}
     </>
   );
 }
 
 export function ImageGrid({images, isLoading, error, onRefresh, onOpenUploadModal, onDelete}: ImageGridProps) {
   const {toast} = useToast();
+  const {displayFilter, conversionRevision, reload: reloadDisplayPreferences} = useImageDisplayPreferences();
   const [shareDialog, setShareDialog] = useState<{isOpen: boolean; image: ImageRecord | null}>({
     isOpen: false,
     image: null,
@@ -576,7 +602,7 @@ export function ImageGrid({images, isLoading, error, onRefresh, onOpenUploadModa
         image: null,
         isDeleting: false,
       });
-      onRefresh();
+      handleRefresh();
     } catch (error) {
       console.error("Error deleting watermarked image:", error);
       toast({
@@ -587,6 +613,11 @@ export function ImageGrid({images, isLoading, error, onRefresh, onOpenUploadModa
       setDeleteWatermarkedDialog((prev) => ({...prev, isDeleting: false}));
     }
   };
+
+  const handleRefresh = useCallback(() => {
+    void reloadDisplayPreferences();
+    onRefresh();
+  }, [onRefresh, reloadDisplayPreferences]);
 
   if (isLoading) {
     return (
@@ -602,7 +633,7 @@ export function ImageGrid({images, isLoading, error, onRefresh, onOpenUploadModa
       <Alert variant="destructive">
         <AlertDescription>
           {error}{" "}
-          <button onClick={onRefresh} className="underline ml-1">Try again</button>
+          <button onClick={handleRefresh} className="underline ml-1">Try again</button>
         </AlertDescription>
       </Alert>
     );
@@ -634,9 +665,11 @@ export function ImageGrid({images, isLoading, error, onRefresh, onOpenUploadModa
             key={img.id}
             image={img}
             onDelete={onDelete}
-            onRefresh={onRefresh}
+            onRefresh={handleRefresh}
             onShare={(image) => setShareDialog({isOpen: true, image})}
             onDeleteWatermarked={handleDeleteWatermarkedClick}
+            displayFilter={displayFilter}
+            conversionRevision={conversionRevision}
           />
         ))}
       </div>
