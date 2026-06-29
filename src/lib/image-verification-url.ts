@@ -17,6 +17,11 @@ export function imageProcessedVerificationUrl(imageId: string): string {
   return `/api/images/${imageId}/processed`;
 }
 
+/** Public pages (/i, /embed/i) — anonymous same-origin processed bytes for verification. */
+export function publicImageProcessedVerificationUrl(imageId: string): string {
+  return `/api/public/images/${encodeURIComponent(imageId)}/processed`;
+}
+
 export function imageProcessedDownloadUrl(imageId: string): string {
   return imageProcessedVerificationUrl(imageId);
 }

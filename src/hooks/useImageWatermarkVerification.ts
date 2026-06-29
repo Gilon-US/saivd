@@ -26,10 +26,12 @@ export type UseImageWatermarkVerification = {
  */
 export function useImageWatermarkVerification(
   imageId: string | null | undefined,
-  options?: {enabled?: boolean},
+  options?: {enabled?: boolean; verifyUrl?: string | null},
 ): UseImageWatermarkVerification {
   const enabled = options?.enabled ?? true;
-  const verifyUrl = imageId?.trim() ? imageProcessedVerificationUrl(imageId.trim()) : null;
+  const verifyUrl =
+    options?.verifyUrl ??
+    (imageId?.trim() ? imageProcessedVerificationUrl(imageId.trim()) : null);
 
   const [state, setState] = useState<ImageVerificationStatus>("idle");
   const [result, setResult] = useState<ImageVerificationResult | null>(null);
