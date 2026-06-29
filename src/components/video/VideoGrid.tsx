@@ -1,7 +1,8 @@
 "use client";
 import {Card, CardContent} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
-import {UploadIcon, RefreshCwIcon, TrashIcon, Download, QrCode, Share2Icon} from "lucide-react";
+import {UploadIcon, RefreshCwIcon, TrashIcon, Download, QrCode} from "lucide-react";
+import {MediaShareDropdown} from "@/components/media/MediaShareDropdown";
 import Image from "next/image";
 import {useToast} from "@/hooks/useToast";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
@@ -697,15 +698,13 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                   </p>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                    onClick={() => setShareDialog({isOpen: true, video})}
-                    title={`Share "${video.filename}" to a viewer`}
-                    aria-label={`Share ${video.filename} to a viewer`}>
-                    <Share2Icon className="h-4 w-4" />
-                  </Button>
+                  <MediaShareDropdown
+                    mediaKind="video"
+                    mediaId={video.id}
+                    mediaFilename={video.filename}
+                    publicLinksEnabled={video.status === "processed" && Boolean(video.processed_url)}
+                    onShareToViewer={() => setShareDialog({isOpen: true, video})}
+                  />
                   <Button
                     variant="ghost"
                     size="icon"

@@ -11,6 +11,7 @@ export type ImageUploadPhase =
 
 export type ImageUploadState = {
   id: string;
+  batchId?: string;
   phase: ImageUploadPhase;
   progress: number;
   uploading: boolean;
@@ -32,6 +33,27 @@ export type ImageUploadResult = {
   createdAt: string;
 };
 
+export type ImageBatchUploadResult = {
+  batchId: string;
+  succeeded: ImageUploadResult[];
+  failed: {file: File; error: Error}[];
+};
+
+export type ImageUploadOptions = {
+  silentToasts?: boolean;
+  batchId?: string;
+};
+
+export type ImageBatchUploadOptions = {
+  concurrency?: number;
+  maxBatch?: number;
+  silentToasts?: boolean;
+  batchId?: string;
+};
+
+const DEFAULT_BATCH_CONCURRENCY = 2;
+const DEFAULT_MAX_BATCH = 100;
+
 function normalizeError(error: unknown): string {
   if (error instanceof Error) {
     if (error.name === "AbortError") return error.message;
@@ -47,18 +69,40 @@ function normalizeError(error: unknown): string {
   return "An error occurred during upload.";
 }
 
+async function mapWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return;
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, items.length);
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      await fn(items[index]);
+    }
+  }
+
+  await Promise.all(Array.from({length: workerCount}, () => worker()));
+}
+
 export function useImageUpload() {
   const [uploads, setUploads] = useState<Record<string, ImageUploadState>>({});
   const {toast} = useToast();
 
-  const uploadImage = async (file: File): Promise<ImageUploadResult> => {
+  const uploadImage = async (file: File, options?: ImageUploadOptions): Promise<ImageUploadResult> => {
     const uploadId = uuidv4();
     const abortController = new AbortController();
+    const silentToasts = options?.silentToasts ?? false;
+    const batchId = options?.batchId;
 
     setUploads((prev) => ({
       ...prev,
       [uploadId]: {
         id: uploadId,
+        batchId,
         phase: "requesting-url",
         progress: 0,
         uploading: true,
@@ -139,7 +183,9 @@ export function useImageUpload() {
         },
       }));
 
-      toast({title: "Image uploaded", description: `${file.name} has been uploaded successfully.`, variant: "success"});
+      if (!silentToasts) {
+        toast({title: "Image uploaded", description: `${file.name} has been uploaded successfully.`, variant: "success"});
+      }
 
       return data as ImageUploadResult;
     } catch (error: unknown) {
@@ -152,9 +198,70 @@ export function useImageUpload() {
         [uploadId]: {...prev[uploadId], uploading: false, phase: "error", error: new Error(msg)},
       }));
 
-      toast({title: "Upload failed", description: msg, variant: "error"});
+      if (!silentToasts) {
+        toast({title: "Upload failed", description: msg, variant: "error"});
+      }
       return Promise.reject(new Error(msg));
     }
+  };
+
+  const uploadImages = async (
+    files: File[],
+    options?: ImageBatchUploadOptions
+  ): Promise<ImageBatchUploadResult> => {
+    const maxBatch = options?.maxBatch ?? DEFAULT_MAX_BATCH;
+    const concurrency = options?.concurrency ?? DEFAULT_BATCH_CONCURRENCY;
+    const silentToasts = options?.silentToasts ?? false;
+
+    if (files.length > maxBatch) {
+      const msg = `Too many files. Maximum is ${maxBatch} images per batch.`;
+      toast({title: "Too many files", description: msg, variant: "error"});
+      throw new Error(msg);
+    }
+
+    const batchId = options?.batchId ?? uuidv4();
+    const succeeded: ImageUploadResult[] = [];
+    const failed: {file: File; error: Error}[] = [];
+
+    await mapWithConcurrency(files, concurrency, async (file) => {
+      try {
+        const result = await uploadImage(file, {silentToasts: true, batchId});
+        succeeded.push(result);
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === "AbortError") {
+          failed.push({file, error});
+          return;
+        }
+        failed.push({
+          file,
+          error: error instanceof Error ? error : new Error(normalizeError(error)),
+        });
+      }
+    });
+
+    if (!silentToasts) {
+      if (failed.length === 0) {
+        toast({
+          title: "Upload complete",
+          description: `${succeeded.length} image${succeeded.length === 1 ? "" : "s"} uploaded successfully.`,
+          variant: "success",
+        });
+      } else if (succeeded.length === 0) {
+        toast({
+          title: "Upload failed",
+          description: `All ${failed.length} image${failed.length === 1 ? "" : "s"} failed to upload.`,
+          variant: "error",
+        });
+      } else {
+        toast({
+          title: "Upload finished",
+          description: `${succeeded.length} uploaded, ${failed.length} failed.`,
+          variant: "info",
+        });
+      }
+    }
+
+    return {batchId, succeeded, failed};
   };
 
   const cancelUpload = (uploadId: string) => {
@@ -177,7 +284,17 @@ export function useImageUpload() {
     });
   };
 
-  return {uploadImage, cancelUpload, clearUpload, uploads};
+  const clearBatch = (batchId: string) => {
+    setUploads((prev) => {
+      const next = {...prev};
+      for (const [id, upload] of Object.entries(next)) {
+        if (upload.batchId === batchId) delete next[id];
+      }
+      return next;
+    });
+  };
+
+  return {uploadImage, uploadImages, cancelUpload, clearUpload, clearBatch, uploads};
 }
 
 async function uploadToWasabi(

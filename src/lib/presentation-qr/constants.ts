@@ -1,3 +1,5 @@
+import {getCreatorAppPublicOrigin} from "@/lib/public-media-urls";
+
 /** Token valid for 4 minutes; rotate every 3 → 1 minute overlap. */
 export const PRESENTATION_QR_TTL_SECONDS = 240;
 
@@ -13,4 +15,9 @@ export function getCreatorAppBaseUrl(): string {
     throw new Error("App base URL is not configured. Set NEXT_PUBLIC_SITE_URL or PUBLIC_APP_URL.");
   }
   return fromEnv.replace(/\/+$/, "");
+}
+
+/** Client-safe creator origin for QR/profile links (env, then browser origin, then prod fallback). */
+export function getCreatorAppOriginOrFallback(): string {
+  return getCreatorAppPublicOrigin();
 }

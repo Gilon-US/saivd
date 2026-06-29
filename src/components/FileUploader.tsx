@@ -37,6 +37,8 @@ export default function FileUploader({
         setError(`File is too large. Maximum size is ${maxSize / (1024 * 1024)}MB.`);
       } else if (rejection.errors[0].code === 'file-invalid-type') {
         setError(invalidTypeMessage);
+      } else if (rejection.errors[0].code === 'too-many-files') {
+        setError(`Too many files. Maximum is ${maxFiles} file${maxFiles === 1 ? '' : 's'}.`);
       } else {
         setError(rejection.errors[0].message);
       }
@@ -51,7 +53,7 @@ export default function FileUploader({
     
     // Call parent callback
     onFilesSelected(acceptedFiles);
-  }, [maxSize, onFilesSelected, invalidTypeMessage]);
+  }, [maxSize, maxFiles, onFilesSelected, invalidTypeMessage]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -86,13 +88,16 @@ export default function FileUploader({
           <div className="flex flex-col items-center justify-center space-y-2">
             <UploadIcon className="h-10 w-10 text-gray-400" />
             <p className="text-lg font-medium">
-              {isDragActive ? 'Drop the file here' : 'Drag & drop a file here'}
+              {isDragActive
+                ? maxFiles > 1 ? 'Drop files here' : 'Drop the file here'
+                : maxFiles > 1 ? 'Drag & drop files here' : 'Drag & drop a file here'}
             </p>
             <p className="text-sm text-gray-500">
-              or click to select a file
+              {maxFiles > 1 ? 'or click to select files' : 'or click to select a file'}
             </p>
             <p className="text-xs text-gray-400">
               Maximum file size: {maxSize / (1024 * 1024)}MB
+              {maxFiles > 1 ? ` · Up to ${maxFiles} files` : ''}
             </p>
           </div>
         </div>

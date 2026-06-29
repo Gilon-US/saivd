@@ -9,7 +9,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {Download, ImageIcon, QrCode, Share2Icon, TrashIcon, UploadIcon} from "lucide-react";
+import {Download, ImageIcon, QrCode, TrashIcon, UploadIcon} from "lucide-react";
+import {MediaShareDropdown} from "@/components/media/MediaShareDropdown";
 import type {ImageRecord} from "@/hooks/useImages";
 import {useImageWatermarkVerification} from "@/hooks/useImageWatermarkVerification";
 import {PresentationQrFlipButton} from "@/components/presentation/PresentationQrFlipButton";
@@ -320,15 +321,13 @@ function ImagePairCard({
               </p>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                onClick={() => onShare(image)}
-                title={`Share "${image.filename}" to a viewer`}
-                aria-label={`Share ${image.filename} to a viewer`}>
-                <Share2Icon className="h-4 w-4" />
-              </Button>
+              <MediaShareDropdown
+                mediaKind="image"
+                mediaId={image.id}
+                mediaFilename={image.filename}
+                publicLinksEnabled={image.status === "processed" && Boolean(image.processed_url)}
+                onShareToViewer={() => onShare(image)}
+              />
               <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button

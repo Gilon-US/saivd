@@ -42,12 +42,19 @@ export async function updateSession(request: NextRequest) {
   // Public profile routes (numeric user IDs and optional /qr suffix)
   const isPublicProfileRoute = /^\/profile\/[0-9]+(\/qr)?$/.test(pathname);
 
+  // Public verified media watch + embed (creator-hosted)
+  const isPublicMediaRoute =
+    /^\/i\/[^/]+$/.test(pathname) ||
+    /^\/v\/[^/]+$/.test(pathname) ||
+    /^\/embed\/[^/]+$/.test(pathname) ||
+    /^\/embed\/i\/[^/]+$/.test(pathname);
+
   // Protected routes that require authentication
   const protectedRoutes = ["/dashboard", "/profile", "/videos"];
   let isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
 
   // Do NOT protect numeric public profile routes (e.g. /profile/123, /profile/123/qr)
-  if (isPublicProfileRoute) {
+  if (isPublicProfileRoute || isPublicMediaRoute) {
     isProtectedRoute = false;
   }
 

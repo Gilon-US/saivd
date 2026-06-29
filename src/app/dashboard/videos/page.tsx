@@ -11,6 +11,7 @@ import {useToast} from "@/hooks/useToast";
 import {cn} from "@/lib/utils";
 import {UploadIcon, RefreshCwIcon} from "lucide-react";
 import type {MediaUploadResult} from "@/components/media/MediaUploader";
+import type {ImageBatchUploadResult} from "@/hooks/useImageUpload";
 
 type MediaTab = "videos" | "images";
 
@@ -44,22 +45,17 @@ export default function VideosPage() {
   };
 
   const handleUploadComplete = (result: MediaUploadResult) => {
-    if (result.kind === "video") {
-      toast({
-        title: "Upload complete",
-        description: `${result.result.filename} has been uploaded successfully.`,
-        variant: "success",
-      });
-      setActiveTab("videos");
-      setTimeout(() => refresh(), 1000);
-      return;
-    }
-
+    if (result.kind !== "video") return;
     toast({
-      title: "Image uploaded",
+      title: "Upload complete",
       description: `${result.result.filename} has been uploaded successfully.`,
       variant: "success",
     });
+    setActiveTab("videos");
+    setTimeout(() => refresh(), 1000);
+  };
+
+  const handleImageBatchComplete = (_result: ImageBatchUploadResult) => {
     setActiveTab("images");
     setTimeout(() => refreshImages(), 800);
   };
@@ -141,6 +137,7 @@ export default function VideosPage() {
         isOpen={isUploadModalOpen}
         onClose={handleCloseUploadModal}
         onUploadComplete={handleUploadComplete}
+        onImageBatchComplete={handleImageBatchComplete}
         existingVideos={videos}
       />
     </div>

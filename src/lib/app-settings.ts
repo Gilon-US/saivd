@@ -5,6 +5,7 @@ const DEFAULTS: Record<string, string> = {
   max_video_size_mb: "500",
   allowed_video_types: "video/mp4,video/quicktime,video/x-msvideo,video/webm",
   max_image_size_mb: "10",
+  max_image_batch_upload: "100",
   allowed_image_types: "image/jpeg,image/png,image/webp,image/gif",
   unauthenticated_media_headline: "Unauthenticated Media",
   unauthenticated_media_subhead: "This content could not be verified.",
@@ -284,6 +285,14 @@ export async function getMaxImageSizeMb(): Promise<number> {
   const raw = await getSetting("max_image_size_mb");
   const mb = parseInt(raw, 10);
   return isNaN(mb) || mb <= 0 ? 10 : mb;
+}
+
+/** Max images allowed in a single batch upload (1–100). */
+export async function getMaxImageBatchUpload(): Promise<number> {
+  const raw = await getSetting("max_image_batch_upload");
+  const n = parseInt(raw, 10);
+  if (isNaN(n) || n <= 0) return 100;
+  return Math.min(100, n);
 }
 
 /** Convenience: returns the list of allowed image MIME types from settings. */

@@ -4,17 +4,30 @@ import { MediaUploader, MediaUploadResult } from '@/components/media/MediaUpload
 import { Video } from '@/components/video/VideoUploader';
 import { Button } from '@/components/ui/button';
 import { XIcon } from 'lucide-react';
+import type { ImageBatchUploadResult } from '@/hooks/useImageUpload';
 
 type UploadModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onUploadComplete: (result: MediaUploadResult) => void;
+  onImageBatchComplete?: (result: ImageBatchUploadResult) => void;
   existingVideos?: Video[];
 };
 
-export function UploadModal({ isOpen, onClose, onUploadComplete, existingVideos = [] }: UploadModalProps) {
+export function UploadModal({
+  isOpen,
+  onClose,
+  onUploadComplete,
+  onImageBatchComplete,
+  existingVideos = [],
+}: UploadModalProps) {
   const handleUploadComplete = (result: MediaUploadResult) => {
     onUploadComplete(result);
+    onClose();
+  };
+
+  const handleImageBatchComplete = (result: ImageBatchUploadResult) => {
+    onImageBatchComplete?.(result);
     onClose();
   };
 
@@ -35,10 +48,14 @@ export function UploadModal({ isOpen, onClose, onUploadComplete, existingVideos 
         <div className="p-6">
           <div className="space-y-4">
             <p className="text-gray-500 dark:text-gray-400 mb-4">
-              Select a video or image to upload. Videos are processed for watermarking; images are stored as uploaded.
-              Size and format limits are configured in Settings → General.
+              Upload one video, or up to 100 images per batch. Videos are processed for watermarking; images are
+              watermarked on upload. Size and format limits are configured in Settings → General.
             </p>
-            <MediaUploader onUploadComplete={handleUploadComplete} existingVideos={existingVideos} />
+            <MediaUploader
+              onUploadComplete={handleUploadComplete}
+              onImageBatchComplete={handleImageBatchComplete}
+              existingVideos={existingVideos}
+            />
           </div>
         </div>
       </div>

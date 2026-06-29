@@ -1,8 +1,8 @@
 'use client';
 
 import {useRouter} from "next/navigation";
-import Link from "next/link";
 import {MediaUploader, MediaUploadResult} from "@/components/media/MediaUploader";
+import type {ImageBatchUploadResult} from "@/hooks/useImageUpload";
 import {Button} from "@/components/ui/button";
 import {ArrowLeftIcon} from "lucide-react";
 import {useToast} from "@/hooks/useToast";
@@ -12,28 +12,16 @@ export default function UploadPage() {
   const {toast} = useToast();
 
   const handleUploadComplete = (result: MediaUploadResult) => {
-    if (result.kind === "video") {
-      toast({
-        title: "Upload complete",
-        description: `${result.result.filename} has been uploaded successfully.`,
-        variant: "success",
-      });
-      router.replace("/dashboard/videos");
-      return;
-    }
-
+    if (result.kind !== "video") return;
     toast({
-      title: "Image uploaded",
-      description: (
-        <span>
-          {result.result.filename} uploaded.{" "}
-          <Link href="/dashboard/images" className="underline font-medium">
-            View in Images
-          </Link>
-        </span>
-      ),
+      title: "Upload complete",
+      description: `${result.result.filename} has been uploaded successfully.`,
       variant: "success",
     });
+    router.replace("/dashboard/videos");
+  };
+
+  const handleImageBatchComplete = (_result: ImageBatchUploadResult) => {
     router.replace("/dashboard/images");
   };
 
@@ -49,10 +37,14 @@ export default function UploadPage() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 className="text-xl font-semibold mb-4">Select a video or image</h2>
         <p className="text-gray-500 dark:text-gray-400 mb-6">
-          Videos go through watermark processing. Images are stored as uploaded with no preprocessing.
+          Upload one video, or up to 100 images per batch. Videos go through watermark processing; images are
+          watermarked on upload.
         </p>
 
-        <MediaUploader onUploadComplete={handleUploadComplete} />
+        <MediaUploader
+          onUploadComplete={handleUploadComplete}
+          onImageBatchComplete={handleImageBatchComplete}
+        />
       </div>
     </div>
   );

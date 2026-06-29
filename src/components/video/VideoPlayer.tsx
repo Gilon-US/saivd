@@ -1,7 +1,8 @@
 "use client";
 
 import {useEffect, useRef, useState, useCallback} from "react";
-import {X, Play, Pause, Volume2, VolumeX, Maximize} from "lucide-react";
+import {X, Play, Pause, Volume2, VolumeX, Maximize, ExternalLink} from "lucide-react";
+import {getPublicWatchUrl} from "@/lib/public-media-urls";
 import {useFrameAnalysis, type FrameAnalysisFunction} from "@/hooks/useFrameAnalysis";
 import {useWatermarkVerification, type VerificationProgress, type VerificationProgressPhase} from "@/hooks/useWatermarkVerification";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
@@ -199,6 +200,9 @@ export function VideoPlayer({
     }
   };
 
+  const publicWatchUrl =
+    enableFrameAnalysis && videoId ? getPublicWatchUrl("video", videoId) : null;
+
   if (!isOpen) return null;
 
   return (
@@ -211,6 +215,17 @@ export function VideoPlayer({
           aria-label="Close video player">
           <X className="w-6 h-6 sm:w-8 sm:h-8" />
         </button>
+
+        {publicWatchUrl && (
+          <a
+            href={publicWatchUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute -top-10 sm:-top-12 left-0 sm:left-2 flex items-center gap-1.5 text-white/80 hover:text-white text-sm transition-colors touch-manipulation z-30">
+            <ExternalLink className="w-4 h-4" />
+            Open public page
+          </a>
+        )}
 
         {/* Video container */}
         <div className="relative bg-black rounded-lg overflow-hidden">

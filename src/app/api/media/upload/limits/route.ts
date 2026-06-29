@@ -3,6 +3,7 @@ import {
   getMaxVideoSizeMb,
   getAllowedVideoTypes,
   getMaxImageSizeMb,
+  getMaxImageBatchUpload,
   getAllowedImageTypes,
   ALL_VIDEO_TYPES,
   ALL_IMAGE_TYPES,
@@ -13,12 +14,14 @@ import {
  * Returns upload constraints for both video and image flows.
  */
 export async function GET() {
-  const [maxVideoSizeMb, allowedVideoTypes, maxImageSizeMb, allowedImageTypes] = await Promise.all([
-    getMaxVideoSizeMb(),
-    getAllowedVideoTypes(),
-    getMaxImageSizeMb(),
-    getAllowedImageTypes(),
-  ]);
+  const [maxVideoSizeMb, allowedVideoTypes, maxImageSizeMb, maxImageBatchUpload, allowedImageTypes] =
+    await Promise.all([
+      getMaxVideoSizeMb(),
+      getAllowedVideoTypes(),
+      getMaxImageSizeMb(),
+      getMaxImageBatchUpload(),
+      getAllowedImageTypes(),
+    ]);
 
   const videoTypesDetail = allowedVideoTypes.map((mime) => {
     const def = ALL_VIDEO_TYPES.find((t) => t.mime === mime);
@@ -42,6 +45,7 @@ export async function GET() {
       image: {
         maxSizeMb: maxImageSizeMb,
         maxSizeBytes: maxImageSizeMb * 1024 * 1024,
+        maxBatchUpload: maxImageBatchUpload,
         allowedTypes: allowedImageTypes,
         allowedTypesDetail: imageTypesDetail,
       },

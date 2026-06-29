@@ -2,7 +2,11 @@
 
 import {useCallback, useEffect, useRef, useState} from "react";
 import QRCode from "qrcode";
-import {PRESENTATION_QR_ROTATE_MS, isPresentationQrEnabled} from "@/lib/presentation-qr/constants";
+import {
+  PRESENTATION_QR_ROTATE_MS,
+  getCreatorAppOriginOrFallback,
+  isPresentationQrEnabled,
+} from "@/lib/presentation-qr/constants";
 
 export type PresentationMediaKind = "video" | "image";
 
@@ -34,8 +38,9 @@ export function usePresentationQr({
   const [scanUrl, setScanUrl] = useState<string | null>(null);
   const inflightRef = useRef(false);
 
+  const creatorOrigin = getCreatorAppOriginOrFallback();
   const staticQrUrl =
-    numericUserId !== null ? `/profile/${numericUserId}/qr` : null;
+    numericUserId !== null ? `${creatorOrigin}/profile/${numericUserId}/qr` : null;
 
   const mint = useCallback(async () => {
     if (!dynamicEnabled || !enabled || numericUserId === null || !mediaId || inflightRef.current) return;
