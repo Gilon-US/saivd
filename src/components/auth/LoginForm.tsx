@@ -63,7 +63,10 @@ export function LoginForm() {
       });
 
       if (error) {
-        if (error.message.includes("credentials")) {
+        const lower = error.message.toLowerCase();
+        if (lower.includes("email not confirmed")) {
+          setErrors({general: "Your email is not confirmed yet. Try registering again or contact support."});
+        } else if (error.message.includes("credentials")) {
           setErrors({general: "Invalid email or password"});
         } else {
           setErrors({general: error.message});
