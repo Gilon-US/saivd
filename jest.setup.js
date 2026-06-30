@@ -1,4 +1,13 @@
 import '@testing-library/jest-dom'
+import { webcrypto } from 'crypto'
+
+// jsdom lacks Web Crypto; Node's webcrypto works for SHA-256 in tests.
+if (typeof globalThis.crypto?.subtle === 'undefined') {
+  Object.defineProperty(globalThis, 'crypto', {
+    value: webcrypto,
+    configurable: true,
+  })
+}
 
 // Mock Next.js router
 jest.mock('next/navigation', () => ({

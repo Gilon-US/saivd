@@ -1,6 +1,13 @@
 import {useState} from "react";
 import {v4 as uuidv4} from "uuid";
 import {useToast} from "@/hooks/useToast";
+import {
+  buildExistingLibraryKeys,
+  checkImageDuplicate,
+  sha256Hex,
+  type ExistingImageFingerprint,
+  type SkippedImageUpload,
+} from "@/lib/image-deduplication";
 
 export type ImageUploadPhase =
   | "requesting-url"   // Getting presigned URL
@@ -37,6 +44,7 @@ export type ImageBatchUploadResult = {
   batchId: string;
   succeeded: ImageUploadResult[];
   failed: {file: File; error: Error}[];
+  skipped: SkippedImageUpload[];
 };
 
 export type ImageUploadOptions = {
@@ -49,6 +57,8 @@ export type ImageBatchUploadOptions = {
   maxBatch?: number;
   silentToasts?: boolean;
   batchId?: string;
+  /** User's existing images — duplicates (filename + size) are skipped. */
+  existingImages?: ExistingImageFingerprint[];
 };
 
 const DEFAULT_BATCH_CONCURRENCY = 2;
@@ -67,6 +77,13 @@ function normalizeError(error: unknown): string {
   if (typeof error === "object" && error !== null && "message" in error)
     return String((error as {message: unknown}).message);
   return "An error occurred during upload.";
+}
+
+async function fetchExistingImageFingerprints(): Promise<ExistingImageFingerprint[]> {
+  const res = await fetch("/api/images/dedup-index", {credentials: "include"});
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body?.success) return [];
+  return (body.data?.images ?? []) as ExistingImageFingerprint[];
 }
 
 async function mapWithConcurrency<T>(
@@ -222,8 +239,26 @@ export function useImageUpload() {
     const batchId = options?.batchId ?? uuidv4();
     const succeeded: ImageUploadResult[] = [];
     const failed: {file: File; error: Error}[] = [];
+    const skipped: SkippedImageUpload[] = [];
 
-    await mapWithConcurrency(files, concurrency, async (file) => {
+    const libraryKeys = buildExistingLibraryKeys(
+      options?.existingImages ?? (await fetchExistingImageFingerprints()),
+    );
+    const batchHashes = new Set<string>();
+    const filesToUpload: File[] = [];
+
+    for (const file of files) {
+      const fileHash = await sha256Hex(file);
+      const duplicate = checkImageDuplicate(file, {libraryKeys, batchHashes, fileHash});
+      if (duplicate) {
+        skipped.push(duplicate);
+        continue;
+      }
+      batchHashes.add(fileHash);
+      filesToUpload.push(file);
+    }
+
+    await mapWithConcurrency(filesToUpload, concurrency, async (file) => {
       try {
         const result = await uploadImage(file, {silentToasts: true, batchId});
         succeeded.push(result);
@@ -240,28 +275,37 @@ export function useImageUpload() {
     });
 
     if (!silentToasts) {
-      if (failed.length === 0) {
+      if (failed.length === 0 && skipped.length === 0) {
         toast({
           title: "Upload complete",
           description: `${succeeded.length} image${succeeded.length === 1 ? "" : "s"} uploaded successfully.`,
           variant: "success",
         });
-      } else if (succeeded.length === 0) {
+      } else if (succeeded.length === 0 && failed.length === 0 && skipped.length > 0) {
+        toast({
+          title: "No new images uploaded",
+          description: `${skipped.length} duplicate image${skipped.length === 1 ? "" : "s"} skipped.`,
+          variant: "info",
+        });
+      } else if (succeeded.length === 0 && failed.length > 0) {
         toast({
           title: "Upload failed",
           description: `All ${failed.length} image${failed.length === 1 ? "" : "s"} failed to upload.`,
           variant: "error",
         });
       } else {
+        const parts = [`${succeeded.length} uploaded`];
+        if (skipped.length > 0) parts.push(`${skipped.length} skipped as duplicates`);
+        if (failed.length > 0) parts.push(`${failed.length} failed`);
         toast({
           title: "Upload finished",
-          description: `${succeeded.length} uploaded, ${failed.length} failed.`,
+          description: parts.join(", ") + ".",
           variant: "info",
         });
       }
     }
 
-    return {batchId, succeeded, failed};
+    return {batchId, succeeded, failed, skipped};
   };
 
   const cancelUpload = (uploadId: string) => {

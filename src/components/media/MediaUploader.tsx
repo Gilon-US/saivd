@@ -16,6 +16,7 @@ import {
   ImageBatchUploadResult,
 } from "@/hooks/useImageUpload";
 import {UploadIcon, CheckCircleIcon, AlertCircleIcon, ImageIcon} from "lucide-react";
+import {SkippedImagesReport} from "@/components/image/SkippedImagesReport";
 import type {Video} from "@/components/video/VideoUploader";
 
 export type MediaUploadResult =
@@ -314,9 +315,13 @@ export function MediaUploader({
 
   const completedCount = batchResult?.succeeded.length ?? batchUploads.filter((u) => u.phase === "complete").length;
   const failedCount = batchResult?.failed.length ?? batchUploads.filter((u) => u.phase === "error").length;
+  const skippedCount = batchResult?.skipped.length ?? 0;
   const totalCount = batchResult
-    ? batchResult.succeeded.length + batchResult.failed.length
+    ? batchResult.succeeded.length + batchResult.failed.length + batchResult.skipped.length
     : batchUploads.length;
+
+  const showImageBatchPanel =
+    batchRunning || (batchComplete && (batchUploads.length > 0 || skippedCount > 0));
 
   const showDropzone = !batchComplete && !currentVideoUpload;
   const showSelection = selectedFiles.length > 0 && !uploading && !batchComplete && !currentVideoUpload;
@@ -462,14 +467,15 @@ export function MediaUploader({
         </Card>
       )}
 
-      {(batchRunning || batchComplete) && batchUploads.length > 0 && (
+      {showImageBatchPanel && (
         <Card>
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-medium">{batchRunning ? "Uploading images…" : "Upload summary"}</h3>
-              {!batchRunning && batchComplete && (
+              {!batchRunning && batchComplete && totalCount > 0 && (
                 <p className="text-sm text-gray-500">
-                  {completedCount}/{totalCount} succeeded
+                  {completedCount}/{totalCount} uploaded
+                  {skippedCount > 0 ? ` · ${skippedCount} skipped` : ""}
                   {failedCount > 0 ? ` · ${failedCount} failed` : ""}
                 </p>
               )}
@@ -478,44 +484,48 @@ export function MediaUploader({
             {batchRunning && (
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <LoadingSpinner size="sm" />
-                Processing up to 2 images at a time…
+                Checking duplicates, then uploading up to 2 at a time…
               </div>
             )}
 
-            <ul className="max-h-56 overflow-y-auto space-y-3">
-              {batchUploads.map((upload) => (
-                <li key={upload.id} className="border rounded-md p-3 space-y-2">
-                  <div className="flex items-center gap-2">
-                    {upload.phase === "complete" ? (
-                      <CheckCircleIcon className="h-4 w-4 text-green-500 shrink-0" />
-                    ) : upload.phase === "error" ? (
-                      <AlertCircleIcon className="h-4 w-4 text-red-500 shrink-0" />
-                    ) : (
-                      <LoadingSpinner size="sm" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{upload.file.name}</p>
-                      <p className="text-xs text-gray-500">{getImagePhaseMessage(upload.phase)}</p>
+            {!batchRunning && batchResult && <SkippedImagesReport skipped={batchResult.skipped} />}
+
+            {batchUploads.length > 0 && (
+              <ul className="max-h-56 overflow-y-auto space-y-3">
+                {batchUploads.map((upload) => (
+                  <li key={upload.id} className="border rounded-md p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      {upload.phase === "complete" ? (
+                        <CheckCircleIcon className="h-4 w-4 text-green-500 shrink-0" />
+                      ) : upload.phase === "error" ? (
+                        <AlertCircleIcon className="h-4 w-4 text-red-500 shrink-0" />
+                      ) : (
+                        <LoadingSpinner size="sm" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{upload.file.name}</p>
+                        <p className="text-xs text-gray-500">{getImagePhaseMessage(upload.phase)}</p>
+                      </div>
+                      {upload.uploading && (
+                        <Button variant="ghost" size="sm" onClick={() => cancelImageUpload(upload.id)}>
+                          Cancel
+                        </Button>
+                      )}
                     </div>
-                    {upload.uploading && (
-                      <Button variant="ghost" size="sm" onClick={() => cancelImageUpload(upload.id)}>
-                        Cancel
-                      </Button>
+
+                    {upload.phase === "error" && upload.error && (
+                      <p className="text-xs text-destructive">{upload.error.message}</p>
                     )}
-                  </div>
 
-                  {upload.phase === "error" && upload.error && (
-                    <p className="text-xs text-destructive">{upload.error.message}</p>
-                  )}
+                    {upload.phase === "uploading" && <Progress value={upload.progress} className="h-1.5" />}
 
-                  {upload.phase === "uploading" && <Progress value={upload.progress} className="h-1.5" />}
-
-                  {(upload.phase === "requesting-url" || upload.phase === "confirming") && (
-                    <Progress value={null} className="h-1.5" />
-                  )}
-                </li>
-              ))}
-            </ul>
+                    {(upload.phase === "requesting-url" || upload.phase === "confirming") && (
+                      <Progress value={null} className="h-1.5" />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
 
             {!batchRunning && batchComplete && (
               <div className="flex justify-end">

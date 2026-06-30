@@ -31,6 +31,12 @@ describe("useImageUpload", () => {
     (useToast as jest.Mock).mockReturnValue(mockToast);
 
     (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url === "/api/images/dedup-index") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({success: true, data: {images: []}}),
+        });
+      }
       if (url === "/api/images/upload") {
         return Promise.resolve({
           ok: true,
@@ -113,15 +119,22 @@ describe("useImageUpload", () => {
 
     expect(batchResult?.succeeded).toHaveLength(2);
     expect(batchResult?.failed).toHaveLength(0);
+    expect(batchResult?.skipped).toHaveLength(0);
     expect(batchResult?.batchId).toBe("batch-1");
     expect(mockToast.toast).toHaveBeenCalledWith(
       expect.objectContaining({title: "Upload complete", variant: "success"})
     );
-    expect(global.fetch).toHaveBeenCalledTimes(4);
+    expect(global.fetch).toHaveBeenCalledTimes(5);
   });
 
   it("uploadImages records partial failures", async () => {
     (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url === "/api/images/dedup-index") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({success: true, data: {images: []}}),
+        });
+      }
       if (url === "/api/images/upload") {
         return Promise.resolve({
           ok: true,
@@ -159,8 +172,30 @@ describe("useImageUpload", () => {
 
     expect(batchResult?.succeeded).toHaveLength(0);
     expect(batchResult?.failed).toHaveLength(1);
+    expect(batchResult?.skipped).toHaveLength(0);
     expect(mockToast.toast).toHaveBeenCalledWith(
       expect.objectContaining({title: "Upload failed", variant: "error"})
     );
+  });
+
+  it("uploadImages skips duplicates without stopping the batch", async () => {
+    const existingFile = new File(["same"], "dup.jpg", {type: "image/jpeg"});
+    const newFile = new File(["new"], "new.jpg", {type: "image/jpeg"});
+
+    const {result} = renderHook(() => useImageUpload());
+    let batchResult: ImageBatchUploadResult | undefined;
+
+    await act(async () => {
+      batchResult = await result.current.uploadImages([existingFile, newFile], {
+        maxBatch: 100,
+        existingImages: [{filename: "dup.jpg", file_size: existingFile.size}],
+      });
+    });
+
+    expect(batchResult?.skipped).toHaveLength(1);
+    expect(batchResult?.skipped[0]?.file.name).toBe("dup.jpg");
+    expect(batchResult?.succeeded).toHaveLength(1);
+    expect(batchResult?.failed).toHaveLength(0);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 });
