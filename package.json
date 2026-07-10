@@ -66,6 +66,7 @@
     "redis": "^4.7.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
+    "upng-js": "^2.1.0",
     "uuid": "^13.0.0",
     "web-demuxer": "^4.0.0"
   },

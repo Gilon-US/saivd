@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import packageJson from "./package.json";
 
 /**
  * Use standalone output only when explicitly requested (e.g. Docker/self-hosted).
@@ -10,6 +11,9 @@ const strictModeDisabledForSession = process.env.NEXT_DISABLE_STRICT_MODE === "1
 
 const nextConfig: NextConfig = {
   ...(process.env.USE_STANDALONE_OUTPUT === "true" ? { output: "standalone" as const } : {}),
+  env: {
+    NEXT_PUBLIC_APP_VERSION: packageJson.version,
+  },
   images: {
     remotePatterns: [
       {protocol: "https", hostname: "media.licdn.com", pathname: "/**"},
