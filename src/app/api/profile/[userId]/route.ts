@@ -30,7 +30,7 @@ export async function GET(_request: NextRequest, context: {params: Promise<{user
     // Fetch public profile data - only safe fields
     const {data: profile, error} = await supabase
       .from("profiles")
-      .select("id, display_name, bio, photo, created_at, numeric_user_id, qr_overlay_position, twitter_url, instagram_url, facebook_url, youtube_url, tiktok_url, website_url")
+      .select("id, display_name, bio, photo, logo, created_at, numeric_user_id, qr_overlay_position, twitter_url, instagram_url, facebook_url, youtube_url, tiktok_url, website_url")
       .eq("numeric_user_id", numericUserId)
       .single();
 
@@ -52,15 +52,16 @@ export async function GET(_request: NextRequest, context: {params: Promise<{user
       return NextResponse.json({success: false, error: "User not found"}, {status: 404});
     }
 
-    // Resolve S3 key → presigned URL so callers always get a usable photo URL
+    // Resolve S3 keys → presigned URLs so callers always get usable image URLs
     const resolvedPhoto = await resolvePhotoUrl(profile.photo);
+    const resolvedLogo = await resolvePhotoUrl(profile.logo);
 
     // Success response with profile data
     // Add cache control headers to prevent stale data
     return NextResponse.json(
       {
         success: true,
-        data: {...profile, photo: resolvedPhoto},
+        data: {...profile, photo: resolvedPhoto, logo: resolvedLogo},
       },
       {
         headers: {

@@ -24,11 +24,13 @@ const DISPLAY_NAME_MIN = 2;
 const DISPLAY_NAME_MAX = 100;
 const MAX_PHOTO_BYTES = 50 * 1024; // 50 KB
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const DEFAULT_CREATOR_LOGO = "/images/saivd-logo.png";
 
-function getProfileDefaults(profile: {display_name?: string | null; photo?: string | null; bio?: string | null; qr_overlay_position?: string | null; twitter_url?: string | null; instagram_url?: string | null; facebook_url?: string | null; youtube_url?: string | null; tiktok_url?: string | null; website_url?: string | null} | null) {
+function getProfileDefaults(profile: {display_name?: string | null; photo?: string | null; logo?: string | null; bio?: string | null; qr_overlay_position?: string | null; twitter_url?: string | null; instagram_url?: string | null; facebook_url?: string | null; youtube_url?: string | null; tiktok_url?: string | null; website_url?: string | null} | null) {
   return {
     displayName: profile?.display_name ?? "",
     photo: profile?.photo ?? "",
+    logo: profile?.logo ?? "",
     bio: profile?.bio ?? "",
     qrOverlayPosition: parseQrOverlayPosition(profile?.qr_overlay_position),
     twitterUrl: profile?.twitter_url ?? "",
@@ -48,6 +50,7 @@ export function ProfileEditorForm() {
   const defaults = getProfileDefaults(profile);
   const [displayName, setDisplayName] = useState(defaults.displayName);
   const [photo, setPhoto] = useState(defaults.photo);
+  const [logo, setLogo] = useState(defaults.logo);
   const [bio, setBio] = useState(defaults.bio);
   const [twitterUrl, setTwitterUrl] = useState(defaults.twitterUrl);
   const [instagramUrl, setInstagramUrl] = useState(defaults.instagramUrl);
@@ -67,6 +70,12 @@ export function ProfileEditorForm() {
   const [localPreview, setLocalPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Creator logo upload state
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
+  const [localLogoPreview, setLocalLogoPreview] = useState<string | null>(null);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+
   // Refresh on mount so we always get a fresh presigned photo URL
   useEffect(() => {
     refreshProfile();
@@ -78,6 +87,7 @@ export function ProfileEditorForm() {
       setDisplayName(profile.display_name ?? "");
       // Only store the photo if it's a usable URL; bare S3 keys are not displayable
       setPhoto(isDisplayableUrl(profile.photo) ? (profile.photo ?? "") : "");
+      setLogo(isDisplayableUrl(profile.logo) ? (profile.logo ?? "") : "");
       setBio(profile.bio ?? "");
       setTwitterUrl(profile.twitter_url ?? "");
       setInstagramUrl(profile.instagram_url ?? "");
@@ -93,8 +103,9 @@ export function ProfileEditorForm() {
   useEffect(() => {
     return () => {
       if (localPreview) URL.revokeObjectURL(localPreview);
+      if (localLogoPreview) URL.revokeObjectURL(localLogoPreview);
     };
-  }, [localPreview]);
+  }, [localPreview, localLogoPreview]);
 
   const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -164,9 +175,76 @@ export function ProfileEditorForm() {
     }
   };
 
+  const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLogoUploadError(null);
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setLogoUploadError("Unsupported file type. Use JPEG, PNG, WebP, or GIF.");
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setLogoUploadError("Image must be 50 KB or smaller.");
+      return;
+    }
+
+    const preview = URL.createObjectURL(file);
+    if (localLogoPreview) URL.revokeObjectURL(localLogoPreview);
+    setLocalLogoPreview(preview);
+
+    setIsUploadingLogo(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+
+      const res = await fetch("/api/profile/logo", {method: "POST", body: fd});
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        setLogoUploadError(json.error ?? "Upload failed");
+        setLocalLogoPreview(null);
+        return;
+      }
+
+      await refreshProfile();
+      setLocalLogoPreview(null);
+    } catch {
+      setLogoUploadError("Upload failed. Please try again.");
+      setLocalLogoPreview(null);
+    } finally {
+      setIsUploadingLogo(false);
+      if (logoFileInputRef.current) logoFileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    setLogoUploadError(null);
+    setLocalLogoPreview(null);
+    setIsUploadingLogo(true);
+    try {
+      const res = await fetch("/api/profile/logo", {method: "DELETE"});
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setLogoUploadError(json.error ?? "Failed to remove logo");
+        return;
+      }
+      setLogo("");
+      await refreshProfile();
+    } catch {
+      setLogoUploadError("Failed to remove logo. Please try again.");
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
   // Guard: only show photo if it's a proper URL (not a bare S3 key)
   const rawPhoto = localPreview ?? photo;
   const displayedPhoto = isDisplayableUrl(rawPhoto) ? rawPhoto : null;
+  const rawLogo = localLogoPreview ?? logo;
+  const hasCustomLogo = isDisplayableUrl(rawLogo);
+  const displayedLogo = hasCustomLogo ? rawLogo : DEFAULT_CREATOR_LOGO;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -324,6 +402,68 @@ export function ProfileEditorForm() {
             </div>
           </div>
           {photoUploadError && <p className="text-sm text-destructive">{photoUploadError}</p>}
+        </div>
+
+        {/* Creator logo — used on the revolving QR flip (defaults to SAIVD logo) */}
+        <div className="space-y-2">
+          <Label>Creator logo</Label>
+          <p className="text-xs text-muted-foreground">
+            Shown on the QR flip overlay. Defaults to the SAIVD logo until you upload your own.
+          </p>
+          <div className="flex items-center gap-4">
+            <div className="relative w-20 h-20 rounded-md border-2 border-border overflow-hidden bg-muted flex items-center justify-center shrink-0">
+              <Image
+                src={displayedLogo}
+                alt="Creator logo"
+                fill
+                className="object-contain p-1"
+                unoptimized={
+                  displayedLogo.startsWith("blob:") ||
+                  displayedLogo.includes("wasabisys.com") ||
+                  displayedLogo.includes("X-Amz-")
+                }
+              />
+              {isUploadingLogo && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <LoadingSpinner size="sm" />
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <input
+                ref={logoFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={handleLogoFileChange}
+                disabled={isUploadingLogo || isSubmitting}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isUploadingLogo || isSubmitting}
+                onClick={() => logoFileInputRef.current?.click()}>
+                <Upload className="w-4 h-4 mr-2" />
+                {hasCustomLogo ? "Change logo" : "Upload logo"}
+              </Button>
+              {hasCustomLogo && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={isUploadingLogo || isSubmitting}
+                  onClick={handleRemoveLogo}
+                  className="text-destructive hover:text-destructive">
+                  <X className="w-4 h-4 mr-2" />
+                  Reset to SAIVD logo
+                </Button>
+              )}
+              <p className="text-xs text-muted-foreground">JPEG, PNG, WebP or GIF · max 50 KB</p>
+            </div>
+          </div>
+          {logoUploadError && <p className="text-sm text-destructive">{logoUploadError}</p>}
         </div>
 
         <div className="space-y-2">

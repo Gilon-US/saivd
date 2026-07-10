@@ -1,5 +1,6 @@
 "use client";
 
+import {useEffect, useState} from "react";
 import {usePresentationQr, type PresentationMediaKind} from "@/hooks/usePresentationQr";
 import {
   DEFAULT_QR_OVERLAY_POSITION,
@@ -13,12 +14,21 @@ const CREATOR_APP_ORIGIN =
   process.env.PUBLIC_APP_URL?.replace(/\/+$/, "") ??
   "";
 
+const DEFAULT_LOGO_URL = "/images/saivd-logo.png";
+
+function isDisplayableLogoUrl(url: string | null | undefined): url is string {
+  if (!url) return false;
+  return url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/") || url.startsWith("blob:");
+}
+
 type PresentationQrFlipButtonProps = {
   numericUserId: number;
   mediaKind: PresentationMediaKind;
   mediaId: string;
   enabled: boolean;
   position?: QrOverlayPosition;
+  /** Creator brand logo for the flip back face; falls back to SAIVD logo */
+  logoUrl?: string | null;
   /** Lift bottom corners above video control bar */
   elevateAboveBottomControls?: boolean;
   className?: string;
@@ -33,6 +43,7 @@ export function PresentationQrFlipButton({
   mediaId,
   enabled,
   position = DEFAULT_QR_OVERLAY_POSITION,
+  logoUrl = null,
   elevateAboveBottomControls = false,
   className = "",
   mintEndpoint = "/api/presentation/mint",
@@ -45,6 +56,13 @@ export function PresentationQrFlipButton({
     mediaId,
     mintEndpoint,
   });
+
+  const preferredLogo = isDisplayableLogoUrl(logoUrl) ? logoUrl : DEFAULT_LOGO_URL;
+  const [backLogoSrc, setBackLogoSrc] = useState(preferredLogo);
+
+  useEffect(() => {
+    setBackLogoSrc(preferredLogo);
+  }, [preferredLogo]);
 
   const profileUrl = profileOrigin
     ? `${profileOrigin}/profile/${numericUserId}`
@@ -78,9 +96,14 @@ export function PresentationQrFlipButton({
         <div className="qr-logo-flip-face qr-logo-flip-face-back">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/images/saivd-logo.png"
-            alt="Brand logo"
-            className="w-16 h-16 object-contain rounded-md shadow-md"
+            src={backLogoSrc}
+            alt="Creator logo"
+            className="w-16 h-16 object-cover rounded-md shadow-md"
+            onError={() => {
+              if (backLogoSrc !== DEFAULT_LOGO_URL) {
+                setBackLogoSrc(DEFAULT_LOGO_URL);
+              }
+            }}
           />
         </div>
       </div>

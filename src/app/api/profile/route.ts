@@ -29,6 +29,7 @@ export async function GET() {
         display_name,
         avatar_url,
         photo,
+        logo,
         bio,
         numeric_user_id,
         twitter_url,
@@ -88,6 +89,7 @@ export async function GET() {
             display_name,
             avatar_url,
             photo,
+            logo,
             bio,
             numeric_user_id,
             twitter_url,
@@ -116,7 +118,15 @@ export async function GET() {
         void rsa_public;
         void rsa_private;
         const resolvedPhoto = await resolvePhotoUrl(safeCreatedProfile.photo);
-        return NextResponse.json({success: true, data: profileWithBootstrapSuperuserRole({...safeCreatedProfile, photo: resolvedPhoto})});
+        const resolvedLogo = await resolvePhotoUrl(safeCreatedProfile.logo);
+        return NextResponse.json({
+          success: true,
+          data: profileWithBootstrapSuperuserRole({
+            ...safeCreatedProfile,
+            photo: resolvedPhoto,
+            logo: resolvedLogo,
+          }),
+        });
       }
 
       console.error("Error fetching profile:", error);
@@ -164,7 +174,15 @@ export async function GET() {
     void rsa_private;
 
     const resolvedPhoto = await resolvePhotoUrl(safeProfile.photo);
-    return NextResponse.json({success: true, data: profileWithBootstrapSuperuserRole({...safeProfile, photo: resolvedPhoto})});
+    const resolvedLogo = await resolvePhotoUrl(safeProfile.logo);
+    return NextResponse.json({
+      success: true,
+      data: profileWithBootstrapSuperuserRole({
+        ...safeProfile,
+        photo: resolvedPhoto,
+        logo: resolvedLogo,
+      }),
+    });
   } catch (error) {
     console.error("Unexpected error in GET /api/profile:", error);
     return NextResponse.json({success: false, error: "Server error"}, {status: 500});
@@ -201,6 +219,7 @@ export async function PUT(request: Request) {
       display_name,
       bio,
       photo,
+      logo,
       avatar_url,
       twitter_url,
       instagram_url,
@@ -266,6 +285,7 @@ export async function PUT(request: Request) {
     if (display_name !== undefined) updatePayload.display_name = String(display_name).trim();
     if (bio !== undefined) updatePayload.bio = bio == null ? null : String(bio).trim() || null;
     if (photo !== undefined) updatePayload.photo = photo == null ? null : String(photo).trim() || null;
+    if (logo !== undefined) updatePayload.logo = logo == null ? null : String(logo).trim() || null;
     if (avatar_url !== undefined) updatePayload.avatar_url = avatar_url == null ? null : String(avatar_url).trim() || null;
     if (twitter_url !== undefined) updatePayload.twitter_url = twitter_url == null ? null : String(twitter_url).trim() || null;
     if (instagram_url !== undefined) updatePayload.instagram_url = instagram_url == null ? null : String(instagram_url).trim() || null;
@@ -280,7 +300,7 @@ export async function PUT(request: Request) {
       .update(updatePayload)
       .eq("id", user.id)
       .select(
-        "id, email, display_name, avatar_url, photo, bio, numeric_user_id, twitter_url, instagram_url, facebook_url, youtube_url, tiktok_url, website_url, qr_overlay_position, role, created_at, updated_at"
+        "id, email, display_name, avatar_url, photo, logo, bio, numeric_user_id, twitter_url, instagram_url, facebook_url, youtube_url, tiktok_url, website_url, qr_overlay_position, role, created_at, updated_at"
       )
       .single();
 
@@ -289,9 +309,15 @@ export async function PUT(request: Request) {
       return NextResponse.json({success: false, error: "Failed to update profile"}, {status: 500});
     }
 
+    const resolvedPhoto = await resolvePhotoUrl(profile.photo);
+    const resolvedLogo = await resolvePhotoUrl(profile.logo);
     return NextResponse.json({
       success: true,
-      data: profileWithBootstrapSuperuserRole(profile),
+      data: profileWithBootstrapSuperuserRole({
+        ...profile,
+        photo: resolvedPhoto,
+        logo: resolvedLogo,
+      }),
     });
   } catch (error) {
     console.error("Unexpected error in PUT /api/profile:", error);

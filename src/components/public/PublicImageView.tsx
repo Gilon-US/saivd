@@ -22,7 +22,9 @@ export function PublicImageView({imageId, result, embed = false}: PublicImageVie
     enabled: result.ok,
     verifyUrl: result.ok ? publicImageProcessedVerificationUrl(imageId) : null,
   });
-  const qrOverlayPosition = usePublicQrOverlayPosition(verification.verifiedUserId);
+  const {position: qrOverlayPosition, logoUrl: creatorLogoUrl} = usePublicQrOverlayPosition(
+    verification.verifiedUserId,
+  );
 
   if (!result.ok) {
     if (result.status === 404) {
@@ -60,6 +62,7 @@ export function PublicImageView({imageId, result, embed = false}: PublicImageVie
             mediaId={imageId}
             enabled
             position={qrOverlayPosition}
+            logoUrl={creatorLogoUrl}
           />
         )}
 

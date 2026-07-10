@@ -276,6 +276,7 @@ export function VideoPlayer({
               mediaId={videoId}
               enabled={isOpen && !isPlaybackBlocked}
               position={qrOverlayPosition}
+              logoUrl={profile?.logo}
               elevateAboveBottomControls
             />
           )}
@@ -306,9 +307,9 @@ export function VideoPlayer({
                 <div className="qr-logo-flip-face qr-logo-flip-face-back">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src="/images/saivd-logo.png"
-                    alt="Brand logo"
-                    className="w-16 h-16 object-contain rounded-md shadow-md"
+                    src={profile?.logo || "/images/saivd-logo.png"}
+                    alt="Creator logo"
+                    className="w-16 h-16 object-cover rounded-md shadow-md"
                   />
                 </div>
               </div>

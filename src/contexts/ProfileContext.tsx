@@ -13,6 +13,7 @@ export interface Profile {
   display_name: string | null;
   avatar_url: string | null;
   photo: string | null;
+  logo: string | null;
   bio: string | null;
   numeric_user_id: number | null;
   twitter_url: string | null;

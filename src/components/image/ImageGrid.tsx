@@ -113,6 +113,7 @@ function ImageLightbox({
             mediaId={image.id}
             enabled
             position={qrOverlayPosition}
+            logoUrl={profile?.logo}
           />
         )}
 

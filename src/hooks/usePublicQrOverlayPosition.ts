@@ -7,15 +7,24 @@ import {
   type QrOverlayPosition,
 } from "@/lib/presentation-qr/position";
 
+export type PublicCreatorQrOverlay = {
+  position: QrOverlayPosition;
+  /** Resolved creator brand logo URL, if available */
+  logoUrl: string | null;
+};
+
 /**
- * Loads a creator's QR overlay corner from the public profile API.
+ * Loads a creator's QR overlay corner and brand logo from the public profile API.
  */
-export function usePublicQrOverlayPosition(numericUserId: number | null): QrOverlayPosition {
-  const [position, setPosition] = useState<QrOverlayPosition>(DEFAULT_QR_OVERLAY_POSITION);
+export function usePublicQrOverlayPosition(numericUserId: number | null): PublicCreatorQrOverlay {
+  const [overlay, setOverlay] = useState<PublicCreatorQrOverlay>({
+    position: DEFAULT_QR_OVERLAY_POSITION,
+    logoUrl: null,
+  });
 
   useEffect(() => {
     if (numericUserId === null) {
-      setPosition(DEFAULT_QR_OVERLAY_POSITION);
+      setOverlay({position: DEFAULT_QR_OVERLAY_POSITION, logoUrl: null});
       return;
     }
 
@@ -26,9 +35,14 @@ export function usePublicQrOverlayPosition(numericUserId: number | null): QrOver
         const res = await fetch(`/api/profile/${numericUserId}`, {credentials: "omit"});
         const body = await res.json().catch(() => null);
         if (cancelled || !res.ok || !body?.success) return;
-        setPosition(parseQrOverlayPosition(body.data?.qr_overlay_position));
+
+        const logo = typeof body.data?.logo === "string" ? body.data.logo.trim() : "";
+        setOverlay({
+          position: parseQrOverlayPosition(body.data?.qr_overlay_position),
+          logoUrl: logo || null,
+        });
       } catch {
-        /* keep default position */
+        /* keep default overlay */
       }
     })();
 
@@ -37,5 +51,5 @@ export function usePublicQrOverlayPosition(numericUserId: number | null): QrOver
     };
   }, [numericUserId]);
 
-  return position;
+  return overlay;
 }
