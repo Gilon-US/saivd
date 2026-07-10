@@ -3,6 +3,7 @@
 import {useEffect, useRef, useState} from "react";
 
 import {imageProcessedVerificationUrl} from "@/lib/image-verification-url";
+import {decodeBitmapFromBlob} from "@/lib/image-bitmap-decode";
 import {
   type ImageVerificationFailReason,
   type ImageVerificationResult,
@@ -67,7 +68,7 @@ export function useImageWatermarkVerification(
         }
         const blob = await res.blob();
         if (tag.cancelled) return;
-        bmp = await createImageBitmap(blob);
+        bmp = await decodeBitmapFromBlob(blob, "strict");
         if (tag.cancelled) {
           bmp.close();
           bmp = null;

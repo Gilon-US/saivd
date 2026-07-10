@@ -13,9 +13,11 @@
  *   - {@link importRsaPublicKeyForVerify}: shared key import helper
  *
  * The decoder MUST run on the full-resolution image (intrinsic dimensions),
- * not a styled DOM element. Caller passes an `ImageBitmap` produced via
- * `createImageBitmap(blob)` or `createImageBitmap(<img>)`.
+ * not a styled DOM element. Prefer {@link decodeBitmapFromBlob} / strict
+ * `createImageBitmap` options so Safari does not color-manage the B channel.
  */
+
+import {getWatermarkCanvas2dContext} from "@/lib/image-bitmap-decode";
 
 // --- Spec constants — must match watermark_image.embed + IMAGE_WATERMARK_SPEC.md §8.
 const RSA_LEN = 256;
@@ -59,15 +61,16 @@ function imageBitmapToBlueRowSums(bmp: ImageBitmap): DecodedRegions | {error: st
     return {error: `image too small (${W}x${H}); need W>=${RSA_LEN} and H>=${RSA_LEN + USER_ID_DIGITS}`};
   }
   // OffscreenCanvas is widely supported; fall back to a regular canvas if not.
-  let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+  // Use sRGB + willReadFrequently when available so iOS Safari does not remap B bytes.
+  let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
   if (typeof OffscreenCanvas !== "undefined") {
     const oc = new OffscreenCanvas(W, H);
-    ctx = oc.getContext("2d") as OffscreenCanvasRenderingContext2D;
+    ctx = getWatermarkCanvas2dContext(oc);
   } else {
     const c = document.createElement("canvas");
     c.width = W;
     c.height = H;
-    ctx = c.getContext("2d") as CanvasRenderingContext2D;
+    ctx = getWatermarkCanvas2dContext(c);
   }
   if (!ctx) return {error: "could not get 2d context"};
   ctx.drawImage(bmp, 0, 0);
