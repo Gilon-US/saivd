@@ -6,6 +6,7 @@ import {PresentationQrFlipButton} from "@/components/presentation/PresentationQr
 import {usePublicQrOverlayPosition} from "@/hooks/usePublicQrOverlayPosition";
 import {useWatermarkVerification} from "@/hooks/useWatermarkVerification";
 import type {PlaybackResult} from "@/lib/playback-url";
+import {publicVideoWatermarkedStreamUrl} from "@/lib/video-verification-url";
 import {prewarmWasmVerificationSession} from "@/lib/wasm-watermark-verification-client";
 
 type PublicVideoViewProps = {
@@ -25,7 +26,7 @@ export function PublicVideoView({videoId, result, embed = false}: PublicVideoVie
     ? "relative flex h-full w-full items-center justify-center bg-black"
     : "relative flex min-h-screen items-center justify-center bg-black p-4";
 
-  const playbackUrl = result.ok ? result.playbackUrl : null;
+  const playbackUrl = result.ok ? publicVideoWatermarkedStreamUrl(videoId) : null;
   const videoRef = useRef<HTMLVideoElement>(null);
   const {status: verificationStatus, verifiedUserId} = useWatermarkVerification(
     videoRef,
@@ -76,7 +77,7 @@ export function PublicVideoView({videoId, result, embed = false}: PublicVideoVie
         <video
           ref={videoRef}
           data-saivd-public-video={videoId}
-          src={result.playbackUrl}
+          src={playbackUrl ?? undefined}
           controls
           playsInline
           crossOrigin="anonymous"

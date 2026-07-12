@@ -28,11 +28,13 @@ describe("PublicVideoView", () => {
     render(
       <PublicVideoView
         videoId="9fc24c25-39b0-49e0-8f13-5ca9da6f0000"
-        result={{ok: true, playbackUrl: "https://example.com/video.mp4"}}
+        result={{ok: true, playbackUrl: "https://wasabi.example.com/video.mp4"}}
       />,
     );
 
     expect(screen.getByTestId("presentation-qr")).toBeInTheDocument();
+    const video = document.querySelector("video");
+    expect(video?.getAttribute("src")).toContain("/api/public/videos/");
   });
 
   it("does not show QR when verification has not succeeded", () => {
