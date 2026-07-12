@@ -23,6 +23,8 @@ type NormalizeCallbackPayload = {
   height?: number;
   fps?: number;
   frame_count?: number;
+  /** Display aspect ratio (width/height) from source upload, including SAR when present. */
+  display_aspect?: number;
 };
 
 function verifyNormalizeSignature(
@@ -142,6 +144,13 @@ export async function POST(request: NextRequest) {
         normalization_message: null,
         updated_at: new Date().toISOString(),
       };
+      if (
+        typeof payload.display_aspect === "number" &&
+        Number.isFinite(payload.display_aspect) &&
+        payload.display_aspect > 0
+      ) {
+        updatePayload.source_display_aspect = payload.display_aspect;
+      }
       const {error: updateError} = await supabase
         .from("videos")
         .update(updatePayload)

@@ -14,6 +14,7 @@ import {
   parseQrOverlayPosition,
 } from "@/lib/presentation-qr/position";
 import {cn} from "@/lib/utils";
+import {watermarkedPlaybackScaleX} from "@/lib/video-display-aspect";
 
 const CREATOR_APP_ORIGIN =
   process.env.NEXT_PUBLIC_SITE_URL ??
@@ -29,6 +30,8 @@ interface VideoPlayerProps {
   verificationStatus?: "verifying" | "verified" | "failed" | null;
   verifiedUserId?: string | null;
   onVerificationComplete?: (status: "verified" | "failed", userId: string | null) => void;
+  /** True display aspect (width/height) from upload, including SAR when present. */
+  displayAspectRatio?: number | null;
 }
 
 export function VideoPlayer({
@@ -40,14 +43,17 @@ export function VideoPlayer({
   verificationStatus,
   verifiedUserId,
   onVerificationComplete,
+  displayAspectRatio,
 }: VideoPlayerProps) {
   const {profile} = useProfile();
   const qrOverlayPosition = parseQrOverlayPosition(profile?.qr_overlay_position);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [codedSize, setCodedSize] = useState<{width: number; height: number} | null>(null);
   const [verificationProgress, setVerificationProgress] = useState<VerificationProgress | null>(null);
   const [microcopyIndex, setMicrocopyIndex] = useState(0);
 
@@ -120,6 +126,7 @@ export function VideoPlayer({
   useEffect(() => {
     if (!isOpen) {
       setIsPlaying(false);
+      setCodedSize(null);
       if (videoRef.current) {
         videoRef.current.pause();
         videoRef.current.currentTime = 0;
@@ -176,27 +183,42 @@ export function VideoPlayer({
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
       setDuration(videoRef.current.duration);
+      setCodedSize({
+        width: videoRef.current.videoWidth,
+        height: videoRef.current.videoHeight,
+      });
     }
   };
 
+  const playbackScaleX =
+    enableFrameAnalysis &&
+    displayAspectRatio &&
+    codedSize &&
+    codedSize.width > 0 &&
+    codedSize.height > 0
+      ? watermarkedPlaybackScaleX(codedSize.width, codedSize.height, displayAspectRatio)
+      : 1;
+
   const toggleFullscreen = () => {
-    if (videoRef.current) {
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        const el = videoRef.current as HTMLVideoElement & {
-          webkitEnterFullscreen?: () => void;
-          webkitEnterFullScreen?: () => void;
-        };
-        // iOS Safari often doesn't support requestFullscreen() for <video>; use the WebKit API when available.
-        if (typeof el.webkitEnterFullscreen === "function") {
-          el.webkitEnterFullscreen();
-        } else if (typeof el.webkitEnterFullScreen === "function") {
-          el.webkitEnterFullScreen();
-        } else {
-          videoRef.current.requestFullscreen();
-        }
-      }
+    const target = stageRef.current ?? videoRef.current;
+    if (!target) return;
+
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+      return;
+    }
+
+    const videoEl = videoRef.current as (HTMLVideoElement & {
+      webkitEnterFullscreen?: () => void;
+      webkitEnterFullScreen?: () => void;
+    }) | null;
+
+    if (videoEl && typeof videoEl.webkitEnterFullscreen === "function") {
+      videoEl.webkitEnterFullscreen();
+    } else if (videoEl && typeof videoEl.webkitEnterFullScreen === "function") {
+      videoEl.webkitEnterFullScreen();
+    } else {
+      target.requestFullscreen();
     }
   };
 
@@ -227,19 +249,26 @@ export function VideoPlayer({
           </a>
         )}
 
-        {/* Video container */}
-        <div className="relative bg-black rounded-lg overflow-hidden">
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            playsInline
-            crossOrigin="anonymous"
-            className="w-full aspect-video"
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onEnded={() => setIsPlaying(false)}
-            controls={false}
-          />
+        {/* Video container — same pattern as upload preview: 16:9 shell + object-contain */}
+        <div
+          ref={stageRef}
+          className="relative mx-auto w-full max-h-[80vh] aspect-video overflow-hidden rounded-lg bg-black">
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              playsInline
+              crossOrigin="anonymous"
+              className="h-full w-full object-contain bg-black"
+              style={
+                playbackScaleX !== 1
+                  ? {transform: `scaleX(${playbackScaleX})`, transformOrigin: "center center"}
+                  : undefined
+              }
+              onTimeUpdate={handleTimeUpdate}
+              onLoadedMetadata={handleLoadedMetadata}
+              onEnded={() => setIsPlaying(false)}
+              controls={false}
+            />
 
           {/* Verification overlay */}
           {isVerificationInProgress && (

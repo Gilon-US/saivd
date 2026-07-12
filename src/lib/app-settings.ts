@@ -3,6 +3,7 @@ import {createServiceRoleClient} from "@/utils/supabase/service";
 /** Hard-coded fallbacks used when the DB row is absent or unreadable. */
 const DEFAULTS: Record<string, string> = {
   max_video_size_mb: "500",
+  max_video_batch_upload: "5",
   allowed_video_types: "video/mp4,video/quicktime,video/x-msvideo,video/webm",
   max_image_size_mb: "10",
   max_image_batch_upload: "100",
@@ -71,6 +72,12 @@ export const SETTING_DEFS: SettingDef[] = [
     type: "integer",
   },
   {
+    key: "max_video_batch_upload",
+    label: "Max videos per batch",
+    description: "Maximum number of videos allowed in a single batch upload (1–10).",
+    type: "integer",
+  },
+  {
     key: "allowed_video_types",
     label: "Allowed video types",
     description: "Video MIME types accepted for upload. At least one must be selected.",
@@ -80,6 +87,12 @@ export const SETTING_DEFS: SettingDef[] = [
     key: "max_image_size_mb",
     label: "Max image upload size (MB)",
     description: "Maximum file size allowed for a single image upload, in megabytes.",
+    type: "integer",
+  },
+  {
+    key: "max_image_batch_upload",
+    label: "Max images per batch",
+    description: "Maximum number of images allowed in a single batch upload (1–100).",
     type: "integer",
   },
   {
@@ -197,6 +210,12 @@ export function validateSettingValue(key: string, value: string): string | null 
     if (isNaN(n) || n <= 0) {
       return `${def.label} must be a positive integer`;
     }
+    if (key === "max_video_batch_upload" && (n < 1 || n > 10)) {
+      return "Max videos per batch must be between 1 and 10";
+    }
+    if (key === "max_image_batch_upload" && (n < 1 || n > 100)) {
+      return "Max images per batch must be between 1 and 100";
+    }
   }
 
   if (def.type === "float") {
@@ -293,6 +312,14 @@ export async function getMaxImageBatchUpload(): Promise<number> {
   const n = parseInt(raw, 10);
   if (isNaN(n) || n <= 0) return 100;
   return Math.min(100, n);
+}
+
+/** Max videos allowed in a single batch upload (1–10). Default 5. */
+export async function getMaxVideoBatchUpload(): Promise<number> {
+  const raw = await getSetting("max_video_batch_upload");
+  const n = parseInt(raw, 10);
+  if (isNaN(n) || n <= 0) return 5;
+  return Math.min(10, n);
 }
 
 /** Convenience: returns the list of allowed image MIME types from settings. */

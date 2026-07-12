@@ -10,6 +10,7 @@ jest.mock('lucide-react', () => ({
   Volume2: () => <div data-testid="volume-icon">Volume</div>,
   VolumeX: () => <div data-testid="mute-icon">Mute</div>,
   Maximize: () => <div data-testid="maximize-icon">Maximize</div>,
+  ExternalLink: () => <div data-testid="external-link-icon">Link</div>,
 }));
 
 // Mock useFrameAnalysis hook
@@ -28,12 +29,17 @@ jest.mock('@/contexts/ProfileContext', () => ({
   }),
 }));
 
+jest.mock('@/components/presentation/PresentationQrFlipButton', () => ({
+  PresentationQrFlipButton: () => <div data-testid="presentation-qr">QR</div>,
+}));
+
 describe('VideoPlayer', () => {
   const mockOnClose = jest.fn();
   const defaultProps = {
     videoUrl: 'https://example.com/test-video.mp4',
     onClose: mockOnClose,
     isOpen: true,
+    enableFrameAnalysis: false,
   };
 
   beforeEach(() => {
@@ -211,7 +217,7 @@ describe('VideoPlayer', () => {
       />
     );
 
-    expect(screen.getByLabelText('View creator profile')).toBeInTheDocument();
+    expect(screen.getByTestId('presentation-qr')).toBeInTheDocument();
   });
 
   it('has proper accessibility attributes', () => {
@@ -225,20 +231,18 @@ describe('VideoPlayer', () => {
 
   it('handles fullscreen toggle', () => {
     render(<VideoPlayer {...defaultProps} />);
-    
+
     const video = document.querySelector('video') as HTMLVideoElement;
+    const stage = video.parentElement as HTMLDivElement;
     const fullscreenButton = screen.getByLabelText('Fullscreen');
-    
-    // Mock fullscreen API
-    video.requestFullscreen = jest.fn();
+
+    stage.requestFullscreen = jest.fn();
     document.exitFullscreen = jest.fn();
-    
-    // Enter fullscreen
+
     fireEvent.click(fullscreenButton);
-    expect(video.requestFullscreen).toHaveBeenCalled();
-    
-    // Exit fullscreen
-    Object.defineProperty(document, 'fullscreenElement', { value: video, writable: true });
+    expect(stage.requestFullscreen).toHaveBeenCalled();
+
+    Object.defineProperty(document, 'fullscreenElement', {value: stage, writable: true});
     fireEvent.click(fullscreenButton);
     expect(document.exitFullscreen).toHaveBeenCalled();
   });

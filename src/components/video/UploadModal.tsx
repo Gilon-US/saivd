@@ -5,12 +5,14 @@ import { Video } from '@/components/video/VideoUploader';
 import { Button } from '@/components/ui/button';
 import { XIcon } from 'lucide-react';
 import type { ImageBatchUploadResult } from '@/hooks/useImageUpload';
+import type { VideoBatchUploadResult } from '@/hooks/useVideoUpload';
 
 type UploadModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onUploadComplete: (result: MediaUploadResult) => void;
   onImageBatchComplete?: (result: ImageBatchUploadResult) => void;
+  onVideoBatchComplete?: (result: VideoBatchUploadResult) => void;
   existingVideos?: Video[];
 };
 
@@ -19,6 +21,7 @@ export function UploadModal({
   onClose,
   onUploadComplete,
   onImageBatchComplete,
+  onVideoBatchComplete,
   existingVideos = [],
 }: UploadModalProps) {
   const handleUploadComplete = (result: MediaUploadResult) => {
@@ -28,7 +31,16 @@ export function UploadModal({
 
   const handleImageBatchComplete = (result: ImageBatchUploadResult) => {
     onImageBatchComplete?.(result);
-    onClose();
+    if (result.succeeded.length !== 1 || result.failed.length > 0) {
+      onClose();
+    }
+  };
+
+  const handleVideoBatchComplete = (result: VideoBatchUploadResult) => {
+    onVideoBatchComplete?.(result);
+    if (result.succeeded.length !== 1 || result.failed.length > 0) {
+      onClose();
+    }
   };
 
   if (!isOpen) {
@@ -48,12 +60,13 @@ export function UploadModal({
         <div className="p-6">
           <div className="space-y-4">
             <p className="text-gray-500 dark:text-gray-400 mb-4">
-              Upload one video, or up to 100 images per batch. Videos are processed for watermarking; images are
-              watermarked on upload. Size and format limits are configured in Settings → General.
+              Upload up to 5 videos (one at a time) or up to 100 images per batch. Videos are processed for
+              watermarking; images are watermarked on upload. Limits are configured in Settings → General.
             </p>
             <MediaUploader
               onUploadComplete={handleUploadComplete}
               onImageBatchComplete={handleImageBatchComplete}
+              onVideoBatchComplete={handleVideoBatchComplete}
               existingVideos={existingVideos}
             />
           </div>

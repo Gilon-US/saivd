@@ -1,5 +1,10 @@
 import {NextResponse} from "next/server";
-import {getMaxVideoSizeMb, getAllowedVideoTypes, ALL_VIDEO_TYPES} from "@/lib/app-settings";
+import {
+  getMaxVideoSizeMb,
+  getAllowedVideoTypes,
+  getMaxVideoBatchUpload,
+  ALL_VIDEO_TYPES,
+} from "@/lib/app-settings";
 
 /**
  * GET /api/videos/upload/limits
@@ -8,8 +13,11 @@ import {getMaxVideoSizeMb, getAllowedVideoTypes, ALL_VIDEO_TYPES} from "@/lib/ap
  * so the client-side UI can show accurate limits and validate before uploading.
  */
 export async function GET() {
-  const [maxSizeMb, allowedTypes] = await Promise.all([getMaxVideoSizeMb(), getAllowedVideoTypes()]);
-  // Enrich with labels for client display
+  const [maxSizeMb, allowedTypes, maxBatchUpload] = await Promise.all([
+    getMaxVideoSizeMb(),
+    getAllowedVideoTypes(),
+    getMaxVideoBatchUpload(),
+  ]);
   const allowedTypesDetail = allowedTypes.map((mime) => {
     const def = ALL_VIDEO_TYPES.find((t) => t.mime === mime);
     return {mime, label: def?.label ?? mime, ext: def?.ext ?? ""};
@@ -19,6 +27,7 @@ export async function GET() {
     data: {
       maxSizeMb,
       maxSizeBytes: maxSizeMb * 1024 * 1024,
+      maxBatchUpload,
       allowedTypes,
       allowedTypesDetail,
     },

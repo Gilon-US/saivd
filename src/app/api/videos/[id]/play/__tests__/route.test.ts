@@ -90,6 +90,7 @@ describe("GET /api/videos/[id]/play", () => {
       original_url: "uploads/abc/original.mov",
       normalized_url: "uploads/abc/normalized.mp4",
       processed_url: null,
+      source_display_aspect: 0.5625,
     };
     mockCreateClient.mockResolvedValue(buildSupabaseMocks(video) as never);
 
@@ -99,6 +100,7 @@ describe("GET /api/videos/[id]/play", () => {
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
+    expect(body.data.sourceDisplayAspect).toBe(0.5625);
     expect(mockPresign).toHaveBeenCalledWith("uploads/abc/normalized.mp4");
   });
 });

@@ -2,8 +2,29 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { UploadModal } from '../UploadModal';
 
 jest.mock('@/components/media/MediaUploader', () => ({
-  MediaUploader: ({ onUploadComplete }: { onUploadComplete: (data: { kind: 'video'; result: { filename: string } }) => void }) => (
-    <button onClick={() => onUploadComplete({ kind: 'video', result: { filename: 'test.mp4' } })}>
+  MediaUploader: ({
+    onUploadComplete,
+    onVideoBatchComplete,
+  }: {
+    onUploadComplete?: (data: { kind: 'video'; result: { filename: string } }) => void;
+    onVideoBatchComplete?: (result: {
+      batchId: string;
+      succeeded: { filename: string }[];
+      failed: unknown[];
+      skipped: unknown[];
+    }) => void;
+  }) => (
+    <button
+      onClick={() => {
+        const result = { filename: 'test.mp4' };
+        onUploadComplete?.({ kind: 'video', result });
+        onVideoBatchComplete?.({
+          batchId: 'batch-1',
+          succeeded: [result],
+          failed: [],
+          skipped: [],
+        });
+      }}>
       Mock MediaUploader
     </button>
   ),

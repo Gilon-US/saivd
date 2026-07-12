@@ -37,7 +37,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse request body
-    const {key, filename, filesize, contentType, previewThumbnailData} = await request.json();
+    const {key, filename, filesize, contentType, previewThumbnailData, sourceDisplayAspect} =
+      await request.json();
 
     // Validate input
     if (!key || !filename || !filesize || !contentType) {
@@ -66,6 +67,11 @@ export async function POST(request: NextRequest) {
     // Server-side thumbnail generation can be added later as an enhancement
     const thumbnailUrl = null;
 
+    const parsedDisplayAspect =
+      typeof sourceDisplayAspect === "number" && Number.isFinite(sourceDisplayAspect) && sourceDisplayAspect > 0
+        ? sourceDisplayAspect
+        : null;
+
     // Store video metadata in Supabase (normalization_status pending until normalize callback runs)
     const {data: video, error} = await supabase
       .from("videos")
@@ -77,6 +83,7 @@ export async function POST(request: NextRequest) {
         original_url: key,
         original_thumbnail_url: thumbnailUrl,
         preview_thumbnail_data: previewThumbnailData,
+        source_display_aspect: parsedDisplayAspect,
         status: "uploaded", // Explicitly set status
         normalization_status: "pending",
         upload_date: new Date().toISOString(),

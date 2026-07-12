@@ -67,10 +67,18 @@ export async function GET(request: NextRequest, context: {params: Promise<{id: s
 
     const playbackUrl = await generatePresignedVideoUrl(key);
 
+    const sourceDisplayAspect =
+      typeof video.source_display_aspect === "number" &&
+      Number.isFinite(video.source_display_aspect) &&
+      video.source_display_aspect > 0
+        ? video.source_display_aspect
+        : null;
+
     return NextResponse.json({
       success: true,
       data: {
         playbackUrl,
+        sourceDisplayAspect,
       },
     });
   } catch (error) {

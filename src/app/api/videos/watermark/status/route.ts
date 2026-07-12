@@ -9,7 +9,15 @@ type QueueStatusResponse = {
   message: string[];
   path: string[];
   videoId?: string[];
+  segmentsDone?: string[];
+  segmentsTotal?: string[];
 };
+
+function parseSegmentCount(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
 
 export async function GET() {
   try {
@@ -143,6 +151,8 @@ export async function GET() {
       path: string | null;
       pathKey: string | null;
       videoId: string | null;
+      segmentsDone: number | null;
+      segmentsTotal: number | null;
     }[];
 
     for (let i = 0; i < length; i++) {
@@ -164,6 +174,8 @@ export async function GET() {
         path: pathValue,
         pathKey,
         videoId: videoIdValue,
+        segmentsDone: parseSegmentCount(payload.segmentsDone?.[i]),
+        segmentsTotal: parseSegmentCount(payload.segmentsTotal?.[i]),
       });
     }
 

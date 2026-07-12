@@ -11,7 +11,10 @@ import {DeleteWatermarkedConfirmDialog} from "./DeleteWatermarkedConfirmDialog";
 import {ShareTransferDialog} from "./ShareTransferDialog";
 import {WatermarkStartNotification} from "./WatermarkStartNotification";
 import {VideoPlayer} from "./VideoPlayer";
-import {useState, useEffect, useRef, useCallback} from "react";
+import {useState, useEffect, useRef, useCallback, useMemo} from "react";
+import {probeDisplayAspectFromUrl} from "@/lib/video-display-aspect";
+import {parseWatermarkProgress, resolveWatermarkProgress} from "@/lib/watermark-progress";
+import {VideoProcessingStatus} from "./VideoProcessingStatus";
 
 export type Video = {
   id: string;
@@ -31,6 +34,8 @@ export type Video = {
   normalization_status?: string | null;
   /** Progress or error message from normalize callback (e.g. "Downloading", "Normalizing", "Uploading"). */
   normalization_message?: string | null;
+  /** Display aspect ratio (width/height) captured from the upload, including SAR. */
+  source_display_aspect?: number | null;
 };
 
 type VideoGridProps = {
@@ -53,6 +58,8 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         jobId?: string | null;
         /** True when queue_status reported this job as failed. */
         failed?: boolean;
+        segmentsDone?: number | null;
+        segmentsTotal?: number | null;
       }
     >
   >({});
@@ -97,6 +104,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     enableFrameAnalysis: boolean;
     verificationStatus: "verifying" | "verified" | "failed" | null;
     verifiedUserId: string | null;
+    displayAspectRatio: number | null;
   }>({
     isOpen: false,
     videoUrl: null,
@@ -104,6 +112,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     enableFrameAnalysis: false,
     verificationStatus: null,
     verifiedUserId: null,
+    displayAspectRatio: null,
   });
 
   const [isOpeningVideo, setIsOpeningVideo] = useState<string | null>(null);
@@ -115,6 +124,37 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       verifiedUserId: userId,
     }));
   }, []);
+
+  const probeDisplayAspectFromUpload = async (video: Video): Promise<number | null> => {
+    try {
+      const response = await fetch(`/api/videos/${video.id}/play?variant=upload`);
+      const data = await response.json();
+      if (!response.ok || !data.success || !data.data?.playbackUrl) {
+        return null;
+      }
+      return await probeDisplayAspectFromUrl(data.data.playbackUrl);
+    } catch (error) {
+      console.warn("[VideoGrid] Failed to probe display aspect from upload", {videoId: video.id, error});
+      return null;
+    }
+  };
+
+  const resolveDisplayAspectRatio = async (
+    video: Video,
+    playPayload?: {sourceDisplayAspect?: number | null},
+  ): Promise<number | null> => {
+    const fromPlay =
+      typeof playPayload?.sourceDisplayAspect === "number" && playPayload.sourceDisplayAspect > 0
+        ? playPayload.sourceDisplayAspect
+        : null;
+    if (fromPlay) return fromPlay;
+
+    if (video.source_display_aspect && video.source_display_aspect > 0) {
+      return video.source_display_aspect;
+    }
+
+    return probeDisplayAspectFromUpload(video);
+  };
 
   const handleVideoClick = async (video: Video, variant: "original" | "watermarked" = "original") => {
     try {
@@ -128,6 +168,13 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       if (!response.ok || !data.success || !data.data?.playbackUrl) {
         throw new Error(data.error?.message || "Failed to generate playback URL");
       }
+
+      const displayAspectRatio = await resolveDisplayAspectRatio(video, data.data);
+      console.log("[VideoGrid] Playback display aspect", {
+        videoId: video.id,
+        variant,
+        displayAspectRatio,
+      });
 
       // For watermarked videos, open player in "verifying" state; frontend verification runs in VideoPlayer
       if (variant === "watermarked") {
@@ -144,6 +191,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
           enableFrameAnalysis: true,
           verificationStatus: "verifying",
           verifiedUserId: null,
+          displayAspectRatio,
         });
       } else {
             // Original videos don't need verification
@@ -154,6 +202,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
               enableFrameAnalysis: false,
               verificationStatus: null,
               verifiedUserId: null,
+              displayAspectRatio,
             });
       }
     } catch (error) {
@@ -177,6 +226,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
       enableFrameAnalysis: false,
       verificationStatus: null,
       verifiedUserId: null,
+      displayAspectRatio: null,
     });
   };
 
@@ -431,12 +481,25 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     videosRef.current = videos;
   }, [videos]);
 
+  const needsStatusPolling = useMemo(() => {
+    const hasActiveVideos = videos.some(
+      (v) =>
+        v.status === "processing" ||
+        v.normalization_status === "pending" ||
+        v.normalization_status === "normalizing",
+    );
+    const hasPendingJobs = Object.keys(pendingJobs).length > 0;
+    return hasActiveVideos || hasPendingJobs;
+  }, [videos, pendingJobs]);
+
   // Ref so the setState updater always reads the latest poll result (avoids stale closure)
   const latestPollJobsRef = useRef<
     { jobId?: string | null; status?: string | null; message?: string | null; pathKey?: string | null; videoId?: string | number | null }[]
   >([]);
 
   useEffect(() => {
+    if (!needsStatusPolling) return;
+
     let isCancelled = false;
     let intervalId: NodeJS.Timeout | null = null;
 
@@ -498,6 +561,8 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                 message: job.message ?? null,
                 jobId: jobIdStr(job) ?? prevPendingJobs[videoIdStr]?.jobId ?? undefined,
                 failed: isFailed ? true : isSuccess ? false : prevPendingJobs[videoIdStr]?.failed,
+                segmentsDone: job.segmentsDone ?? null,
+                segmentsTotal: job.segmentsTotal ?? null,
               };
               hasUpdates = true;
               continue;
@@ -524,6 +589,8 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                 message: job.message ?? null,
                 jobId: jobIdStr(job) ?? prevPendingJobs[matchingVideo.id]?.jobId ?? undefined,
                 failed: isFailed ? true : isSuccess ? false : prevPendingJobs[matchingVideo.id]?.failed,
+                segmentsDone: job.segmentsDone ?? null,
+                segmentsTotal: job.segmentsTotal ?? null,
               };
               hasUpdates = true;
             }
@@ -579,7 +646,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
         intervalId = null;
       }
     };
-  }, [onSilentRefresh]);
+  }, [needsStatusPolling, onSilentRefresh]);
 
   const handleDeleteClick = (video: Video) => {
     setDeleteDialog({
@@ -696,6 +763,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     Uploaded {new Date(video.upload_date).toLocaleDateString()}
                   </p>
+                  <VideoProcessingStatus video={video} pendingJob={pendingJobs[video.id]} />
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <MediaShareDropdown
@@ -873,13 +941,16 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                         )}
                       </div>
                     ) : (video.status === "processing" || pendingJobs[video.id]) && !pendingJobs[video.id]?.failed ? (
-                      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700 animate-pulse">
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700 animate-pulse px-2">
                         <LoadingSpinner size="sm" />
-                        <span className="text-black dark:text-black text-xs mt-2 text-center px-2">
-                          {(() => {
-                            const message = pendingJobs[video.id]?.message ?? "Processing...";
-                            return message.length > 32 ? `${message.substring(0, 32)}...` : message;
-                          })()}
+                        <span className="text-gray-700 dark:text-gray-300 text-xs mt-2 text-center leading-snug">
+                          {resolveWatermarkProgress(
+                            pendingJobs[video.id]?.message ?? "Processing…",
+                            pendingJobs[video.id]?.segmentsDone,
+                            pendingJobs[video.id]?.segmentsTotal,
+                          )?.label ??
+                            pendingJobs[video.id]?.message ??
+                            "Processing…"}
                         </span>
                       </div>
                     ) : video.status === "failed" || pendingJobs[video.id]?.failed ? (
@@ -957,6 +1028,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
           verificationStatus={videoPlayer.verificationStatus}
           verifiedUserId={videoPlayer.verifiedUserId}
           onVerificationComplete={handleVerificationComplete}
+          displayAspectRatio={videoPlayer.displayAspectRatio}
         />
       )}
     </div>

@@ -3,21 +3,22 @@
 import {useRouter} from "next/navigation";
 import {MediaUploader, MediaUploadResult} from "@/components/media/MediaUploader";
 import type {ImageBatchUploadResult} from "@/hooks/useImageUpload";
+import type {VideoBatchUploadResult} from "@/hooks/useVideoUpload";
+import {useVideos} from "@/hooks/useVideos";
 import {Button} from "@/components/ui/button";
 import {ArrowLeftIcon} from "lucide-react";
-import {useToast} from "@/hooks/useToast";
 
 export default function UploadPage() {
   const router = useRouter();
-  const {toast} = useToast();
+  const {videos} = useVideos();
 
   const handleUploadComplete = (result: MediaUploadResult) => {
     if (result.kind !== "video") return;
-    toast({
-      title: "Upload complete",
-      description: `${result.result.filename} has been uploaded successfully.`,
-      variant: "success",
-    });
+    router.replace("/dashboard/videos");
+  };
+
+  const handleVideoBatchComplete = (result: VideoBatchUploadResult) => {
+    if (result.succeeded.length === 0) return;
     router.replace("/dashboard/videos");
   };
 
@@ -37,13 +38,15 @@ export default function UploadPage() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 className="text-xl font-semibold mb-4">Select a video or image</h2>
         <p className="text-gray-500 dark:text-gray-400 mb-6">
-          Upload one video, or up to 100 images per batch. Videos go through watermark processing; images are
-          watermarked on upload.
+          Upload up to 5 videos (one at a time) or up to 100 images per batch. Videos go through watermark
+          processing; images are watermarked on upload.
         </p>
 
         <MediaUploader
           onUploadComplete={handleUploadComplete}
           onImageBatchComplete={handleImageBatchComplete}
+          onVideoBatchComplete={handleVideoBatchComplete}
+          existingVideos={videos}
         />
       </div>
     </div>

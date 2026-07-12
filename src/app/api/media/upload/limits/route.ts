@@ -2,6 +2,7 @@ import {NextResponse} from "next/server";
 import {
   getMaxVideoSizeMb,
   getAllowedVideoTypes,
+  getMaxVideoBatchUpload,
   getMaxImageSizeMb,
   getMaxImageBatchUpload,
   getAllowedImageTypes,
@@ -14,14 +15,21 @@ import {
  * Returns upload constraints for both video and image flows.
  */
 export async function GET() {
-  const [maxVideoSizeMb, allowedVideoTypes, maxImageSizeMb, maxImageBatchUpload, allowedImageTypes] =
-    await Promise.all([
-      getMaxVideoSizeMb(),
-      getAllowedVideoTypes(),
-      getMaxImageSizeMb(),
-      getMaxImageBatchUpload(),
-      getAllowedImageTypes(),
-    ]);
+  const [
+    maxVideoSizeMb,
+    allowedVideoTypes,
+    maxVideoBatchUpload,
+    maxImageSizeMb,
+    maxImageBatchUpload,
+    allowedImageTypes,
+  ] = await Promise.all([
+    getMaxVideoSizeMb(),
+    getAllowedVideoTypes(),
+    getMaxVideoBatchUpload(),
+    getMaxImageSizeMb(),
+    getMaxImageBatchUpload(),
+    getAllowedImageTypes(),
+  ]);
 
   const videoTypesDetail = allowedVideoTypes.map((mime) => {
     const def = ALL_VIDEO_TYPES.find((t) => t.mime === mime);
@@ -39,6 +47,7 @@ export async function GET() {
       video: {
         maxSizeMb: maxVideoSizeMb,
         maxSizeBytes: maxVideoSizeMb * 1024 * 1024,
+        maxBatchUpload: maxVideoBatchUpload,
         allowedTypes: allowedVideoTypes,
         allowedTypesDetail: videoTypesDetail,
       },

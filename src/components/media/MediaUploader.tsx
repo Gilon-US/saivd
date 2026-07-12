@@ -8,15 +8,21 @@ import {Card, CardContent} from "@/components/ui/card";
 import {Progress} from "@/components/ui/progress";
 import {Alert, AlertDescription} from "@/components/ui/alert";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
-import {useVideoUpload, UploadResult, UploadPhase} from "@/hooks/useVideoUpload";
+import {
+  useVideoUpload,
+  UploadResult,
+  UploadPhase,
+  VideoBatchUploadResult,
+} from "@/hooks/useVideoUpload";
 import {
   useImageUpload,
   ImageUploadResult,
   ImageUploadPhase,
   ImageBatchUploadResult,
 } from "@/hooks/useImageUpload";
-import {UploadIcon, CheckCircleIcon, AlertCircleIcon, ImageIcon} from "lucide-react";
+import {UploadIcon, CheckCircleIcon, AlertCircleIcon, ImageIcon, FilmIcon} from "lucide-react";
 import {SkippedImagesReport} from "@/components/image/SkippedImagesReport";
+import {SkippedVideosReport} from "@/components/video/SkippedVideosReport";
 import type {Video} from "@/components/video/VideoUploader";
 
 export type MediaUploadResult =
@@ -26,6 +32,7 @@ export type MediaUploadResult =
 type MediaUploaderProps = {
   onUploadComplete?: (result: MediaUploadResult) => void;
   onImageBatchComplete?: (result: ImageBatchUploadResult) => void;
+  onVideoBatchComplete?: (result: VideoBatchUploadResult) => void;
   className?: string;
   existingVideos?: Video[];
 };
@@ -33,12 +40,16 @@ type MediaUploaderProps = {
 type MediaKind = "video" | "image";
 
 type UploadLimits = {
-  video: {maxSizeBytes: number; allowedTypes: string[]};
+  video: {maxSizeBytes: number; allowedTypes: string[]; maxBatchUpload: number};
   image: {maxSizeBytes: number; allowedTypes: string[]; maxBatchUpload: number};
 };
 
 const DEFAULT_LIMITS: UploadLimits = {
-  video: {maxSizeBytes: 500 * 1024 * 1024, allowedTypes: ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"]},
+  video: {
+    maxSizeBytes: 500 * 1024 * 1024,
+    allowedTypes: ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"],
+    maxBatchUpload: 5,
+  },
   image: {
     maxSizeBytes: 10 * 1024 * 1024,
     allowedTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
@@ -68,23 +79,35 @@ function formatFileSize(bytes: number): string {
 
 function getVideoPhaseMessage(phase: UploadPhase): string {
   switch (phase) {
-    case "preparing": return "Preparing video…";
-    case "requesting-url": return "Requesting upload URL…";
-    case "uploading": return "Uploading video…";
-    case "confirming": return "Finalizing upload…";
-    case "complete": return "Upload complete!";
-    case "error": return "Upload failed";
-    default: return "Processing…";
+    case "preparing":
+      return "Preparing video…";
+    case "requesting-url":
+      return "Requesting upload URL…";
+    case "uploading":
+      return "Uploading video…";
+    case "confirming":
+      return "Finalizing upload…";
+    case "complete":
+      return "Upload complete!";
+    case "error":
+      return "Upload failed";
+    default:
+      return "Processing…";
   }
 }
 
 function getImagePhaseMessage(phase: ImageUploadPhase): string {
   switch (phase) {
-    case "requesting-url": return "Requesting upload URL…";
-    case "uploading": return "Uploading…";
-    case "confirming": return "Finalizing…";
-    case "complete": return "Complete";
-    case "error": return "Failed";
+    case "requesting-url":
+      return "Requesting upload URL…";
+    case "uploading":
+      return "Uploading…";
+    case "confirming":
+      return "Finalizing…";
+    case "complete":
+      return "Complete";
+    case "error":
+      return "Failed";
   }
 }
 
@@ -97,6 +120,7 @@ function detectKind(file: File): MediaKind | null {
 export function MediaUploader({
   onUploadComplete,
   onImageBatchComplete,
+  onVideoBatchComplete,
   className = "",
   existingVideos = [],
 }: MediaUploaderProps) {
@@ -106,15 +130,21 @@ export function MediaUploader({
   const [error, setError] = useState<string | null>(null);
   const [limits, setLimits] = useState<UploadLimits>(DEFAULT_LIMITS);
   const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
+  const [batchKind, setBatchKind] = useState<MediaKind | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
-  const [batchResult, setBatchResult] = useState<ImageBatchUploadResult | null>(null);
+  const [imageBatchResult, setImageBatchResult] = useState<ImageBatchUploadResult | null>(null);
+  const [videoBatchResult, setVideoBatchResult] = useState<VideoBatchUploadResult | null>(null);
 
-  const {uploadVideo, cancelUpload: cancelVideoUpload, clearUpload: clearVideoUpload, uploads: videoUploads} =
-    useVideoUpload();
+  const {
+    uploadVideos,
+    cancelUpload: cancelVideoUpload,
+    clearBatch: clearVideoBatch,
+    uploads: videoUploads,
+  } = useVideoUpload();
   const {
     uploadImages,
     cancelUpload: cancelImageUpload,
-    clearBatch,
+    clearBatch: clearImageBatch,
     uploads: imageUploads,
   } = useImageUpload();
 
@@ -124,11 +154,14 @@ export function MediaUploader({
       .then((json) => {
         if (json.success && json.data) {
           const data = json.data as {
-            video: UploadLimits["video"];
+            video: UploadLimits["video"] & {maxBatchUpload?: number};
             image: UploadLimits["image"] & {maxBatchUpload?: number};
           };
           setLimits({
-            video: data.video,
+            video: {
+              ...data.video,
+              maxBatchUpload: data.video.maxBatchUpload ?? DEFAULT_LIMITS.video.maxBatchUpload,
+            },
             image: {
               ...data.image,
               maxBatchUpload: data.image.maxBatchUpload ?? DEFAULT_LIMITS.image.maxBatchUpload,
@@ -141,18 +174,15 @@ export function MediaUploader({
       });
   }, []);
 
-  const currentVideoUpload =
-    Object.values(videoUploads).find((u) => u.uploading) ??
-    Object.values(videoUploads).find((u) => u.phase === "error") ??
-    Object.values(videoUploads).find((u) => u.phase === "complete") ??
-    null;
-
   const batchUploads = useMemo(() => {
-    if (!activeBatchId) return [];
-    return Object.values(imageUploads)
+    if (!activeBatchId || !batchKind) return [];
+    const source = batchKind === "video" ? videoUploads : imageUploads;
+    return Object.values(source)
       .filter((u) => u.batchId === activeBatchId)
       .sort((a, b) => a.file.name.localeCompare(b.file.name));
-  }, [imageUploads, activeBatchId]);
+  }, [imageUploads, videoUploads, activeBatchId, batchKind]);
+
+  const batchResult = batchKind === "video" ? videoBatchResult : imageBatchResult;
 
   const batchComplete =
     batchResult !== null ||
@@ -160,8 +190,7 @@ export function MediaUploader({
       batchUploads.every((u) => u.phase === "complete" || u.phase === "error") &&
       !batchRunning);
 
-  const videoUploading = currentVideoUpload?.uploading ?? false;
-  const uploading = videoUploading || batchRunning;
+  const uploading = batchRunning;
 
   const acceptMap = useMemo(
     () => buildAcceptMap(limits.video.allowedTypes, limits.image.allowedTypes),
@@ -169,12 +198,8 @@ export function MediaUploader({
   );
 
   const maxDropzoneSize = Math.max(limits.video.maxSizeBytes, limits.image.maxSizeBytes);
-  const selectedVideo = mediaKind === "video" ? (selectedFiles[0] ?? null) : null;
-
-  const hasDuplicateFilename =
-    mediaKind === "video" && selectedVideo
-      ? existingVideos.some((v) => v.filename === selectedVideo.name)
-      : false;
+  const maxDropzoneFiles = Math.max(limits.video.maxBatchUpload, limits.image.maxBatchUpload);
+  const selectedVideo = mediaKind === "video" && selectedFiles.length === 1 ? selectedFiles[0] : null;
 
   useEffect(() => {
     if (!selectedVideo) {
@@ -187,14 +212,16 @@ export function MediaUploader({
   }, [selectedVideo]);
 
   const handleFilesSelected = (files: File[]) => {
-    if (batchRunning || videoUploading) return;
+    if (batchRunning) return;
 
     if (files.length === 0) {
       setSelectedFiles([]);
       setMediaKind(null);
       setError(null);
-      setBatchResult(null);
+      setImageBatchResult(null);
+      setVideoBatchResult(null);
       setActiveBatchId(null);
+      setBatchKind(null);
       return;
     }
 
@@ -216,10 +243,10 @@ export function MediaUploader({
       return;
     }
 
-    if (hasVideo && files.length > 1) {
-      setError("Only one video can be uploaded at a time.");
-      setSelectedFiles([]);
-      setMediaKind(null);
+    if (hasVideo && files.length > limits.video.maxBatchUpload) {
+      setError(`Too many videos. Maximum is ${limits.video.maxBatchUpload} per batch.`);
+      setSelectedFiles(files.slice(0, limits.video.maxBatchUpload));
+      setMediaKind("video");
       return;
     }
 
@@ -254,25 +281,41 @@ export function MediaUploader({
     setSelectedFiles(files);
     setMediaKind(kind);
     setError(null);
-    setBatchResult(null);
+    setImageBatchResult(null);
+    setVideoBatchResult(null);
     setActiveBatchId(null);
+    setBatchKind(null);
   };
 
   const handleUpload = async () => {
-    if (selectedFiles.length === 0 || !mediaKind || uploading || hasDuplicateFilename) return;
+    if (selectedFiles.length === 0 || !mediaKind || uploading) return;
     setError(null);
 
     try {
-      if (mediaKind === "video") {
-        const result = await uploadVideo(selectedFiles[0]);
-        onUploadComplete?.({kind: "video", result});
-        return;
-      }
-
       setBatchRunning(true);
-      setBatchResult(null);
+      setImageBatchResult(null);
+      setVideoBatchResult(null);
       const batchId = uuidv4();
       setActiveBatchId(batchId);
+      setBatchKind(mediaKind);
+
+      if (mediaKind === "video") {
+        const result = await uploadVideos(selectedFiles, {
+          maxBatch: limits.video.maxBatchUpload,
+          concurrency: 1,
+          batchId,
+          existingVideos,
+        });
+
+        setVideoBatchResult(result);
+        setSelectedFiles([]);
+
+        if (result.succeeded.length === 1 && result.failed.length === 0) {
+          onUploadComplete?.({kind: "video", result: result.succeeded[0]});
+        }
+        onVideoBatchComplete?.(result);
+        return;
+      }
 
       const result = await uploadImages(selectedFiles, {
         maxBatch: limits.image.maxBatchUpload,
@@ -280,9 +323,12 @@ export function MediaUploader({
         batchId,
       });
 
-      setBatchResult(result);
+      setImageBatchResult(result);
       setSelectedFiles([]);
 
+      if (result.succeeded.length === 1 && result.failed.length === 0) {
+        onUploadComplete?.({kind: "image", result: result.succeeded[0]});
+      }
       onImageBatchComplete?.(result);
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== "AbortError") {
@@ -294,37 +340,44 @@ export function MediaUploader({
   };
 
   const handleBatchDone = () => {
-    if (activeBatchId) clearBatch(activeBatchId);
+    if (activeBatchId) {
+      if (batchKind === "video") clearVideoBatch(activeBatchId);
+      else clearImageBatch(activeBatchId);
+    }
     setActiveBatchId(null);
-    setBatchResult(null);
+    setBatchKind(null);
+    setImageBatchResult(null);
+    setVideoBatchResult(null);
     setSelectedFiles([]);
     setMediaKind(null);
     setError(null);
   };
 
-  const handleCancelVideoUpload = () => {
-    if (currentVideoUpload?.uploading) cancelVideoUpload(currentVideoUpload.id);
-  };
-
-  const handleDismissVideoError = () => {
-    if (currentVideoUpload?.phase === "error") {
-      clearVideoUpload(currentVideoUpload.id);
-      setError(null);
-    }
-  };
-
-  const completedCount = batchResult?.succeeded.length ?? batchUploads.filter((u) => u.phase === "complete").length;
-  const failedCount = batchResult?.failed.length ?? batchUploads.filter((u) => u.phase === "error").length;
+  const completedCount =
+    batchResult?.succeeded.length ?? batchUploads.filter((u) => u.phase === "complete").length;
+  const failedCount =
+    batchResult?.failed.length ?? batchUploads.filter((u) => u.phase === "error").length;
   const skippedCount = batchResult?.skipped.length ?? 0;
   const totalCount = batchResult
     ? batchResult.succeeded.length + batchResult.failed.length + batchResult.skipped.length
     : batchUploads.length;
 
-  const showImageBatchPanel =
+  const showBatchPanel =
     batchRunning || (batchComplete && (batchUploads.length > 0 || skippedCount > 0));
 
-  const showDropzone = !batchComplete && !currentVideoUpload;
-  const showSelection = selectedFiles.length > 0 && !uploading && !batchComplete && !currentVideoUpload;
+  const showDropzone = !batchComplete && !batchRunning;
+  const showSelection = selectedFiles.length > 0 && !uploading && !batchComplete;
+
+  const uploadButtonLabel = (() => {
+    if (!mediaKind) return "Upload Now";
+    if (mediaKind === "image" && selectedFiles.length > 1) {
+      return `Upload ${selectedFiles.length} images`;
+    }
+    if (mediaKind === "video" && selectedFiles.length > 1) {
+      return `Upload ${selectedFiles.length} videos`;
+    }
+    return "Upload Now";
+  })();
 
   return (
     <div className={`space-y-6 ${className}`}>
@@ -332,13 +385,13 @@ export function MediaUploader({
         <FileUploader
           accept={acceptMap}
           maxSize={maxDropzoneSize}
-          maxFiles={limits.image.maxBatchUpload}
+          maxFiles={maxDropzoneFiles}
           invalidTypeMessage="Invalid file type. Please upload a video or image file."
           onFilesSelected={handleFilesSelected}
         />
       )}
 
-      {previewUrl && selectedVideo && !uploading && !currentVideoUpload && (
+      {previewUrl && selectedVideo && !uploading && (
         <Card>
           <CardContent className="p-4">
             <h3 className="font-medium mb-2">Video Preview</h3>
@@ -363,7 +416,33 @@ export function MediaUploader({
                 {selectedFiles.length} image{selectedFiles.length === 1 ? "" : "s"} selected
               </h3>
               <p className="text-xs text-gray-500 shrink-0">
-                Up to {limits.image.maxBatchUpload} · max {Math.round(limits.image.maxSizeBytes / (1024 * 1024))} MB each
+                Up to {limits.image.maxBatchUpload} · max{" "}
+                {Math.round(limits.image.maxSizeBytes / (1024 * 1024))} MB each
+              </p>
+            </div>
+            <ul className="max-h-40 overflow-y-auto space-y-2 text-sm">
+              {selectedFiles.map((file) => (
+                <li key={`${file.name}-${file.size}`} className="flex justify-between gap-2 truncate">
+                  <span className="truncate">{file.name}</span>
+                  <span className="text-gray-500 shrink-0">{formatFileSize(file.size)}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {showSelection && mediaKind === "video" && selectedFiles.length > 1 && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-medium flex items-center gap-2">
+                <FilmIcon className="h-4 w-4" />
+                {selectedFiles.length} videos selected
+              </h3>
+              <p className="text-xs text-gray-500 shrink-0">
+                Up to {limits.video.maxBatchUpload} · max{" "}
+                {Math.round(limits.video.maxSizeBytes / (1024 * 1024))} MB each · one at a time
               </p>
             </div>
             <ul className="max-h-40 overflow-y-auto space-y-2 text-sm">
@@ -389,7 +468,7 @@ export function MediaUploader({
             disabled={uploading}>
             Cancel
           </Button>
-          <Button onClick={handleUpload} disabled={uploading || hasDuplicateFilename}>
+          <Button onClick={handleUpload} disabled={uploading}>
             {uploading ? (
               <>
                 <LoadingSpinner size="sm" className="mr-2" />
@@ -398,80 +477,24 @@ export function MediaUploader({
             ) : (
               <>
                 <UploadIcon className="mr-2 h-4 w-4" />
-                {mediaKind === "image" && selectedFiles.length > 1
-                  ? `Upload ${selectedFiles.length} images`
-                  : "Upload Now"}
+                {uploadButtonLabel}
               </>
             )}
           </Button>
         </div>
       )}
 
-      {currentVideoUpload && (
-        <Card>
-          <CardContent className="p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              {currentVideoUpload.phase === "complete" ? (
-                <CheckCircleIcon className="h-5 w-5 text-green-500" />
-              ) : currentVideoUpload.phase === "error" ? (
-                <AlertCircleIcon className="h-5 w-5 text-red-500" />
-              ) : (
-                <LoadingSpinner size="sm" />
-              )}
-              <div className="flex-1">
-                <p className="font-medium text-sm">{getVideoPhaseMessage(currentVideoUpload.phase)}</p>
-                <p className="text-xs text-gray-500 truncate">{currentVideoUpload.file.name}</p>
-              </div>
-            </div>
-
-            {currentVideoUpload.phase === "error" && currentVideoUpload.error && (
-              <p className="text-sm text-destructive">{currentVideoUpload.error.message}</p>
-            )}
-
-            {(currentVideoUpload.phase === "uploading" || currentVideoUpload.progress > 0) && (
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                  <span>{currentVideoUpload.progress}%</span>
-                  {currentVideoUpload.bytesUploaded != null && currentVideoUpload.totalBytes != null && (
-                    <span>
-                      {formatFileSize(currentVideoUpload.bytesUploaded)} /{" "}
-                      {formatFileSize(currentVideoUpload.totalBytes)}
-                    </span>
-                  )}
-                </div>
-                <Progress value={currentVideoUpload.progress} className="h-2" />
-              </div>
-            )}
-
-            {currentVideoUpload.phase !== "uploading" &&
-              currentVideoUpload.progress === 0 &&
-              currentVideoUpload.phase !== "complete" &&
-              currentVideoUpload.phase !== "error" && <Progress value={null} className="h-2" />}
-
-            {currentVideoUpload.phase !== "complete" && currentVideoUpload.phase !== "error" && (
-              <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={handleCancelVideoUpload}>
-                  Cancel Upload
-                </Button>
-              </div>
-            )}
-
-            {currentVideoUpload.phase === "error" && (
-              <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={handleDismissVideoError}>
-                  Try again
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {showImageBatchPanel && (
+      {showBatchPanel && (
         <Card>
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="font-medium">{batchRunning ? "Uploading images…" : "Upload summary"}</h3>
+              <h3 className="font-medium">
+                {batchRunning
+                  ? batchKind === "video"
+                    ? "Uploading videos…"
+                    : "Uploading images…"
+                  : "Upload summary"}
+              </h3>
               {!batchRunning && batchComplete && totalCount > 0 && (
                 <p className="text-sm text-gray-500">
                   {completedCount}/{totalCount} uploaded
@@ -484,11 +507,14 @@ export function MediaUploader({
             {batchRunning && (
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <LoadingSpinner size="sm" />
-                Checking duplicates, then uploading up to 2 at a time…
+                {batchKind === "video"
+                  ? "Checking duplicates, then uploading one at a time…"
+                  : "Checking duplicates, then uploading up to 2 at a time…"}
               </div>
             )}
 
-            {!batchRunning && batchResult && <SkippedImagesReport skipped={batchResult.skipped} />}
+            {!batchRunning && videoBatchResult && <SkippedVideosReport skipped={videoBatchResult.skipped} />}
+            {!batchRunning && imageBatchResult && <SkippedImagesReport skipped={imageBatchResult.skipped} />}
 
             {batchUploads.length > 0 && (
               <ul className="max-h-56 overflow-y-auto space-y-3">
@@ -504,10 +530,21 @@ export function MediaUploader({
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{upload.file.name}</p>
-                        <p className="text-xs text-gray-500">{getImagePhaseMessage(upload.phase)}</p>
+                        <p className="text-xs text-gray-500">
+                          {batchKind === "video"
+                            ? getVideoPhaseMessage(upload.phase as UploadPhase)
+                            : getImagePhaseMessage(upload.phase as ImageUploadPhase)}
+                        </p>
                       </div>
                       {upload.uploading && (
-                        <Button variant="ghost" size="sm" onClick={() => cancelImageUpload(upload.id)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            batchKind === "video"
+                              ? cancelVideoUpload(upload.id)
+                              : cancelImageUpload(upload.id)
+                          }>
                           Cancel
                         </Button>
                       )}
@@ -519,9 +556,9 @@ export function MediaUploader({
 
                     {upload.phase === "uploading" && <Progress value={upload.progress} className="h-1.5" />}
 
-                    {(upload.phase === "requesting-url" || upload.phase === "confirming") && (
-                      <Progress value={null} className="h-1.5" />
-                    )}
+                    {(upload.phase === "requesting-url" ||
+                      upload.phase === "confirming" ||
+                      upload.phase === "preparing") && <Progress value={null} className="h-1.5" />}
                   </li>
                 ))}
               </ul>
@@ -534,16 +571,6 @@ export function MediaUploader({
             )}
           </CardContent>
         </Card>
-      )}
-
-      {hasDuplicateFilename && selectedVideo && (
-        <Alert variant="destructive">
-          <AlertCircleIcon className="h-4 w-4" />
-          <AlertDescription>
-            A video named <strong>&ldquo;{selectedVideo.name}&rdquo;</strong> already exists. Rename the file or choose
-            another.
-          </AlertDescription>
-        </Alert>
       )}
 
       {error && (
