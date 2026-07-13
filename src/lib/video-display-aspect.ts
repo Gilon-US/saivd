@@ -25,7 +25,7 @@ function displayAspectFromMovie(info: Movie): number | null {
   if (!track) return null;
   const width = track.video?.width ?? track.track_width;
   const height = track.video?.height ?? track.track_height;
-  return displayAspectFromTrack(width, height, track.sample_aspect_ratio);
+  return displayAspectFromTrack(width, height, (track as {sample_aspect_ratio?: string | null}).sample_aspect_ratio);
 }
 
 /**

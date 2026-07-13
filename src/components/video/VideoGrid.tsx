@@ -494,7 +494,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
 
   // Ref so the setState updater always reads the latest poll result (avoids stale closure)
   const latestPollJobsRef = useRef<
-    { jobId?: string | null; status?: string | null; message?: string | null; pathKey?: string | null; videoId?: string | number | null }[]
+    { jobId?: string | null; status?: string | null; message?: string | null; pathKey?: string | null; videoId?: string | number | null; segmentsDone?: number | null; segmentsTotal?: number | null }[]
   >([]);
 
   useEffect(() => {
