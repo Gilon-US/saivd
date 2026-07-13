@@ -149,6 +149,35 @@
   }
 }
 
+/* Fullscreen: 3D flip often fails on the stage element — use opacity with same timing. */
+@keyframes qr-logo-front-fade {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  95% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes qr-logo-back-fade {
+  0%,
+  45% {
+    opacity: 0;
+  }
+  50%,
+  95% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 @layer utilities {
   .qr-logo-flip-container {
     perspective: 1000px;
@@ -191,10 +220,33 @@
   height: 100vh;
   max-height: none;
   border-radius: 0;
+  overflow: visible;
 }
 [data-video-stage]:fullscreen video,
 [data-video-stage]:-webkit-full-screen video {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+[data-video-stage]:fullscreen .qr-logo-flip-card,
+[data-video-stage]:-webkit-full-screen .qr-logo-flip-card {
+  animation: none;
+  transform: none;
+}
+
+[data-video-stage]:fullscreen .qr-logo-flip-face-front,
+[data-video-stage]:-webkit-full-screen .qr-logo-flip-face-front {
+  animation: qr-logo-front-fade 6s infinite;
+  transform: none;
+  backface-visibility: visible;
+  -webkit-backface-visibility: visible;
+}
+
+[data-video-stage]:fullscreen .qr-logo-flip-face-back,
+[data-video-stage]:-webkit-full-screen .qr-logo-flip-face-back {
+  animation: qr-logo-back-fade 6s infinite;
+  transform: none;
+  backface-visibility: visible;
+  -webkit-backface-visibility: visible;
 }
