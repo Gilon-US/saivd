@@ -1,22 +1,16 @@
 import {render, screen} from "@testing-library/react";
-import {PublicVideoView} from "@/components/public/PublicVideoView";
+import {PublicVideoView} from "@/app/v/[id]/_view";
 
-jest.mock("@/hooks/useWatermarkVerification", () => ({
-  useWatermarkVerification: jest.fn(() => ({
-    status: "verified",
-    verifiedUserId: "18",
-  })),
-}));
-
-jest.mock("@/hooks/usePublicQrOverlayPosition", () => ({
-  usePublicQrOverlayPosition: jest.fn(() => ({
-    position: "top-right",
-    logoUrl: null,
-  })),
-}));
-
-jest.mock("@/components/presentation/PresentationQrFlipButton", () => ({
-  PresentationQrFlipButton: () => <div data-testid="presentation-qr">QR</div>,
+jest.mock("@/components/video/VideoPlayer", () => ({
+  VideoPlayer: ({
+    videoUrl,
+    verificationStatus,
+  }: {
+    videoUrl: string;
+    verificationStatus: string | null;
+  }) => (
+    <div data-testid="video-player" data-url={videoUrl} data-status={verificationStatus ?? ""} />
+  ),
 }));
 
 jest.mock("@/lib/wasm-watermark-verification-client", () => ({
@@ -24,34 +18,30 @@ jest.mock("@/lib/wasm-watermark-verification-client", () => ({
 }));
 
 describe("PublicVideoView", () => {
-  it("shows presentation QR after watermark verification", () => {
+  it("opens VideoPlayer with presigned playback URL from server prefetch", () => {
     render(
       <PublicVideoView
         videoId="9fc24c25-39b0-49e0-8f13-5ca9da6f0000"
-        result={{ok: true, playbackUrl: "https://wasabi.example.com/video.mp4"}}
+        initialPlaybackUrl="https://wasabi.example.com/video.mp4"
+        initialError={null}
       />,
     );
 
-    expect(screen.getByTestId("presentation-qr")).toBeInTheDocument();
-    const video = document.querySelector("video");
-    expect(video?.getAttribute("src")).toContain("/api/public/videos/");
+    const player = screen.getByTestId("video-player");
+    expect(player).toHaveAttribute("data-url", "https://wasabi.example.com/video.mp4");
+    expect(player).toHaveAttribute("data-status", "verifying");
   });
 
-  it("does not show QR when verification has not succeeded", () => {
-    const {useWatermarkVerification} = jest.requireMock("@/hooks/useWatermarkVerification");
-    useWatermarkVerification.mockReturnValueOnce({
-      status: "verifying",
-      verifiedUserId: null,
-    });
-
+  it("shows not found when server prefetch returned 404", () => {
     render(
       <PublicVideoView
         videoId="9fc24c25-39b0-49e0-8f13-5ca9da6f0000"
-        result={{ok: true, playbackUrl: "https://example.com/video.mp4"}}
+        initialPlaybackUrl={null}
+        initialError={{code: "not_found", message: "Video not found", status: 404}}
       />,
     );
 
-    expect(screen.queryByTestId("presentation-qr")).not.toBeInTheDocument();
-    expect(screen.getByText(/Verifying/)).toBeInTheDocument();
+    expect(screen.getByText(/Video not found/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("video-player")).not.toBeInTheDocument();
   });
 });

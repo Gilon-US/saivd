@@ -1,14 +1,17 @@
 "use client";
 
-import {useEffect, useRef, useState, useCallback} from "react";
+import {useEffect, useLayoutEffect, useRef, useState, useCallback} from "react";
 import {X, Play, Pause, Volume2, VolumeX, Maximize, ExternalLink} from "lucide-react";
 import {getPublicWatchUrl} from "@/lib/public-media-urls";
 import {useFrameAnalysis, type FrameAnalysisFunction} from "@/hooks/useFrameAnalysis";
 import {useWatermarkVerification, type VerificationProgress, type VerificationProgressPhase} from "@/hooks/useWatermarkVerification";
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
 import {PresentationQrFlipButton} from "@/components/presentation/PresentationQrFlipButton";
-import { prewarmWasmVerificationSession } from "@/lib/wasm-watermark-verification-client";
+import {prewarmWasmVerificationSession} from "@/lib/wasm-watermark-verification-client";
 import {useProfile} from "@/contexts/ProfileContext";
+import {usePublicQrOverlayPosition} from "@/hooks/usePublicQrOverlayPosition";
+import {ssrVideoSelector} from "@/lib/video-playback-url";
+import {getVideoElementPlaybackPlan, type PlaybackContext} from "@/lib/video-perf-flags";
 import {
   getQrOverlayPositionClasses,
   parseQrOverlayPosition,
@@ -32,6 +35,12 @@ interface VideoPlayerProps {
   onVerificationComplete?: (status: "verified" | "failed", userId: string | null) => void;
   /** True display aspect (width/height) from upload, including SAR when present. */
   displayAspectRatio?: number | null;
+  /** Inline public / embed layout (no dashboard modal chrome). */
+  embedded?: boolean;
+  /** Bind to server-rendered `<video data-saivd-public-video>` in PublicVideoShell. */
+  ssrVideo?: boolean;
+  playbackContext?: PlaybackContext;
+  contentLengthBytes?: number | null;
 }
 
 export function VideoPlayer({
@@ -44,12 +53,18 @@ export function VideoPlayer({
   verifiedUserId,
   onVerificationComplete,
   displayAspectRatio,
+  embedded = false,
+  ssrVideo = false,
+  playbackContext = "dashboard",
+  contentLengthBytes = null,
 }: VideoPlayerProps) {
+  const isPublicLayout = playbackContext === "public" || embedded || ssrVideo;
   const {profile} = useProfile();
-  const qrOverlayPosition = parseQrOverlayPosition(profile?.qr_overlay_position);
+  const dashboardQrOverlayPosition = parseQrOverlayPosition(profile?.qr_overlay_position);
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [ssrVideoBound, setSsrVideoBound] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -78,6 +93,79 @@ export function VideoPlayer({
     onVerificationProgress: setVerificationProgress,
   });
 
+  const playbackPlan = getVideoElementPlaybackPlan({
+    videoUrl,
+    context: playbackContext,
+    contentLengthBytes,
+    verificationStatus,
+    playRequested: true,
+  });
+
+  useEffect(() => {
+    if (!isPublicLayout || !isOpen || isPlaybackBlocked || !playbackPlan.src) return;
+    if (ssrVideo && !ssrVideoBound) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    let cancelled = false;
+
+    const startPlayback = async () => {
+      if (cancelled || isPlaybackBlocked) return;
+      try {
+        await video.play();
+        if (!cancelled) setIsPlaying(true);
+        return;
+      } catch {
+        /* autoplay blocked */
+      }
+      if (cancelled) return;
+      video.muted = true;
+      setIsMuted(true);
+      try {
+        await video.play();
+        if (!cancelled) setIsPlaying(true);
+      } catch {
+        /* user can press play */
+      }
+    };
+
+    if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      void startPlayback();
+    } else {
+      video.addEventListener("canplay", startPlayback, {once: true});
+    }
+
+    return () => {
+      cancelled = true;
+      video.removeEventListener("canplay", startPlayback);
+    };
+  }, [isPublicLayout, isOpen, isPlaybackBlocked, playbackPlan.src, videoUrl, ssrVideo, ssrVideoBound]);
+
+  useEffect(() => {
+    if (!ssrVideo || !videoRef.current) return;
+    const video = videoRef.current;
+    if (playbackPlan.src) {
+      if (video.getAttribute("src") !== playbackPlan.src) {
+        video.src = playbackPlan.src;
+      }
+    } else {
+      video.removeAttribute("src");
+    }
+    video.preload = playbackPlan.preload;
+  }, [ssrVideo, playbackPlan.src, playbackPlan.preload]);
+
+  useLayoutEffect(() => {
+    if (!ssrVideo || !videoId || !isOpen) {
+      setSsrVideoBound(false);
+      return;
+    }
+    const el = document.querySelector(ssrVideoSelector(videoId));
+    if (el instanceof HTMLVideoElement) {
+      videoRef.current = el;
+      setSsrVideoBound(true);
+    }
+  }, [ssrVideo, videoId, isOpen, videoUrl]);
+
   useEffect(() => {
     if (verificationStatus !== "verifying") {
       setMicrocopyIndex(0);
@@ -99,15 +187,35 @@ export function VideoPlayer({
     if (!enableFrameAnalysis) return null;
     return null;
   }, [enableFrameAnalysis]);
-  const {qrUrl: frameAnalysisQrUrl} = useFrameAnalysis(videoRef, isPlaying, analysisFunction, enableFrameAnalysis && videoId ? videoId : undefined);
+  const {qrUrl: frameAnalysisQrUrl} = useFrameAnalysis(
+    videoRef,
+    isPlaying,
+    analysisFunction,
+    !isPublicLayout && enableFrameAnalysis && videoId ? videoId : undefined,
+  );
 
-  // Use verified user ID for presentation QR when available; frame analysis fallback is static profile QR.
-  const extractedUserId = verifiedUserId ?? extractNumericUserIdFromQrUrl(frameAnalysisQrUrl);
+  const presentationNumericId = verifiedUserId ? Number(verifiedUserId) : null;
+  const publicQrOverlay = usePublicQrOverlayPosition(
+    isPublicLayout && presentationNumericId !== null && Number.isFinite(presentationNumericId)
+      ? presentationNumericId
+      : null,
+  );
+  const qrOverlayPosition = isPublicLayout
+    ? publicQrOverlay.position
+    : dashboardQrOverlayPosition;
+  const creatorLogoUrl = isPublicLayout ? publicQrOverlay.logoUrl : profile?.logo;
+
+  const extractedUserId =
+    verifiedUserId ?? (!isPublicLayout ? extractNumericUserIdFromQrUrl(frameAnalysisQrUrl) : null);
   const creatorProfileUrl = extractedUserId ? `${CREATOR_APP_ORIGIN}/profile/${extractedUserId}` : null;
-  const presentationNumericId = extractedUserId ? Number(extractedUserId) : null;
-  const showPresentationQr =
-    Boolean(presentationNumericId && videoId && verifiedUserId && !isPlaybackBlocked);
+  const dashboardPresentationNumericId = extractedUserId ? Number(extractedUserId) : null;
+  const showPresentationQr = isPublicLayout
+    ? Boolean(presentationNumericId && videoId && verifiedUserId && !isPlaybackBlocked)
+    : Boolean(
+        dashboardPresentationNumericId && videoId && verifiedUserId && !isPlaybackBlocked,
+      );
   const showLegacyQr =
+    !isPublicLayout &&
     Boolean(!verifiedUserId && frameAnalysisQrUrl && !isPlaybackBlocked);
 
   // Diagnostic: src is always set now; verification no longer blocks playback start.
@@ -190,6 +298,29 @@ export function VideoPlayer({
     }
   };
 
+  useEffect(() => {
+    if (!ssrVideo || !isOpen) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const onTimeUpdate = () => setCurrentTime(video.currentTime);
+    const onLoadedMetadata = () => setDuration(video.duration);
+    const onEnded = () => setIsPlaying(false);
+
+    video.addEventListener("timeupdate", onTimeUpdate);
+    video.addEventListener("loadedmetadata", onLoadedMetadata);
+    video.addEventListener("ended", onEnded);
+    if (video.readyState >= 1) {
+      onLoadedMetadata();
+    }
+
+    return () => {
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("loadedmetadata", onLoadedMetadata);
+      video.removeEventListener("ended", onEnded);
+    };
+  }, [ssrVideo, isOpen, videoId, videoUrl]);
+
   const playbackScaleX =
     enableFrameAnalysis &&
     displayAspectRatio &&
@@ -223,20 +354,43 @@ export function VideoPlayer({
   };
 
   const publicWatchUrl =
-    enableFrameAnalysis && videoId ? getPublicWatchUrl("video", videoId) : null;
+    !isPublicLayout && enableFrameAnalysis && videoId ? getPublicWatchUrl("video", videoId) : null;
+  const videoSrc = isPublicLayout ? playbackPlan.src : videoUrl;
+  const qrNumericId = isPublicLayout ? presentationNumericId : dashboardPresentationNumericId;
 
   if (!isOpen) return null;
 
+  const overlayMode = ssrVideo;
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-2 sm:p-4">
-      <div className="relative w-full max-w-5xl">
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="absolute -top-10 sm:-top-12 right-0 sm:right-2 text-white hover:text-gray-300 transition-colors touch-manipulation z-30"
-          aria-label="Close video player">
-          <X className="w-6 h-6 sm:w-8 sm:h-8" />
-        </button>
+    <div
+      className={
+        overlayMode
+          ? "absolute inset-0 z-10"
+          : isPublicLayout
+            ? embedded
+              ? "relative w-full h-full bg-black"
+              : "fixed inset-0 z-50 bg-black flex items-center justify-center p-2 sm:p-4"
+            : "fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-2 sm:p-4"
+      }>
+      <div
+        className={
+          overlayMode || (isPublicLayout && embedded)
+            ? "relative w-full h-full"
+            : "relative w-full max-w-5xl"
+        }>
+        {!embedded && (
+          <button
+            onClick={onClose}
+            className={
+              overlayMode
+                ? "absolute top-2 right-2 sm:top-4 sm:right-4 text-white hover:text-gray-300 transition-colors touch-manipulation z-30"
+                : "absolute -top-10 sm:-top-12 right-0 sm:right-2 text-white hover:text-gray-300 transition-colors touch-manipulation z-30"
+            }
+            aria-label="Close video player">
+            <X className="w-6 h-6 sm:w-8 sm:h-8" />
+          </button>
+        )}
 
         {publicWatchUrl && (
           <a
@@ -249,18 +403,31 @@ export function VideoPlayer({
           </a>
         )}
 
-        {/* Video container — same pattern as upload preview: 16:9 shell + object-contain */}
         <div
           ref={stageRef}
-          className="relative mx-auto w-full max-h-[80vh] aspect-video overflow-hidden rounded-lg bg-black">
+          className={
+            overlayMode
+              ? "relative w-full h-full"
+              : isPublicLayout
+                ? "relative bg-black rounded-lg overflow-hidden w-full h-full"
+                : "relative mx-auto w-full max-h-[80vh] aspect-video overflow-hidden rounded-lg bg-black"
+          }>
+          {!ssrVideo && (
             <video
               ref={videoRef}
-              src={videoUrl}
+              src={videoSrc}
               playsInline
               crossOrigin="anonymous"
-              className="h-full w-full object-contain bg-black"
+              preload={isPublicLayout ? playbackPlan.preload : undefined}
+              className={
+                isPublicLayout
+                  ? embedded
+                    ? "h-full w-full object-contain"
+                    : "w-full aspect-video"
+                  : "h-full w-full object-contain bg-black"
+              }
               style={
-                playbackScaleX !== 1
+                !isPublicLayout && playbackScaleX !== 1
                   ? {transform: `scaleX(${playbackScaleX})`, transformOrigin: "center center"}
                   : undefined
               }
@@ -269,6 +436,7 @@ export function VideoPlayer({
               onEnded={() => setIsPlaying(false)}
               controls={false}
             />
+          )}
 
           {/* Verification overlay */}
           {isVerificationInProgress && (
@@ -298,14 +466,14 @@ export function VideoPlayer({
 
           {/* QR / Logo flip overlay – flips between QR code (front) and logo (back) every 6s.
               Shown when we have a verified user ID or frame analysis returns a QR URL. */}
-          {showPresentationQr && presentationNumericId && videoId && (
+          {showPresentationQr && qrNumericId && videoId && (
             <PresentationQrFlipButton
-              numericUserId={presentationNumericId}
+              numericUserId={qrNumericId}
               mediaKind="video"
               mediaId={videoId}
               enabled={isOpen && !isPlaybackBlocked}
               position={qrOverlayPosition}
-              logoUrl={profile?.logo}
+              logoUrl={creatorLogoUrl}
               elevateAboveBottomControls
             />
           )}

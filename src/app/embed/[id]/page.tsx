@@ -1,4 +1,4 @@
-import {PublicVideoView} from "@/components/public/PublicVideoView";
+import {PublicVideoPageContent} from "@/components/video/PublicVideoPageContent";
 import {getPublicPlaybackData} from "@/lib/playback-url";
 
 export const revalidate = 60;
@@ -9,5 +9,5 @@ export default async function EmbedVideoPage({params}: {params: Promise<Params>}
   const {id} = await params;
   const result = await getPublicPlaybackData(id, "watermarked");
 
-  return <PublicVideoView videoId={id} result={result} embed />;
+  return <PublicVideoPageContent videoId={id} result={result} embed />;
 }
