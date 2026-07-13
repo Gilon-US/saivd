@@ -44,6 +44,7 @@ describe('VideoPlayer', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    document.body.innerHTML = '';
   });
 
   it('renders when isOpen is true', () => {
@@ -247,10 +248,28 @@ describe('VideoPlayer', () => {
     expect(document.exitFullscreen).toHaveBeenCalled();
   });
 
+  it('does not fullscreen stage container when ssrVideo', () => {
+    render(
+      <VideoPlayer
+        {...defaultProps}
+        ssrVideo
+        playbackContext="public"
+        videoId="vid-1"
+      />,
+    );
+
+    const stage = document.querySelector('[data-video-stage]') as HTMLDivElement;
+    stage.requestFullscreen = jest.fn();
+
+    fireEvent.click(screen.getByLabelText('Fullscreen'));
+
+    expect(stage.requestFullscreen).not.toHaveBeenCalled();
+  });
+
   it('stops playing when video ends', () => {
     render(<VideoPlayer {...defaultProps} />);
     
-    const video = document.querySelector('video') as HTMLVideoElement;
+    const video = document.querySelector('[data-video-stage] video') as HTMLVideoElement;
     const playButton = screen.getByLabelText('Play');
     
     video.play = jest.fn();

@@ -331,25 +331,38 @@ export function VideoPlayer({
       : 1;
 
   const toggleFullscreen = () => {
-    const target = stageRef.current ?? videoRef.current;
-    if (!target) return;
-
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-      return;
-    }
-
+    const stage = stageRef.current as (HTMLElement & {
+      webkitRequestFullscreen?: () => void;
+    }) | null;
     const videoEl = videoRef.current as (HTMLVideoElement & {
       webkitEnterFullscreen?: () => void;
       webkitEnterFullScreen?: () => void;
     }) | null;
+    const doc = document as Document & {
+      webkitFullscreenElement?: Element | null;
+      webkitExitFullscreen?: () => void;
+    };
 
-    if (videoEl && typeof videoEl.webkitEnterFullscreen === "function") {
+    if (document.fullscreenElement || doc.webkitFullscreenElement) {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+      return;
+    }
+
+    // Container fullscreen keeps HTML overlays (QR) visible. Skip for SSR shell
+    // where the <video> lives outside stageRef — fullscreen the video there.
+    const preferContainer = !ssrVideo;
+
+    if (preferContainer && stage && typeof stage.requestFullscreen === "function") {
+      stage.requestFullscreen();
+    } else if (preferContainer && stage && typeof stage.webkitRequestFullscreen === "function") {
+      stage.webkitRequestFullscreen();
+    } else if (videoEl && typeof videoEl.webkitEnterFullscreen === "function") {
       videoEl.webkitEnterFullscreen();
     } else if (videoEl && typeof videoEl.webkitEnterFullScreen === "function") {
       videoEl.webkitEnterFullScreen();
-    } else {
-      target.requestFullscreen();
+    } else if (videoEl && typeof videoEl.requestFullscreen === "function") {
+      videoEl.requestFullscreen();
     }
   };
 
@@ -405,6 +418,7 @@ export function VideoPlayer({
 
         <div
           ref={stageRef}
+          data-video-stage
           className={
             overlayMode
               ? "relative w-full h-full"
