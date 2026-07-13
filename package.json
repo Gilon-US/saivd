@@ -1,6 +1,6 @@
 {
   "name": "savd-app",
-  "version": "0.1.87",
+  "version": "0.1.88",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
