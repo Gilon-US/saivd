@@ -45,6 +45,11 @@ describe('VideoPlayer', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     document.body.innerHTML = '';
+    Object.defineProperty(document, 'fullscreenElement', {
+      value: null,
+      writable: true,
+      configurable: true,
+    });
   });
 
   it('renders when isOpen is true', () => {
@@ -248,7 +253,7 @@ describe('VideoPlayer', () => {
     expect(document.exitFullscreen).toHaveBeenCalled();
   });
 
-  it('does not fullscreen stage container when ssrVideo', () => {
+  it('does not fullscreen empty stage when ssrVideo without shell root', () => {
     render(
       <VideoPlayer
         {...defaultProps}
@@ -264,6 +269,31 @@ describe('VideoPlayer', () => {
     fireEvent.click(screen.getByLabelText('Fullscreen'));
 
     expect(stage.requestFullscreen).not.toHaveBeenCalled();
+  });
+
+  it('fullscreens SSR shell root when ssrVideo is inside PublicVideoShell', () => {
+    render(
+      <div data-saivd-fullscreen-root data-video-stage className="relative h-full w-full">
+        <video data-saivd-public-video="vid-1" />
+        <VideoPlayer
+          {...defaultProps}
+          embedded
+          ssrVideo
+          playbackContext="public"
+          videoId="vid-1"
+        />
+      </div>,
+    );
+
+    const shellRoot = document.querySelector('[data-saivd-fullscreen-root]') as HTMLDivElement;
+    const innerStage = shellRoot.querySelector('[data-video-stage]') as HTMLDivElement;
+    shellRoot.requestFullscreen = jest.fn();
+    innerStage.requestFullscreen = jest.fn();
+
+    fireEvent.click(screen.getByLabelText('Fullscreen'));
+
+    expect(shellRoot.requestFullscreen).toHaveBeenCalled();
+    expect(innerStage.requestFullscreen).not.toHaveBeenCalled();
   });
 
   it('stops playing when video ends', () => {

@@ -349,14 +349,20 @@ export function VideoPlayer({
       return;
     }
 
-    // Container fullscreen keeps HTML overlays (QR) visible. Skip for SSR shell
-    // where the <video> lives outside stageRef — fullscreen the video there.
-    const preferContainer = !ssrVideo;
+    // Container fullscreen keeps HTML overlays (QR) visible. SSR shell puts <video>
+    // in PublicVideoShell; fullscreen that wrapper so video + overlay stay together.
+    const shellRoot = ssrVideo
+      ? (stage?.closest("[data-saivd-fullscreen-root]") as (HTMLElement & {
+          webkitRequestFullscreen?: () => void;
+        }) | null)
+      : null;
+    const container = shellRoot ?? stage;
+    const preferContainer = Boolean(container) && (!ssrVideo || Boolean(shellRoot));
 
-    if (preferContainer && stage && typeof stage.requestFullscreen === "function") {
-      stage.requestFullscreen();
-    } else if (preferContainer && stage && typeof stage.webkitRequestFullscreen === "function") {
-      stage.webkitRequestFullscreen();
+    if (preferContainer && container && typeof container.requestFullscreen === "function") {
+      container.requestFullscreen();
+    } else if (preferContainer && container && typeof container.webkitRequestFullscreen === "function") {
+      container.webkitRequestFullscreen();
     } else if (videoEl && typeof videoEl.webkitEnterFullscreen === "function") {
       videoEl.webkitEnterFullscreen();
     } else if (videoEl && typeof videoEl.webkitEnterFullScreen === "function") {

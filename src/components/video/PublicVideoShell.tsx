@@ -13,7 +13,10 @@ export function PublicVideoShell({viewUrl, videoId, embed = false, children}: Pu
   return (
     <div
       className={`relative bg-black ${embed ? "h-full w-full" : "min-h-screen flex flex-col items-center justify-center p-2 sm:p-4"}`}>
-      <div className={embed ? "relative h-full w-full" : "relative w-full max-w-5xl"}>
+      <div
+        data-video-stage
+        data-saivd-fullscreen-root
+        className={embed ? "relative h-full w-full" : "relative w-full max-w-5xl"}>
         <video
           data-saivd-public-video={videoId}
           src={viewUrl}
