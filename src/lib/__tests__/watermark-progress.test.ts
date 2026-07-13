@@ -57,6 +57,13 @@ describe("resolveWatermarkProgress", () => {
     expect(p?.percent).toBe(92);
     expect(p?.phase).toBe("mux");
   });
+
+  it("shows mux phase when all segments are done structurally", () => {
+    const p = resolveWatermarkProgress("Encoding 22/22 segments", 22, 22);
+    expect(p?.percent).toBe(92);
+    expect(p?.phase).toBe("mux");
+    expect(p?.label).toBe("Concatenating and muxing");
+  });
 });
 
 describe("isVideoWatermarking", () => {

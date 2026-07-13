@@ -92,6 +92,13 @@ export function resolveWatermarkProgress(
   const done = segmentsDone ?? null;
   if (total != null && total > 0) {
     const safeDone = done != null && done >= 0 ? Math.min(done, total) : 0;
+    if (safeDone >= total) {
+      return {
+        label: "Concatenating and muxing",
+        percent: 92,
+        phase: "mux",
+      };
+    }
     const percent = Math.min(100, Math.round((safeDone / total) * 100));
     return {
       label:
