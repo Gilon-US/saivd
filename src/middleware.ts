@@ -12,6 +12,7 @@ export const config = {
     // Auth routes
     '/login',
     '/register',
+    '/terms',
     // Protected routes
     '/dashboard/:path*',
     '/profile/:path*',

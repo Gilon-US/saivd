@@ -1,6 +1,7 @@
 "use client";
 
 import {useState} from "react";
+import Link from "next/link";
 import {createClient} from "@/utils/supabase/client";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
@@ -104,7 +105,7 @@ export function LoginForm() {
         <p className="text-gray-500 dark:text-gray-400">Enter your credentials to access your account</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         {errors.general && <div className="p-3 text-sm text-white bg-red-500 rounded">{errors.general}</div>}
 
         <div className="space-y-2">
@@ -143,11 +144,18 @@ export function LoginForm() {
         </Button>
       </form>
 
-      <div className="text-center text-sm">
-        Don&apos;t have an account?{" "}
-        <a href="/register" className="text-blue-500 hover:underline">
-          Sign up
-        </a>
+      <div className="space-y-2 text-center text-sm">
+        <p>
+          Don&apos;t have an account?{" "}
+          <Link href="/register" className="text-blue-500 hover:underline">
+            Sign up
+          </Link>
+        </p>
+        <p>
+          <Link href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+            Terms and Conditions
+          </Link>
+        </p>
       </div>
     </div>
   );

@@ -1,5 +1,8 @@
 import {NextRequest, NextResponse} from "next/server";
 import {createServiceRoleClient} from "@/utils/supabase/service";
+import {isSignupCaptchaServerEnabled, verifyTurnstileToken} from "@/lib/signup-captcha";
+import {getPasswordPolicyError} from "@/lib/password-policy";
+import {validatePhoneNumber} from "@/lib/phone-validation";
 
 function isDuplicateUserError(message: string): boolean {
   const lower = message.toLowerCase();
@@ -75,7 +78,40 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+    const phoneRaw = typeof body?.phone === "string" ? body.phone.trim() : "";
     const password = typeof body?.password === "string" ? body.password : "";
+    const acceptedTerms = body?.acceptedTerms === true;
+    const captchaToken = typeof body?.captchaToken === "string" ? body.captchaToken : "";
+
+    if (!acceptedTerms) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "validation_error",
+            message: "You must read and accept the Terms and Conditions",
+          },
+        },
+        {status: 400},
+      );
+    }
+
+    if (isSignupCaptchaServerEnabled()) {
+      const remoteIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+      const captchaOk = await verifyTurnstileToken(captchaToken, remoteIp);
+      if (!captchaOk) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "validation_error",
+              message: "Security verification failed. Please try again.",
+            },
+          },
+          {status: 400},
+        );
+      }
+    }
 
     if (!email || !/\S+@\S+\.\S+/.test(email)) {
       return NextResponse.json(
@@ -84,9 +120,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!password || password.length < 6) {
+    const phoneResult = validatePhoneNumber(phoneRaw);
+    if (!phoneResult.ok) {
       return NextResponse.json(
-        {success: false, error: {code: "validation_error", message: "Password must be at least 6 characters"}},
+        {success: false, error: {code: "validation_error", message: phoneResult.message}},
+        {status: 400},
+      );
+    }
+
+    const passwordError = getPasswordPolicyError(password);
+    if (passwordError) {
+      return NextResponse.json(
+        {success: false, error: {code: "validation_error", message: passwordError}},
         {status: 400},
       );
     }
@@ -96,6 +141,7 @@ export async function POST(request: NextRequest) {
     const {data, error} = await supabase.auth.admin.createUser({
       email,
       password,
+      phone: phoneResult.e164,
       email_confirm: true,
     });
 
@@ -119,6 +165,7 @@ export async function POST(request: NextRequest) {
       const {error: updateError} = await supabase.auth.admin.updateUserById(existing.id, {
         email_confirm: true,
         password,
+        phone: phoneResult.e164,
       });
 
       if (updateError) {
