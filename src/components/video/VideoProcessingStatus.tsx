@@ -10,6 +10,7 @@ import {
 type VideoProcessingStatusProps = {
   video: {
     status: string;
+    processed_url?: string | null;
     normalization_status?: string | null;
     normalization_message?: string | null;
   };

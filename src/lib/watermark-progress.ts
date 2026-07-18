@@ -114,10 +114,13 @@ export function resolveWatermarkProgress(
 }
 
 export function isVideoWatermarking(
-  video: {status: string},
+  video: {status: string; processed_url?: string | null},
   pendingJob?: {failed?: boolean} | null,
 ): boolean {
-  return (video.status === "processing" || Boolean(pendingJob)) && !pendingJob?.failed;
+  if (pendingJob?.failed) return false;
+  // Completed videos must not keep showing Redis leftovers (e.g. "Concatenating and muxing").
+  if (video.status === "processed" || Boolean(video.processed_url)) return false;
+  return video.status === "processing" || Boolean(pendingJob);
 }
 
 export function isVideoNormalizing(video: {

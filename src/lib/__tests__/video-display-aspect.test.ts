@@ -1,5 +1,6 @@
 import {
   displayAspectFromTrack,
+  isMp4BoxFriendlyFile,
   watermarkedPlaybackScaleX,
 } from "@/lib/video-display-aspect";
 
@@ -22,5 +23,12 @@ describe("video-display-aspect", () => {
   it("skips scale correction for landscape sources", () => {
     const scale = watermarkedPlaybackScaleX(3840, 2160, 16 / 9);
     expect(scale).toBe(1);
+  });
+
+  it("treats QuickTime .mov as non-mp4box-friendly", () => {
+    const mov = new File(["x"], "clip.mov", {type: "video/quicktime"});
+    const mp4 = new File(["x"], "clip.mp4", {type: "video/mp4"});
+    expect(isMp4BoxFriendlyFile(mov)).toBe(false);
+    expect(isMp4BoxFriendlyFile(mp4)).toBe(true);
   });
 });

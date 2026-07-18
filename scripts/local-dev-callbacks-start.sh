@@ -204,6 +204,20 @@ export WATERMARK_CALLBACK_URL="${PUB_URL}/api/webhooks/watermark-complete"
 # behavior that can stall watermark verification in local callback E2E runs.
 export NEXT_DISABLE_STRICT_MODE=1
 
+# Stale SES_SMTP_* exported in the parent shell override Next's .env.local load.
+# Re-apply from .env.local so SMTP region/credentials match the project files.
+if [ -f "$ROOT/.env.local" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      SES_SMTP_HOST=*|SES_SMTP_PORT=*|SES_SMTP_USER=*|SES_SMTP_PASS=*|SES_FROM_EMAIL=*|SES_FROM_NAME=*)
+        key="${line%%=*}"
+        val="${line#*=}"
+        export "$key=$val"
+        ;;
+    esac
+  done <"$ROOT/.env.local"
+fi
+
 echo ""
 note "Public app URL (this session): $BOLD$PUB_URL$NC"
 note "WATERMARK_CALLBACK_URL=$WATERMARK_CALLBACK_URL"

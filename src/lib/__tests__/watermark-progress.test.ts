@@ -74,6 +74,15 @@ describe("isVideoWatermarking", () => {
   it("false when failed pending job", () => {
     expect(isVideoWatermarking({status: "processing"}, {failed: true})).toBe(false);
   });
+
+  it("false when video is already processed even if Redis leftover job exists", () => {
+    expect(
+      isVideoWatermarking(
+        {status: "processed", processed_url: "videos/x-watermarked.mp4"},
+        {failed: false},
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("isVideoNormalizing", () => {

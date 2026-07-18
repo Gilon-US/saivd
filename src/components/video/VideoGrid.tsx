@@ -13,7 +13,7 @@ import {WatermarkStartNotification} from "./WatermarkStartNotification";
 import {VideoPlayer} from "./VideoPlayer";
 import {useState, useEffect, useRef, useCallback, useMemo} from "react";
 import {probeDisplayAspectFromUrl} from "@/lib/video-display-aspect";
-import {parseWatermarkProgress, resolveWatermarkProgress} from "@/lib/watermark-progress";
+import {resolveWatermarkProgress} from "@/lib/watermark-progress";
 import {VideoProcessingStatus} from "./VideoProcessingStatus";
 
 export type Video = {
@@ -557,10 +557,17 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
 
             // Primary: update by video id key when API returns videoId (no need for video to be in current list)
             if (videoIdStr) {
+              if (isSuccess) {
+                if (updatedPendingJobs[videoIdStr]) {
+                  delete updatedPendingJobs[videoIdStr];
+                  hasUpdates = true;
+                }
+                continue;
+              }
               updatedPendingJobs[videoIdStr] = {
                 message: job.message ?? null,
                 jobId: jobIdStr(job) ?? prevPendingJobs[videoIdStr]?.jobId ?? undefined,
-                failed: isFailed ? true : isSuccess ? false : prevPendingJobs[videoIdStr]?.failed,
+                failed: isFailed ? true : prevPendingJobs[videoIdStr]?.failed,
                 segmentsDone: job.segmentsDone ?? null,
                 segmentsTotal: job.segmentsTotal ?? null,
               };
@@ -585,13 +592,31 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
             }
 
             if (matchingVideo) {
+              if (isSuccess) {
+                if (updatedPendingJobs[matchingVideo.id]) {
+                  delete updatedPendingJobs[matchingVideo.id];
+                  hasUpdates = true;
+                }
+                continue;
+              }
               updatedPendingJobs[matchingVideo.id] = {
                 message: job.message ?? null,
                 jobId: jobIdStr(job) ?? prevPendingJobs[matchingVideo.id]?.jobId ?? undefined,
-                failed: isFailed ? true : isSuccess ? false : prevPendingJobs[matchingVideo.id]?.failed,
+                failed: isFailed ? true : prevPendingJobs[matchingVideo.id]?.failed,
                 segmentsDone: job.segmentsDone ?? null,
                 segmentsTotal: job.segmentsTotal ?? null,
               };
+              hasUpdates = true;
+            }
+          }
+
+          // Drop leftovers for videos already finished in the DB (Redis may still list success jobs).
+          for (const video of currentVideos) {
+            if (
+              (video.status === "processed" || Boolean(video.processed_url)) &&
+              updatedPendingJobs[video.id]
+            ) {
+              delete updatedPendingJobs[video.id];
               hasUpdates = true;
             }
           }
@@ -940,7 +965,10 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                           />
                         )}
                       </div>
-                    ) : (video.status === "processing" || pendingJobs[video.id]) && !pendingJobs[video.id]?.failed ? (
+                    ) : video.status !== "processed" &&
+                      !video.processed_url &&
+                      (video.status === "processing" || pendingJobs[video.id]) &&
+                      !pendingJobs[video.id]?.failed ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700 animate-pulse px-2">
                         <LoadingSpinner size="sm" />
                         <span className="text-gray-700 dark:text-gray-300 text-xs mt-2 text-center leading-snug">
