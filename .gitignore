@@ -49,3 +49,6 @@ supabase-local/volumes/
 next-env.d.ts
 
 *.mp4
+
+# Local Netlify folder
+.netlify
