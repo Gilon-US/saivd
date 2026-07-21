@@ -1,9 +1,9 @@
 import {getCreatorAppPublicOrigin} from "@/lib/public-media-urls";
 
-/** Token valid for 4 minutes; rotate every 3 → 1 minute overlap. */
-export const PRESENTATION_QR_TTL_SECONDS = 240;
+/** Token valid for 2 minutes; rotate every 90s → 30s overlap. */
+export const PRESENTATION_QR_TTL_SECONDS = 120;
 
-export const PRESENTATION_QR_ROTATE_MS = 180_000;
+export const PRESENTATION_QR_ROTATE_MS = 90_000;
 
 export function isPresentationQrEnabled(): boolean {
   return process.env.NEXT_PUBLIC_PRESENTATION_QR_ENABLED !== "0";
