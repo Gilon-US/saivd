@@ -169,3 +169,22 @@ export function useProfile() {
 
   return context;
 }
+
+const EMPTY_PROFILE_CONTEXT: ProfileContextType = {
+  profile: null,
+  loading: false,
+  error: null,
+  initialized: false,
+  updateProfile: async () => {},
+  refreshProfile: async () => {},
+};
+
+/**
+ * Like useProfile(), but returns a safe default when no ProfileProvider is
+ * present (e.g. public /v/ and /embed/ pages). Avoids the throw that
+ * useProfile() uses to catch missing providers in dashboard code.
+ */
+export function useOptionalProfile(): ProfileContextType {
+  const context = useContext(ProfileContext);
+  return context ?? EMPTY_PROFILE_CONTEXT;
+}

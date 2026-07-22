@@ -8,7 +8,7 @@ import {useWatermarkVerification, type VerificationProgress, type VerificationPr
 import {LoadingSpinner} from "@/components/ui/loading-spinner";
 import {PresentationQrFlipButton} from "@/components/presentation/PresentationQrFlipButton";
 import {prewarmWasmVerificationSession} from "@/lib/wasm-watermark-verification-client";
-import {useProfile} from "@/contexts/ProfileContext";
+import {useOptionalProfile} from "@/contexts/ProfileContext";
 import {usePublicQrOverlayPosition} from "@/hooks/usePublicQrOverlayPosition";
 import {ssrVideoSelector} from "@/lib/video-playback-url";
 import {getVideoElementPlaybackPlan, type PlaybackContext} from "@/lib/video-perf-flags";
@@ -59,7 +59,7 @@ export function VideoPlayer({
   contentLengthBytes = null,
 }: VideoPlayerProps) {
   const isPublicLayout = playbackContext === "public" || embedded || ssrVideo;
-  const {profile} = useProfile();
+  const {profile} = useOptionalProfile();
   const dashboardQrOverlayPosition = parseQrOverlayPosition(profile?.qr_overlay_position);
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
