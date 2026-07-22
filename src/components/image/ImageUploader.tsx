@@ -25,12 +25,14 @@ type ImageUploaderProps = {
 
 type ImageLimits = {
   maxSizeBytes: number;
+  minSizeBytes: number;
   maxBatchUpload: number;
   allowedTypes: string[];
 };
 
 const DEFAULT_LIMITS: ImageLimits = {
   maxSizeBytes: 10 * 1024 * 1024,
+  minSizeBytes: 50 * 1024,
   maxBatchUpload: 100,
   allowedTypes: ["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/tiff"],
 };
@@ -77,11 +79,13 @@ export function ImageUploader({onUploadComplete, onBatchComplete, className = ""
         if (json.success && json.data?.image) {
           const image = json.data.image as {
             maxSizeBytes: number;
+            minSizeBytes?: number;
             maxBatchUpload?: number;
             allowedTypes: string[];
           };
           setLimits({
             maxSizeBytes: image.maxSizeBytes,
+            minSizeBytes: image.minSizeBytes ?? DEFAULT_LIMITS.minSizeBytes,
             maxBatchUpload: image.maxBatchUpload ?? DEFAULT_LIMITS.maxBatchUpload,
             allowedTypes: image.allowedTypes,
           });
@@ -133,6 +137,17 @@ export function ImageUploader({onUploadComplete, onBatchComplete, className = ""
       );
       setSelectedFiles([]);
       return;
+    }
+
+    if (limits.minSizeBytes > 0) {
+      const tooSmall = files.find((f) => f.size < limits.minSizeBytes);
+      if (tooSmall) {
+        setError(
+          `"${tooSmall.name}" is too small. Minimum size is ${Math.round(limits.minSizeBytes / 1024)} KB.`
+        );
+        setSelectedFiles([]);
+        return;
+      }
     }
 
     if (files.length > limits.maxBatchUpload) {
@@ -216,6 +231,9 @@ export function ImageUploader({onUploadComplete, onBatchComplete, className = ""
               </h3>
               <p className="text-xs text-gray-500">
                 Up to {limits.maxBatchUpload} per batch · max {Math.round(limits.maxSizeBytes / (1024 * 1024))} MB each
+                {limits.minSizeBytes > 0
+                  ? ` · min ${Math.round(limits.minSizeBytes / 1024)} KB each`
+                  : ""}
               </p>
             </div>
             <ul className="max-h-48 overflow-y-auto space-y-2 text-sm">

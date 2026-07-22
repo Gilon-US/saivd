@@ -34,7 +34,11 @@ export function PublicVideoPageContent({videoId, result, embed = false}: PublicV
     );
   }
 
-  preload(result.playbackUrl, {as: "video", crossOrigin: "anonymous"});
+  try {
+    preload(result.playbackUrl, {as: "video", crossOrigin: "anonymous"});
+  } catch {
+    // Best-effort SSR hint; the <video src> in PublicVideoShell still triggers the fetch.
+  }
 
   return (
     <>

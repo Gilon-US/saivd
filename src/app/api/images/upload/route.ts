@@ -2,7 +2,7 @@ import {NextRequest, NextResponse} from "next/server";
 import {createClient} from "@/utils/supabase/server";
 import {createPresignedPost} from "@aws-sdk/s3-presigned-post";
 import {wasabiClient, WASABI_BUCKET, URL_EXPIRATION_SECONDS} from "@/lib/wasabi";
-import {getAllowedImageTypes, getMaxImageSizeBytes, getMaxImageSizeMb} from "@/lib/app-settings";
+import {getAllowedImageTypes, getMaxImageSizeBytes, getMaxImageSizeMb, getMinImageSizeBytes, getMinImageSizeKb} from "@/lib/app-settings";
 import {v4 as uuidv4} from "uuid";
 
 /**
@@ -31,10 +31,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const [allowedTypes, maxBytes, maxMb] = await Promise.all([
+    const [allowedTypes, maxBytes, maxMb, minBytes, minKb] = await Promise.all([
       getAllowedImageTypes(),
       getMaxImageSizeBytes(),
       getMaxImageSizeMb(),
+      getMinImageSizeBytes(),
+      getMinImageSizeKb(),
     ]);
 
     if (!allowedTypes.includes(contentType)) {
@@ -47,6 +49,13 @@ export async function POST(request: NextRequest) {
     if (filesize > maxBytes) {
       return NextResponse.json(
         {success: false, error: {code: "validation_error", message: `File too large. Maximum size: ${maxMb} MB`}},
+        {status: 400}
+      );
+    }
+
+    if (minBytes > 0 && filesize < minBytes) {
+      return NextResponse.json(
+        {success: false, error: {code: "validation_error", message: `File too small. Minimum size: ${minKb} KB`}},
         {status: 400}
       );
     }

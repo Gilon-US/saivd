@@ -4,6 +4,7 @@ import {
   getAllowedVideoTypes,
   getMaxVideoBatchUpload,
   getMaxImageSizeMb,
+  getMinImageSizeKb,
   getMaxImageBatchUpload,
   getAllowedImageTypes,
   ALL_VIDEO_TYPES,
@@ -20,6 +21,7 @@ export async function GET() {
     allowedVideoTypes,
     maxVideoBatchUpload,
     maxImageSizeMb,
+    minImageSizeKb,
     maxImageBatchUpload,
     allowedImageTypes,
   ] = await Promise.all([
@@ -27,6 +29,7 @@ export async function GET() {
     getAllowedVideoTypes(),
     getMaxVideoBatchUpload(),
     getMaxImageSizeMb(),
+    getMinImageSizeKb(),
     getMaxImageBatchUpload(),
     getAllowedImageTypes(),
   ]);
@@ -54,6 +57,8 @@ export async function GET() {
       image: {
         maxSizeMb: maxImageSizeMb,
         maxSizeBytes: maxImageSizeMb * 1024 * 1024,
+        minSizeKb: minImageSizeKb,
+        minSizeBytes: minImageSizeKb * 1024,
         maxBatchUpload: maxImageBatchUpload,
         allowedTypes: allowedImageTypes,
         allowedTypesDetail: imageTypesDetail,

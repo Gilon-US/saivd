@@ -6,6 +6,7 @@ const DEFAULTS: Record<string, string> = {
   max_video_batch_upload: "5",
   allowed_video_types: "video/mp4,video/quicktime,video/x-msvideo,video/webm",
   max_image_size_mb: "10",
+  min_image_size_kb: "50",
   max_image_batch_upload: "100",
   allowed_image_types: "image/jpeg,image/png,image/webp,image/gif",
   unauthenticated_media_headline: "Unauthenticated Media",
@@ -87,6 +88,12 @@ export const SETTING_DEFS: SettingDef[] = [
     key: "max_image_size_mb",
     label: "Max image upload size (MB)",
     description: "Maximum file size allowed for a single image upload, in megabytes.",
+    type: "integer",
+  },
+  {
+    key: "min_image_size_kb",
+    label: "Min image upload size (KB)",
+    description: "Minimum file size allowed for a single image upload, in kilobytes. 0 disables the minimum.",
     type: "integer",
   },
   {
@@ -207,7 +214,12 @@ export function validateSettingValue(key: string, value: string): string | null 
 
   if (def.type === "integer") {
     const n = parseInt(trimmed, 10);
-    if (isNaN(n) || n <= 0) {
+    // `min_image_size_kb` accepts 0 (disables the minimum); all other integers must be positive.
+    if (key === "min_image_size_kb") {
+      if (isNaN(n) || n < 0) {
+        return `${def.label} must be zero or a positive integer`;
+      }
+    } else if (isNaN(n) || n <= 0) {
       return `${def.label} must be a positive integer`;
     }
     if (key === "max_video_batch_upload" && (n < 1 || n > 10)) {
@@ -304,6 +316,19 @@ export async function getMaxImageSizeMb(): Promise<number> {
   const raw = await getSetting("max_image_size_mb");
   const mb = parseInt(raw, 10);
   return isNaN(mb) || mb <= 0 ? 10 : mb;
+}
+
+/** Convenience: returns min image size in KB as a number (0 = no minimum). Default 50. */
+export async function getMinImageSizeKb(): Promise<number> {
+  const raw = await getSetting("min_image_size_kb");
+  const kb = parseInt(raw, 10);
+  return isNaN(kb) || kb < 0 ? 50 : kb;
+}
+
+/** Convenience: returns min image size in bytes (0 = no minimum). */
+export async function getMinImageSizeBytes(): Promise<number> {
+  const kb = await getMinImageSizeKb();
+  return kb * 1024;
 }
 
 /** Max images allowed in a single batch upload (1–100). */
