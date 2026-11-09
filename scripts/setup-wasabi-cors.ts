@@ -58,6 +58,8 @@ const client = new S3Client({
 
 const allowedOrigins = [
   appUrl.replace(/\/$/, ""),
+  "https://creator.saivd.io",
+  "https://saivd.netlify.app",
   "http://localhost:3000",
   "http://localhost:3001",
 ];
