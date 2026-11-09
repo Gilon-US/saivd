@@ -516,15 +516,22 @@ export function useVideoUpload() {
           variant: "info",
         });
       } else if (succeeded.length === 0 && failed.length > 0) {
+        const reason = failed[0]?.error?.message?.trim();
         toast({
           title: "Upload failed",
-          description: `All ${failed.length} video${failed.length === 1 ? "" : "s"} failed to upload.`,
+          description:
+            failed.length === 1
+              ? reason || "Video failed to upload."
+              : `All ${failed.length} videos failed to upload.${reason ? ` ${reason}` : ""}`,
           variant: "error",
         });
       } else {
         const parts = [`${succeeded.length} uploaded`];
         if (skipped.length > 0) parts.push(`${skipped.length} skipped as duplicates`);
-        if (failed.length > 0) parts.push(`${failed.length} failed`);
+        if (failed.length > 0) {
+          const reason = failed[0]?.error?.message?.trim();
+          parts.push(`${failed.length} failed${reason ? ` (${reason})` : ""}`);
+        }
         toast({
           title: "Upload finished",
           description: parts.join(", ") + ".",
