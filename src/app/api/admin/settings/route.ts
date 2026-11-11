@@ -1,12 +1,12 @@
 import {NextRequest, NextResponse} from "next/server";
 import {createServiceRoleClient} from "@/utils/supabase/service";
-import {requireSuperuser} from "@/utils/auth-roles";
+import {requireStaff} from "@/utils/auth-roles";
 import {SETTING_DEFS, validateSettingValue} from "@/lib/app-settings";
 
-// GET /api/admin/settings — superuser: returns all settings with metadata
+// GET /api/admin/settings — staff (admin + superuser): returns all settings with metadata
 export async function GET() {
-  const {error} = await requireSuperuser();
-  if (error) return NextResponse.json({success: false, error: {code: "unauthorized", message: "Superuser required"}}, {status: 403});
+  const {error} = await requireStaff();
+  if (error) return NextResponse.json({success: false, error: {code: "unauthorized", message: "Staff access required"}}, {status: 403});
 
   try {
     const client = createServiceRoleClient();
@@ -31,10 +31,10 @@ export async function GET() {
   }
 }
 
-// PUT /api/admin/settings — superuser: upsert one or more { key, value } pairs
+// PUT /api/admin/settings — staff (admin + superuser): upsert one or more { key, value } pairs
 export async function PUT(request: NextRequest) {
-  const {error, user} = await requireSuperuser();
-  if (error || !user) return NextResponse.json({success: false, error: {code: "unauthorized", message: "Superuser required"}}, {status: 403});
+  const {error, user} = await requireStaff();
+  if (error || !user) return NextResponse.json({success: false, error: {code: "unauthorized", message: "Staff access required"}}, {status: 403});
 
   try {
     const body = await request.json();

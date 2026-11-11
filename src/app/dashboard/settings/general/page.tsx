@@ -3,7 +3,7 @@
 import {useCallback, useEffect, useState, type Dispatch, type SetStateAction} from "react";
 import {useProfile} from "@/contexts/ProfileContext";
 import {useAuth} from "@/contexts/AuthContext";
-import {isSuperuserProfile} from "@/lib/app-role";
+import {isStaffProfile} from "@/lib/app-role";
 import {ALL_VIDEO_TYPES, ALL_IMAGE_TYPES, getSettingDefault, IMAGE_COLOR_STANDARDIZE_MODES, type SettingType} from "@/lib/app-settings";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
@@ -33,7 +33,7 @@ const UNAUTHENTICATED_MEDIA_KEYS = [
 export default function SettingsGeneralPage() {
   const {user} = useAuth();
   const {profile, loading: profileLoading, initialized} = useProfile();
-  const isSuperuser = isSuperuserProfile(profile, user?.email);
+  const isStaff = isStaffProfile(profile, user?.email);
 
   const [settings, setSettings] = useState<SettingRow[]>([]);
   const [maxSizeMb, setMaxSizeMb] = useState<string>("");
@@ -163,9 +163,9 @@ export default function SettingsGeneralPage() {
 
   useEffect(() => {
     if (!initialized || profileLoading) return;
-    if (isSuperuser) void load();
+    if (isStaff) void load();
     else setLoading(false);
-  }, [initialized, profileLoading, isSuperuser, load]);
+  }, [initialized, profileLoading, isStaff, load]);
 
   const makeToggle = (setter: Dispatch<SetStateAction<Set<string>>>) => (mime: string) => {
     setter((prev) => {
@@ -425,7 +425,7 @@ export default function SettingsGeneralPage() {
     );
   }
 
-  if (!isSuperuser) {
+  if (!isStaff) {
     return (
       <div className="max-w-2xl mx-auto">
         <Card>
@@ -433,7 +433,7 @@ export default function SettingsGeneralPage() {
             <CardTitle>Access denied</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-gray-600 dark:text-gray-300">Only superusers can manage application settings.</p>
+            <p className="text-sm text-gray-600 dark:text-gray-300">Only admin and superuser accounts can manage application settings.</p>
           </CardContent>
         </Card>
       </div>
