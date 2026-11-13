@@ -9,7 +9,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {Download, ImageIcon, QrCode, TrashIcon, UploadIcon} from "lucide-react";
+import {Download as _Download, ImageIcon, QrCode, TrashIcon, UploadIcon} from "lucide-react";
 import {MediaShareDropdown} from "@/components/media/MediaShareDropdown";
 import type {ImageRecord} from "@/hooks/useImages";
 import {useImageWatermarkVerification} from "@/hooks/useImageWatermarkVerification";
@@ -213,7 +213,7 @@ function ImagePairCard({
 
   const isProcessing = image.status === "processing" || isWatermarking;
 
-  const handleDownloadOriginal = async () => {
+  const _handleDownloadOriginal = async () => {
     try {
       if (!image.original_url) {
         toast({
@@ -251,7 +251,7 @@ function ImagePairCard({
     }
   };
 
-  const handleDownloadWatermarked = async () => {
+  const _handleDownloadWatermarked = async () => {
     try {
       if (!image.processed_url || image.status !== "processed") {
         toast({
@@ -383,6 +383,7 @@ function ImagePairCard({
                 role="button"
                 tabIndex={image.original_url ? 0 : -1}
                 aria-label={`View original ${image.filename}`}>
+                {/* DOWNLOAD UI HIDDEN — original upload download button
                 {image.original_url && (
                   <Button
                     type="button"
@@ -397,6 +398,7 @@ function ImagePairCard({
                     <Download className="h-3 w-3" />
                   </Button>
                 )}
+                */}
                 {image.original_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -453,6 +455,7 @@ function ImagePairCard({
 
                 {image.status === "processed" && image.processed_url && !isWatermarking ? (
                   <>
+                    {/* DOWNLOAD UI HIDDEN — watermarked image download button
                     <Button
                       type="button"
                       variant="ghost"
@@ -465,6 +468,7 @@ function ImagePairCard({
                       }}>
                       <Download className="h-3 w-3" />
                     </Button>
+                    */}
                     <Button
                       type="button"
                       variant="ghost"
