@@ -9,11 +9,13 @@
  */
 
 import {S3Client, PutBucketCorsCommand, GetBucketCorsCommand} from "@aws-sdk/client-s3";
-import {readFileSync} from "fs";
+import {existsSync, readFileSync} from "fs";
 import {resolve} from "path";
 
 function loadEnv() {
   const envPath = resolve(__dirname, "../.env.local");
+  // Without .env.local, the WASABI_* variables must already be set in the environment.
+  if (!existsSync(envPath)) return;
   const lines = readFileSync(envPath, "utf-8").split("\n");
   for (const line of lines) {
     const trimmed = line.trim();
@@ -60,6 +62,10 @@ const allowedOrigins = [
   appUrl.replace(/\/$/, ""),
   "https://creator.saivd.io",
   "https://saivd.netlify.app",
+  // Netlify deploy previews of this app and of saivd-viewer, listed one by one: Wasabi echoes a wildcard
+  // rule ("https://*--saivd.netlify.app") back as the literal Allow-Origin, which browsers reject.
+  "https://deploy-preview-1--saivd.netlify.app",
+  "https://deploy-preview-1--saivdviewer.netlify.app",
   "http://localhost:3000",
   "http://localhost:3001",
 ];
