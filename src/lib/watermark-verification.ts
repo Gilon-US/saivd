@@ -159,7 +159,7 @@ export function decodeNumericUserIdDiagnosticsFromLuma(
     };
   }
   const rightSide = getRightSideRowSums(givenFrame, rightEndIndex);
-  return decodeNumericUserIdDiagnosticsFromRightSide(rightSide);
+  return decodeNumericUserIdDiagnosticsFromRightSide(rightSide, rightEndIndex);
 }
 
 /**
@@ -224,7 +224,14 @@ export function getRightSideRowSums(
  * Decode numeric user ID from rightSide (backend checklist §5): frame 0 only; repsUsed = min(7, floor(len/9));
  * usable = 9*repsUsed; nine groups of repsUsed values; mode per group (must be 0–9); digitStr = join; no strip trailing zeros.
  */
-export function decodeNumericUserIdDiagnosticsFromRightSide(rightSide: number[]): DecodeDiagnostics {
+export function decodeNumericUserIdDiagnosticsFromRightSide(
+  rightSide: number[],
+  /**
+   * Shift-search modulus. Pass rightEndIndex (the backend's payload_end; row sums are taken mod it) to
+   * match the backend decoder. When omitted, the legacy estimate max(10, max(values) + 1) is used.
+   */
+  modulusOverride?: number
+): DecodeDiagnostics {
   const fullGroups = V2_CALIBRATION_MARKER.length + USER_ID_DIGITS;
   const repsUsed = Math.min(REPS, Math.floor(rightSide.length / fullGroups));
   if (repsUsed < 1) {
@@ -244,7 +251,10 @@ export function decodeNumericUserIdDiagnosticsFromRightSide(rightSide: number[])
   const nVals = fullGroups * repsUsed;
   const prefix = rightSide.slice(0, nVals);
   const markerPrefix = prefix.slice(0, V2_CALIBRATION_MARKER.length * repsUsed);
-  const modulo = Math.max(10, (prefix.length ? Math.max(...prefix) : 0) + 1);
+  const modulo =
+    modulusOverride && modulusOverride > 0
+      ? modulusOverride
+      : Math.max(10, (prefix.length ? Math.max(...prefix) : 0) + 1);
 
   // Solve deterministic decode shift from the calibration marker groups.
   let bestShift = 0;
@@ -329,8 +339,8 @@ export function decodeNumericUserIdDiagnosticsFromRightSide(rightSide: number[])
   };
 }
 
-export function decodeNumericUserIdFromRightSide(rightSide: number[]): number | null {
-  return decodeNumericUserIdDiagnosticsFromRightSide(rightSide).numericUserId;
+export function decodeNumericUserIdFromRightSide(rightSide: number[], modulusOverride?: number): number | null {
+  return decodeNumericUserIdDiagnosticsFromRightSide(rightSide, modulusOverride).numericUserId;
 }
 
 /**
@@ -487,7 +497,7 @@ export async function decodeAndVerifyFrameFromLuma(
   const rightEndIndex = getRightEndIndex(h, patchCols);
   if (rightEndIndex <= 0) return {verified: false, numericUserId: null};
   const rightSide = getRightSideRowSums(givenFrame, rightEndIndex);
-  const numericUserId = decodeNumericUserIdFromRightSide(rightSide);
+  const numericUserId = decodeNumericUserIdFromRightSide(rightSide, rightEndIndex);
   const signatureBytes = getLeftSideSignature(cropped, w, h, rightEndIndex);
   const verified = await verifyFrame(publicKey, rightSide, signatureBytes);
   return {verified, numericUserId};

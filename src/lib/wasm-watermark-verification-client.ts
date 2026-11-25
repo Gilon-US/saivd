@@ -17,6 +17,26 @@ export type WasmFrameYResult = {
   };
 };
 
+/** A sync sample (IDR keyframe): sample index and presentation time in seconds. */
+export type WasmKeyframe = {index: number; time: number};
+
+/** Video track facts from the MP4 sample table (mp4box). */
+export type WasmVideoTrackInfo = {
+  nbSamples: number;
+  width: number;
+  height: number;
+  keyframes: WasmKeyframe[];
+};
+
+/** Packed Y, U and V planes of one frame (watermark format v3 reads all three). */
+export type WasmFrameYuvResult = {
+  y: Uint8Array;
+  u: Uint8Array;
+  v: Uint8Array;
+  width: number;
+  height: number;
+};
+
 type InitOk = {
   id: number;
   ok: true;
@@ -25,6 +45,7 @@ type InitOk = {
   nbSamples: number;
   width: number;
   height: number;
+  keyframes?: WasmKeyframe[];
   timings?: {
     moovParseMs: number;
     ffmpegLoadMs: number;
@@ -37,6 +58,8 @@ type DecodeOk = {
   ok: true;
   type: "decodeFrame";
   yPlane: ArrayBuffer;
+  uPlane?: ArrayBuffer;
+  vPlane?: ArrayBuffer;
   width: number;
   height: number;
   timings?: {
@@ -61,7 +84,7 @@ const pending = new Map<
 >();
 
 let activeUrl: string | null = null;
-let initMeta: {nbSamples: number; width: number; height: number} | null = null;
+let initMeta: WasmVideoTrackInfo | null = null;
 let disposeTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
@@ -145,7 +168,7 @@ function send<T extends OkMsg>(payload: Record<string, unknown>): Promise<T> {
  */
 export async function ensureWasmVerificationSession(
   videoUrl: string
-): Promise<{nbSamples: number; width: number; height: number} | null> {
+): Promise<WasmVideoTrackInfo | null> {
   if (disposeTimer) {
     clearTimeout(disposeTimer);
     disposeTimer = null;
@@ -158,7 +181,7 @@ export async function ensureWasmVerificationSession(
 
 async function runEnsureWasmVerificationSessionLocked(
   videoUrl: string
-): Promise<{nbSamples: number; width: number; height: number} | null> {
+): Promise<WasmVideoTrackInfo | null> {
   if (activeUrl === videoUrl && initMeta) {
     return initMeta;
   }
@@ -169,6 +192,7 @@ async function runEnsureWasmVerificationSessionLocked(
       nbSamples: data.nbSamples,
       width: data.width,
       height: data.height,
+      keyframes: data.keyframes ?? [],
     };
     if (data.timings) {
       console.log("[Frame0Decode] WASM init timing", data.timings);
@@ -239,6 +263,41 @@ export async function getFrameYFromWasm(
     width: data.width,
     height: data.height,
     timings: data.timings,
+  };
+}
+
+/**
+ * Sample count, dimensions and keyframe list of the video track (initializes the session if needed).
+ */
+export async function getWasmVideoTrackInfo(videoUrl: string): Promise<WasmVideoTrackInfo | null> {
+  return ensureWasmVerificationSession(videoUrl);
+}
+
+/**
+ * Decode one frame to packed Y, U and V planes (watermark format v3). Requires a session like getFrameYFromWasm.
+ */
+export async function getFrameYuvFromWasm(
+  videoUrl: string,
+  frameIndex: number
+): Promise<WasmFrameYuvResult | null> {
+  const meta = await ensureWasmVerificationSession(videoUrl);
+  if (!meta || frameIndex < 0 || frameIndex >= meta.nbSamples) {
+    return null;
+  }
+  const data = await send<DecodeOk>({
+    type: "decodeFrame",
+    frameIndex,
+    planes: "yuv",
+  });
+  if (!data.uPlane || !data.vPlane) {
+    throw new Error("Worker returned no U/V planes for a yuv decode");
+  }
+  return {
+    y: new Uint8Array(data.yPlane),
+    u: new Uint8Array(data.uPlane),
+    v: new Uint8Array(data.vPlane),
+    width: data.width,
+    height: data.height,
   };
 }
 

@@ -11,11 +11,26 @@ import {
   disposeWasmVerificationSession,
   ensureWasmVerificationSession,
   getFrameYFromWasm,
+  getFrameYuvFromWasm,
+  getWasmVideoTrackInfo,
   prewarmWasmVerificationSession,
   scheduleDisposeWasmVerificationSession,
+  type WasmKeyframe,
 } from "@/lib/wasm-watermark-verification-client";
+import {isV3Reading, readFrameV3, verifyV3Signature, type V3FrameReading} from "@/lib/watermark-v3";
 
 export type WatermarkVerificationStatus = "idle" | "verifying" | "verified" | "failed";
+/** Detected per video at bootstrap: a valid U/V user-ID block means v3, otherwise v2. */
+export type WatermarkFormat = "v2" | "v3";
+type KeyframeCheckResult = "verified" | "failed" | "error";
+
+/** A keyframe the playhead has reached must be verified within this much wall-clock *playing* time. */
+export const KEYFRAME_VERIFY_DEADLINE_MS = 6000;
+/** The queue verifies keyframes up to this far (media seconds) ahead of the playhead. */
+export const KEYFRAME_VERIFY_LOOKAHEAD_S = 4;
+const KEYFRAME_TIME_EPSILON_S = 0.05;
+const QUEUE_IDLE_POLL_MS = 200;
+const DEADLINE_TICK_MS = 250;
 export type VerificationProgressPhase =
   | "prewarm"
   | "session_init"
@@ -70,10 +85,16 @@ export function useWatermarkVerification(
   const prewarmStartedRef = useRef(false);
   const onVerificationProgressRef = useRef<typeof onVerificationProgress>(onVerificationProgress);
   const lastProgressRef = useRef<{phase: VerificationProgressPhase; detail?: string} | null>(null);
-  /** Counts concurrent follow-up (verified) tick decodes — >1 means overlapping async ticks. */
-  const followupTickDepthRef = useRef(0);
   /** True only for the synchronous stretch after we call `video.pause()` from verification failure paths. */
   const programmaticPauseForDiagRef = useRef(false);
+  const [watermarkFormat, setWatermarkFormat] = useState<WatermarkFormat | null>(null);
+  const watermarkFormatRef = useRef<WatermarkFormat | null>(null);
+  /** User id decoded at bootstrap; every later keyframe must carry the same one. */
+  const bootstrapUserIdRef = useRef<number | null>(null);
+  /** Refetch of the public key before blocking on a signature mismatch is allowed once per video. */
+  const keyRefreshUsedRef = useRef(false);
+  /** Per-keyframe decode budget (larger for 4K), set at bootstrap. */
+  const followupDecodeTimeoutRef = useRef(FOLLOWUP_FRAME_DECODE_TIMEOUT_MS);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const debugLog = (...args: any[]) => {
@@ -128,6 +149,10 @@ export function useWatermarkVerification(
       prewarmStartedRef.current = false;
       verifiedFrameIndicesRef.current = new Set();
       lastProgressRef.current = null;
+      watermarkFormatRef.current = null;
+      setWatermarkFormat(null);
+      bootstrapUserIdRef.current = null;
+      keyRefreshUsedRef.current = false;
       scheduleDisposeWasmVerificationSession(SESSION_KEEPALIVE_TTL_MS);
       return;
     }
@@ -143,6 +168,10 @@ export function useWatermarkVerification(
       callbackFiredRef.current = false;
       inconclusiveGraceUsedRef.current = false;
       verifiedFrameIndicesRef.current = new Set();
+      watermarkFormatRef.current = null;
+      setWatermarkFormat(null);
+      bootstrapUserIdRef.current = null;
+      keyRefreshUsedRef.current = false;
     }
     if (verificationStartedRef.current) {
       debugLog("Skipping duplicate bootstrap verification in same session", {sessionKey});
@@ -192,6 +221,7 @@ export function useWatermarkVerification(
       const followupDecodeTimeoutMs = is4K
         ? FOLLOWUP_DECODE_TIMEOUT_4K_MS
         : FOLLOWUP_FRAME_DECODE_TIMEOUT_MS;
+      followupDecodeTimeoutRef.current = followupDecodeTimeoutMs;
 
       console.log("[Frame0Decode] Session ready (init complete)", {
         initMs: Math.round(performance.now() - initStart),
@@ -213,16 +243,19 @@ export function useWatermarkVerification(
         height: number;
       }> = [];
       let strongFrame0Candidate: (typeof candidates)[number] | null = null;
+      let v3Bootstrap: {frameIndex: number; reading: V3FrameReading & {userIdUv: number}} | null = null;
 
       for (const frameIndex of frameIndexes) {
         emitProgress("frame_decode", `Checking watermark on frame ${frameIndex}`);
         const frameStart = performance.now();
         const frameDecodeTimeoutMs =
           frameIndex === 0 ? frame0DecodeTimeoutMs : followupDecodeTimeoutMs;
-        let webCodecsY: Awaited<ReturnType<typeof getFrameYFromWasm>> = null;
+        let webCodecsY: {yPlane: Uint8Array; width: number; height: number} | null = null;
+        let v3Reading: V3FrameReading | null = null;
         try {
-          webCodecsY = await Promise.race([
-            getFrameYFromWasm(videoUrl, frameIndex),
+          // Y, U and V: the U/V user-ID block tells v3 from v2; v2 uses only the Y plane below.
+          const yuv = await Promise.race([
+            getFrameYuvFromWasm(videoUrl, frameIndex),
             new Promise<null>((_, reject) =>
               setTimeout(
                 () => reject(new Error(`Frame decode timeout (${frameDecodeTimeoutMs}ms)`)),
@@ -230,6 +263,10 @@ export function useWatermarkVerification(
               )
             ),
           ]);
+          if (yuv) {
+            webCodecsY = {yPlane: yuv.y, width: yuv.width, height: yuv.height};
+            v3Reading = readFrameV3(yuv);
+          }
         } catch (e) {
           debugLog("WASM frame capture failed", {frameIndex, error: e});
           // If ffmpeg/worker gets stuck on iOS Safari, force a reset so subsequent frames can proceed.
@@ -247,6 +284,18 @@ export function useWatermarkVerification(
           continue;
         }
 
+        if (isV3Reading(v3Reading)) {
+          console.log("[Frame0Decode] Bootstrap v3 frame", {
+            frameIndex,
+            elapsedMs: Math.round(performance.now() - frameStart),
+            userIdUv: v3Reading.userIdUv,
+            userIdY: v3Reading.userIdY,
+            signatureReadable: v3Reading.signature !== null,
+          });
+          v3Bootstrap = {frameIndex, reading: v3Reading};
+          break;
+        }
+
         const diagnostics = decodeNumericUserIdDiagnosticsFromLuma(
           webCodecsY.yPlane,
           webCodecsY.width,
@@ -260,7 +309,6 @@ export function useWatermarkVerification(
           repsUsed: diagnostics.repsUsed,
           validDigits: diagnostics.validDigits,
           rightSideLength: diagnostics.rightSideLength,
-          workerTimings: webCodecsY.timings ?? null,
         });
 
         if (
@@ -289,6 +337,11 @@ export function useWatermarkVerification(
             break;
           }
         }
+      }
+
+      if (v3Bootstrap) {
+        await finishV3Bootstrap(v3Bootstrap.frameIndex, v3Bootstrap.reading, decodeStart, sessionMeta.nbSamples);
+        return;
       }
 
       const votes = new Map<number, number>();
@@ -403,9 +456,76 @@ export function useWatermarkVerification(
       console.log("[Frame0Decode] Verification finished", { status: "verified", elapsedMs: elapsed });
       console.log("[Frame0Decode] Full video loads only after this (when <video> src is set). Verification used Range requests + WASM decode.");
       verifiedFrameIndicesRef.current = new Set([0]);
+      watermarkFormatRef.current = "v2";
+      setWatermarkFormat("v2");
+      bootstrapUserIdRef.current = numericUserId;
       setVerifiedUserId(String(numericUserId));
       setStatus("verified");
-      debugLog("Verification succeeded for frame 0 (user ID decoded)", {numericUserId});
+      debugLog("Verification succeeded for frame 0 (user ID decoded)", {numericUserId, format: "v2"});
+      if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
+        callbackFiredRef.current = true;
+        onVerificationCompleteRef.current("verified", String(numericUserId));
+      }
+    };
+
+    /**
+     * v3 bootstrap: the user id comes from the CRC-checked U/V block. By policy the bootstrap frame's RSA
+     * result is logged but ignored, so playback starts without waiting on it; later keyframes are
+     * enforced by the keyframe queue.
+     */
+    const finishV3Bootstrap = async (
+      frameIndex: number,
+      reading: V3FrameReading & {userIdUv: number},
+      decodeStart: number,
+      frameCount: number
+    ) => {
+      const numericUserId = reading.userIdUv;
+      if (reading.userIdY !== null && reading.userIdY !== numericUserId) {
+        console.warn("[WatermarkVerify] v3 user id mismatch: Y payload differs from U/V block (U/V trusted)", {
+          frameIndex,
+          userIdUv: numericUserId,
+          userIdY: reading.userIdY,
+        });
+      }
+      console.log("[Frame0Decode] Decode phase timing", {
+        frameDecodeMs: Math.round(performance.now() - decodeStart),
+        format: "v3",
+      });
+      emitProgress("key_fetch", "Retrieving signer key");
+      let key: CryptoKey | null = null;
+      try {
+        key = await importPublicKeyFromPem(await fetchPublicKeyPem(numericUserId));
+      } catch (e) {
+        debugLog("Fetch/import public key failed (non-blocking at bootstrap)", e);
+      }
+      if (!mounted) return;
+      publicKeyRef.current = key;
+      if (key && reading.signature) {
+        emitProgress("rsa_verify", "Validating authenticity signature");
+        try {
+          const verified = await verifyV3Signature(key, reading.signature, frameCount, numericUserId);
+          debugLog("Bootstrap v3 RSA result (informational; not enforced on the bootstrap frame)", {
+            verified,
+            frameIndex,
+            frameCount,
+          });
+        } catch (e) {
+          debugLog("Bootstrap v3 RSA threw (non-blocking)", e);
+        }
+      }
+      if (!mounted) return;
+      emitProgress("finalizing", "Final checks");
+      console.log("[Frame0Decode] Verification finished", {
+        status: "verified",
+        elapsedMs: Math.round(performance.now() - verifyStartTime),
+        format: "v3",
+      });
+      verifiedFrameIndicesRef.current = new Set([0]);
+      watermarkFormatRef.current = "v3";
+      setWatermarkFormat("v3");
+      bootstrapUserIdRef.current = numericUserId;
+      setVerifiedUserId(String(numericUserId));
+      setStatus("verified");
       if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
         callbackFiredRef.current = true;
         onVerificationCompleteRef.current("verified", String(numericUserId));
@@ -435,11 +555,43 @@ export function useWatermarkVerification(
     };
   }, [enabled, videoUrl]);
 
+  /**
+   * Ongoing verification: a verify-ahead queue over the MP4's keyframes (the watermarked frames).
+   * - Keyframe 0 is skipped by policy (playback starts without waiting on its RSA result).
+   * - Keyframes are checked in time order, up to KEYFRAME_VERIFY_LOOKAHEAD_S ahead of the playhead.
+   * - v3: a failed or uncorrectable (RS) signature, or a user id different from bootstrap, blocks playback.
+   * - v2: only the Y-payload user id is checked (the v2 RSA can't pass on real outputs); a different
+   *   user id blocks playback.
+   * - Decode / network errors use the one-skip allowance: the next error blocks; a success resets it.
+   * - A keyframe the playhead has reached must be verified within KEYFRAME_VERIFY_DEADLINE_MS of
+   *   wall-clock playing time (paused, seeking and buffering time don't count), or playback is blocked.
+   * - The playhead comes from requestVideoFrameCallback media times; seeks move the queue's floor to the
+   *   keyframe at or before the new position. currentTime is read only where rVFC is unavailable.
+   */
   useEffect(() => {
     if (!enabled || status !== "verified" || !videoUrl) return;
     const video = videoRef.current;
     if (!video) return;
-    let cancelled = false;
+    const format = watermarkFormatRef.current;
+    const expectedUserId = bootstrapUserIdRef.current;
+    if (!format || expectedUserId === null) return;
+
+    type RvfcVideo = HTMLVideoElement & {
+      requestVideoFrameCallback?: (cb: (now: number, meta: {mediaTime: number}) => void) => number;
+      cancelVideoFrameCallback?: (handle: number) => void;
+    };
+    const rvfcVideo = video as RvfcVideo;
+    const hasRvfc = typeof rvfcVideo.requestVideoFrameCallback === "function";
+
+    let stopped = false;
+    let keyframes: WasmKeyframe[] = [];
+    let frameCount = 0;
+    let mediaTime = 0;
+    let floorTime = 0;
+    let seekPending = false;
+    let rvfcHandle: number | null = null;
+    const overdueMs = new Map<number, number>();
+    const done = verifiedFrameIndicesRef.current;
 
     const pauseFromVerification = (reason: string) => {
       debugLog("playback: calling video.pause()", {
@@ -451,154 +603,251 @@ export function useWatermarkVerification(
       video.pause();
     };
 
+    const fail = (reason: string, detail?: Record<string, unknown>) => {
+      if (stopped) return;
+      stopped = true;
+      console.warn("[WatermarkVerify] Ongoing verification failed", {reason, format, ...detail});
+      setStatus("failed");
+      pauseFromVerification(reason);
+      if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
+        callbackFiredRef.current = true;
+        onVerificationCompleteRef.current("failed", null);
+      }
+    };
+
+    const ensureKey = async (): Promise<CryptoKey | null> => {
+      if (publicKeyRef.current) return publicKeyRef.current;
+      try {
+        const key = await importPublicKeyFromPem(await fetchPublicKeyPem(expectedUserId));
+        publicKeyRef.current = key;
+        return key;
+      } catch (e) {
+        debugLog("Public key fetch failed during ongoing verification", e);
+        return null;
+      }
+    };
+
+    /** Once per video: refetch the key (it may have been rotated) before blocking on a mismatch. */
+    const refreshKey = async (): Promise<CryptoKey | null> => {
+      if (keyRefreshUsedRef.current) return null;
+      keyRefreshUsedRef.current = true;
+      try {
+        const key = await importPublicKeyFromPem(await fetchPublicKeyPem(expectedUserId));
+        publicKeyRef.current = key;
+        return key;
+      } catch {
+        return null;
+      }
+    };
+
+    /** Run a worker decode with the per-keyframe budget; on timeout reset the worker (stuck ffmpeg on iOS). */
+    const withDecodeTimeout = async <T,>(work: Promise<T | null>): Promise<T | null> => {
+      const budget = followupDecodeTimeoutRef.current;
+      try {
+        return await Promise.race([
+          work,
+          new Promise<null>((_, reject) =>
+            setTimeout(() => reject(new Error(`Frame decode timeout (${budget}ms)`)), budget)
+          ),
+        ]);
+      } catch (e) {
+        if (e instanceof Error && e.message.includes("timeout")) {
+          await disposeWasmVerificationSession();
+        }
+        return null;
+      }
+    };
+
+    type CheckOutcome = {result: KeyframeCheckResult; reason: string};
+
+    const checkKeyframeV3 = async (index: number): Promise<CheckOutcome> => {
+      const frame = await withDecodeTimeout(getFrameYuvFromWasm(videoUrl, index));
+      if (!frame) return {result: "error", reason: "frame_decode_failed"};
+      const reading = readFrameV3(frame);
+      if (!reading) return {result: "failed", reason: "frame_too_small_for_v3"};
+      if (reading.signature === null) return {result: "failed", reason: "signature_unreadable"};
+      if (reading.userId === null) return {result: "failed", reason: "user_id_unreadable"};
+      if (reading.userId !== expectedUserId) return {result: "failed", reason: "user_id_changed"};
+      const key = await ensureKey();
+      if (!key) return {result: "error", reason: "public_key_unavailable"};
+      if (await verifyV3Signature(key, reading.signature, frameCount, reading.userId)) {
+        return {result: "verified", reason: "ok"};
+      }
+      const fresh = await refreshKey();
+      if (fresh && (await verifyV3Signature(fresh, reading.signature, frameCount, reading.userId))) {
+        return {result: "verified", reason: "ok_after_key_refresh"};
+      }
+      return {result: "failed", reason: "signature_mismatch"};
+    };
+
+    /**
+     * v2 keyframes: the Y-payload user id must match the bootstrap user id. The legacy v2 RSA
+     * (decodeAndVerifyFrameFromLuma, 5-pixel groups) is not used here: it fails on every keyframe of real
+     * v2 outputs (2026-11-23), so v2 checks user-id consistency only.
+     */
+    const checkKeyframeV2 = async (index: number): Promise<CheckOutcome> => {
+      const wasmFrame = await withDecodeTimeout(getFrameYFromWasm(videoUrl, index));
+      if (!wasmFrame) return {result: "error", reason: "frame_decode_failed"};
+      const {numericUserId} = decodeNumericUserIdDiagnosticsFromLuma(
+        wasmFrame.yPlane,
+        wasmFrame.width,
+        wasmFrame.height
+      );
+      if (numericUserId === null) return {result: "error", reason: "user_id_unreadable"};
+      if (numericUserId !== expectedUserId) return {result: "failed", reason: "user_id_changed"};
+      return {result: "verified", reason: "ok"};
+    };
+
+    const applyOutcome = (kf: WasmKeyframe, outcome: CheckOutcome, checkMs: number) => {
+      debugLog("playback: keyframe check", {
+        format,
+        index: kf.index,
+        time: kf.time,
+        result: outcome.result,
+        reason: outcome.reason,
+        checkMs,
+        mediaTime,
+      });
+      if (outcome.result === "verified") {
+        inconclusiveGraceUsedRef.current = false;
+        done.add(kf.index);
+        overdueMs.delete(kf.index);
+        return;
+      }
+      if (outcome.result === "error" && !inconclusiveGraceUsedRef.current) {
+        inconclusiveGraceUsedRef.current = true;
+        done.add(kf.index);
+        overdueMs.delete(kf.index);
+        debugLog("Keyframe check inconclusive; one-skip allowance used", {index: kf.index, reason: outcome.reason});
+        return;
+      }
+      fail(outcome.reason, {index: kf.index});
+    };
+
+    /** Earliest unverified keyframe in scope and within the look-ahead window. */
+    const nextTarget = (): WasmKeyframe | null => {
+      for (const kf of keyframes) {
+        if (kf.time < floorTime - KEYFRAME_TIME_EPSILON_S || done.has(kf.index)) continue;
+        return kf.time <= mediaTime + KEYFRAME_VERIFY_LOOKAHEAD_S ? kf : null;
+      }
+      return null;
+    };
+
+    /** Time of the keyframe at or before media time t (the keyframe whose GOP is on screen). */
+    const keyframeFloorFor = (t: number): number => {
+      let floor = 0;
+      for (const kf of keyframes) {
+        if (kf.time <= t + KEYFRAME_TIME_EPSILON_S) floor = kf.time;
+        else break;
+      }
+      return floor;
+    };
+
+    const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    const runQueue = async () => {
+      let info: Awaited<ReturnType<typeof getWasmVideoTrackInfo>> = null;
+      try {
+        info = await getWasmVideoTrackInfo(videoUrl);
+      } catch {
+        info = null;
+      }
+      if (stopped) return;
+      if (!info) {
+        fail("track_info_unavailable");
+        return;
+      }
+      frameCount = info.nbSamples;
+      keyframes = info.keyframes.filter((kf) => kf.index !== 0).sort((a, b) => a.time - b.time);
+      debugLog("Keyframe queue started", {format, frameCount, keyframes: keyframes.length});
+      while (!stopped) {
+        const kf = seekPending ? null : nextTarget();
+        if (!kf) {
+          await sleep(QUEUE_IDLE_POLL_MS);
+          continue;
+        }
+        const checkStart = performance.now();
+        const outcome = format === "v3" ? await checkKeyframeV3(kf.index) : await checkKeyframeV2(kf.index);
+        if (stopped) return;
+        applyOutcome(kf, outcome, Math.round(performance.now() - checkStart));
+      }
+    };
+
+    const onFrame = (_now: number, meta: {mediaTime: number}) => {
+      mediaTime = meta.mediaTime;
+      if (seekPending) {
+        floorTime = keyframeFloorFor(mediaTime);
+        overdueMs.clear();
+        seekPending = false;
+        debugLog("playback: seek settled", {mediaTime, floorTime});
+      }
+      if (!stopped && rvfcVideo.requestVideoFrameCallback) {
+        rvfcHandle = rvfcVideo.requestVideoFrameCallback(onFrame);
+      }
+    };
+    const onSeeking = () => {
+      seekPending = true;
+      overdueMs.clear();
+    };
+    const onSeeked = () => {
+      if (hasRvfc) return; // the next presented frame (rVFC) settles the new position
+      mediaTime = video.currentTime;
+      floorTime = keyframeFloorFor(mediaTime);
+      seekPending = false;
+    };
     const onPause = () => {
       const fromVerification = programmaticPauseForDiagRef.current;
       programmaticPauseForDiagRef.current = false;
-      debugLog("playback: video 'pause' event", {
-        fromVerification,
-        currentTime: video.currentTime,
-        readyState: video.readyState,
-      });
+      debugLog("playback: video 'pause' event", {fromVerification, currentTime: video.currentTime});
     };
-
     const onWaiting = () => {
       debugLog("playback: video 'waiting' (buffering)", {
         currentTime: video.currentTime,
         readyState: video.readyState,
         networkState: video.networkState,
-        followupTickDepth: followupTickDepthRef.current,
       });
     };
 
-    const onStalled = () => {
-      debugLog("playback: video 'stalled'", {
-        currentTime: video.currentTime,
-        readyState: video.readyState,
-        networkState: video.networkState,
-      });
-    };
+    let lastTick = performance.now();
+    const deadlineTimer = window.setInterval(() => {
+      const now = performance.now();
+      const elapsed = now - lastTick;
+      lastTick = now;
+      if (stopped) return;
+      if (!hasRvfc && !video.seeking) mediaTime = video.currentTime; // fallback for browsers without rVFC
+      const playing = !video.paused && !video.ended && !video.seeking && video.readyState >= 3;
+      if (!playing || seekPending) return;
+      for (const kf of keyframes) {
+        if (kf.time > mediaTime + KEYFRAME_TIME_EPSILON_S) break;
+        if (kf.time < floorTime - KEYFRAME_TIME_EPSILON_S || done.has(kf.index)) continue;
+        const spent = (overdueMs.get(kf.index) ?? 0) + elapsed;
+        overdueMs.set(kf.index, spent);
+        if (spent >= KEYFRAME_VERIFY_DEADLINE_MS) {
+          fail("verification_deadline_exceeded", {index: kf.index, keyframeTime: kf.time, spentMs: Math.round(spent)});
+          return;
+        }
+      }
+    }, DEADLINE_TICK_MS);
 
+    if (hasRvfc && rvfcVideo.requestVideoFrameCallback) {
+      rvfcHandle = rvfcVideo.requestVideoFrameCallback(onFrame);
+    }
+    video.addEventListener("seeking", onSeeking);
+    video.addEventListener("seeked", onSeeked);
     video.addEventListener("pause", onPause);
     video.addEventListener("waiting", onWaiting);
-    video.addEventListener("stalled", onStalled);
+    void runQueue();
 
-    const tick = async () => {
-      if (cancelled) return;
-      if (video.paused || video.ended) return;
-      const key = publicKeyRef.current;
-      if (!key) return;
-
-      const fps = Number.isFinite(video.getVideoPlaybackQuality?.().totalVideoFrames)
-        ? Math.max(1, video.getVideoPlaybackQuality().totalVideoFrames / Math.max(0.001, video.currentTime || 0.001))
-        : 30;
-      const currentFrame = Math.floor(video.currentTime * fps);
-      const checkpoint = Math.floor(currentFrame / 10) * 10;
-      if (checkpoint <= 0 || verifiedFrameIndicesRef.current.has(checkpoint)) return;
-
-      followupTickDepthRef.current += 1;
-      const depth = followupTickDepthRef.current;
-      if (depth > 1) {
-        debugLog("playback: follow-up tick overlap (previous decode still in flight)", {
-          depth,
-          checkpoint,
-          currentTime: video.currentTime,
-        });
-      }
-
-      const tickT0 = performance.now();
-      let wasmFrame: Awaited<ReturnType<typeof getFrameYFromWasm>> = null;
-      try {
-        const wasmT0 = performance.now();
-        try {
-          wasmFrame = await getFrameYFromWasm(videoUrl, checkpoint);
-        } catch {
-          wasmFrame = null;
-        }
-        const wasmMs = Math.round(performance.now() - wasmT0);
-        if (wasmFrame) {
-          debugLog("playback: getFrameYFromWasm ok", {checkpoint, wasmMs, width: wasmFrame.width, height: wasmFrame.height});
-        } else {
-          debugLog("playback: getFrameYFromWasm failed/null", {checkpoint, wasmMs});
-        }
-
-        if (!wasmFrame) {
-          if (inconclusiveGraceUsedRef.current) {
-            setStatus("failed");
-            pauseFromVerification("follow-up decode null after grace");
-            if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
-              callbackFiredRef.current = true;
-              onVerificationCompleteRef.current("failed", null);
-            }
-          } else {
-            inconclusiveGraceUsedRef.current = true;
-            verifiedFrameIndicesRef.current.add(checkpoint);
-          }
-          return;
-        }
-
-        const rsaT0 = performance.now();
-        const frameResult = await decodeAndVerifyFrameFromLuma(
-          key,
-          wasmFrame.yPlane,
-          wasmFrame.width,
-          wasmFrame.height
-        );
-        const rsaMs = Math.round(performance.now() - rsaT0);
-        debugLog("playback: decodeAndVerifyFrameFromLuma", {
-          checkpoint,
-          rsaMs,
-          verified: frameResult.verified,
-          numericUserId: frameResult.numericUserId,
-        });
-
-        if (frameResult.verified) {
-          inconclusiveGraceUsedRef.current = false;
-          verifiedFrameIndicesRef.current.add(checkpoint);
-          return;
-        }
-
-        if (frameResult.numericUserId === null) {
-          if (inconclusiveGraceUsedRef.current) {
-            setStatus("failed");
-            pauseFromVerification("inconclusive after grace");
-            if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
-              callbackFiredRef.current = true;
-              onVerificationCompleteRef.current("failed", null);
-            }
-          } else {
-            inconclusiveGraceUsedRef.current = true;
-            verifiedFrameIndicesRef.current.add(checkpoint);
-          }
-          return;
-        }
-
-        // Cryptographic mismatch -> immediate stop
-        setStatus("failed");
-        pauseFromVerification("cryptographic mismatch");
-        if (!callbackFiredRef.current && onVerificationCompleteRef.current) {
-          callbackFiredRef.current = true;
-          onVerificationCompleteRef.current("failed", null);
-        }
-      } finally {
-        followupTickDepthRef.current -= 1;
-        const totalMs = Math.round(performance.now() - tickT0);
-        if (totalMs >= 40) {
-          debugLog("playback: follow-up tick finished", {checkpoint, totalMs, depthEnded: depth});
-        }
-      }
-    };
-
-    const interval = window.setInterval(() => {
-      void tick();
-    }, 300);
     return () => {
-      cancelled = true;
-      window.clearInterval(interval);
+      stopped = true;
+      window.clearInterval(deadlineTimer);
+      if (rvfcHandle !== null) rvfcVideo.cancelVideoFrameCallback?.(rvfcHandle);
+      video.removeEventListener("seeking", onSeeking);
+      video.removeEventListener("seeked", onSeeked);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("waiting", onWaiting);
-      video.removeEventListener("stalled", onStalled);
     };
   }, [enabled, status, videoRef, videoUrl]);
 
-  return {status, verifiedUserId};
+  return {status, verifiedUserId, watermarkFormat};
 }

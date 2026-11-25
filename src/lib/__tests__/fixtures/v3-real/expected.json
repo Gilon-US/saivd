@@ -1,0 +1,54 @@
+{
+  "source_video": "video_examples/v3_test/landscape_854x480_v3_watermark.mp4",
+  "width": 854,
+  "height": 480,
+  "plane_layout": "I420, no padding: Y (W*H), then U, then V (each ceil(W/2)*ceil(H/2))",
+  "y_bytes": 409920,
+  "u_bytes": 102480,
+  "v_bytes": 102480,
+  "fps": 30.0,
+  "watermark_every_n_frames": 15,
+  "frame_count": 151,
+  "user_id": 123456789,
+  "public_key": "test_public_key.pem",
+  "layout": {
+    "rows": 30,
+    "cols": 53,
+    "payload_end": 50,
+    "rows_per_digit": 2,
+    "y_sig_capacity": 90,
+    "uv_sig_capacity": 1107,
+    "user_id_copies_per_plane": 7,
+    "uv_bits": 1555
+  },
+  "frames": [
+    {
+      "file": "frame_0000_854x480_i420.yuv",
+      "frame_index": 0,
+      "keyframe": true,
+      "expected": {
+        "user_id_y": 123456789,
+        "user_id_uv": 123456789,
+        "rs_codewords_before_correction_hex": "2b30de54b7adf23c18eb362538a4b0c45f12e1de857a16c53d87ca78d68a49e5e6619d9be64fd3c009241f605d9ca3d7c31002058c35e2c670e00dd9f1923a35def3dc541b3ece7d6fa4b94ee8a6ee64cc2ac89905208bd3a201c0df8263789baaca09e5eab0ea01f129aece7d4936492ec3fd4cc46f57440c60a255aa073ec6d1101e5bcea68a7e492d905926e7354c75dd9b23ed2ca13f7ae74b6e558a56d72d221b6ab081cc3af14356b328a1cdad2208fec27b203d3a8fe91101f36e6f9561cadd30c5971752e6538194094cca1c8b986ec5c0aacb6ac1887779d547fb0953f39d5bb1eea5623d466ad7de2713b85d04b2413a0f839d88bb00729421c628d6bc144a88bc863a41049603806b696c72d53b1e28ccbaa6509d33f83811ac49",
+        "rs_bytes_with_errors": 0,
+        "signature_hex": "2b30de54b7adf23c18eb362538a4b0c45f12e1de857a16c53d87ca78d68a49e5e6619d9be64fd3c009241f605d9ca3d7c31002058c35e2c670e00dd9f1923a35def3dc541b3ece7d6fa4b94ee8a6ee64cc2ac89905208bd3a201c0df8263789baaca09e5eab0ea01f129aece7d4936492ec3fd4cc46f57440c60a255aa073ec675dd9b23ed2ca13f7ae74b6e558a56d72d221b6ab081cc3af14356b328a1cdad2208fec27b203d3a8fe91101f36e6f9561cadd30c5971752e6538194094cca1c8b986ec5c0aacb6ac1887779d547fb0953f39d5bb1eea5623d466ad7de2713b85d04b2413a0f839d88bb00729421c628d6bc144a88bc863a41049603806b696c",
+        "signed_message": "saivd-v3:151:123456789",
+        "verify": true
+      }
+    },
+    {
+      "file": "frame_0015_854x480_i420.yuv",
+      "frame_index": 15,
+      "keyframe": true,
+      "expected": {
+        "user_id_y": 123456789,
+        "user_id_uv": 123456789,
+        "rs_codewords_before_correction_hex": "2b30de54b7adf23c18eb362538a4b0c45f12e1de857a16c53d87ca78d68a49e5e6619d9be64fd3c009241f605d9ca3d7c31002058c35e2c670e00dd9f1923a35def3dc541b3ece7d6fa4b94ee8a6ee64cc2ac89905208bd3a201c0df8263789baaca09e5eab0ea01f129aece7d4936492ec3fd4cc46f57440c60a255aa073ec6d1101e5bcea68a7e492d905926e7354c75dd9b23ed2ca13f7ae74b6e558a56d72d221b6ab081cc3af14356b328a1cdad2208fec27b203d3a8fe91101f36e6f9561cadd30c5971752e6538194094cca1c8b986ec5c0aacb6ac1887779d547fb0953f39d5bb1eea5623d466ad7de2713b85d04b2413a0f839d88bb00729421c628d6bc144a88bc863a41049603806b696c72d53b1e28ccbaa6509d33f83811ac49",
+        "rs_bytes_with_errors": 0,
+        "signature_hex": "2b30de54b7adf23c18eb362538a4b0c45f12e1de857a16c53d87ca78d68a49e5e6619d9be64fd3c009241f605d9ca3d7c31002058c35e2c670e00dd9f1923a35def3dc541b3ece7d6fa4b94ee8a6ee64cc2ac89905208bd3a201c0df8263789baaca09e5eab0ea01f129aece7d4936492ec3fd4cc46f57440c60a255aa073ec675dd9b23ed2ca13f7ae74b6e558a56d72d221b6ab081cc3af14356b328a1cdad2208fec27b203d3a8fe91101f36e6f9561cadd30c5971752e6538194094cca1c8b986ec5c0aacb6ac1887779d547fb0953f39d5bb1eea5623d466ad7de2713b85d04b2413a0f839d88bb00729421c628d6bc144a88bc863a41049603806b696c",
+        "signed_message": "saivd-v3:151:123456789",
+        "verify": true
+      }
+    }
+  ]
+}
