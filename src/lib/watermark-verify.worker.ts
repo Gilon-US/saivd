@@ -11,15 +11,18 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { createFile } from "mp4box";
 import type { ISOFile, Movie, MP4BoxBuffer, Sample } from "mp4box";
-import { extractYLumaFromYuv420pRaw } from "./yuv420-luma-extract";
+import { extractYLumaFromYuv420pRaw, extractYuv420pPlanes } from "./yuv420-luma-extract";
 import { getFfmpegCoreUrls } from "./ffmpeg-verification-assets";
 
 const RANGE_STEPS_BYTES = [8 * 1024 * 1024, 16 * 1024 * 1024, 32 * 1024 * 1024];
 
 type WorkerRequest =
   | { id: number; type: "init"; videoUrl: string; baseUrl: string }
-  | { id: number; type: "decodeFrame"; frameIndex: number }
+  | { id: number; type: "decodeFrame"; frameIndex: number; planes?: "y" | "yuv" }
   | { id: number; type: "dispose" };
+
+/** A sync sample (IDR keyframe): its index in the track and its presentation time in seconds. */
+type KeyframeInfo = { index: number; time: number };
 
 type WorkerResponse =
   | {
@@ -30,6 +33,7 @@ type WorkerResponse =
       nbSamples: number;
       width: number;
       height: number;
+      keyframes: KeyframeInfo[];
       timings?: {
         moovParseMs: number;
         ffmpegLoadMs: number;
@@ -41,6 +45,9 @@ type WorkerResponse =
       ok: true;
       type: "decodeFrame";
       yPlane: ArrayBuffer;
+      /** Present when the request asked for planes: "yuv" (watermark format v3). */
+      uPlane?: ArrayBuffer;
+      vPlane?: ArrayBuffer;
       width: number;
       height: number;
       timings?: {
@@ -237,9 +244,13 @@ async function ensureSampleData(trackId: number, sampleIndex: number, signal: Ab
 
 async function decodeFrameToY(
   frameIndex: number,
-  signal: AbortSignal
+  signal: AbortSignal,
+  planes: "y" | "yuv" = "y"
 ): Promise<{
   yPlane: Uint8Array;
+  /** Set when planes === "yuv" (watermark format v3 reads U and V too). */
+  uPlane?: Uint8Array;
+  vPlane?: Uint8Array;
   width: number;
   height: number;
   timings: {
@@ -308,7 +319,17 @@ async function decodeFrameToY(
     full = new Uint8Array(raw as ArrayBuffer);
   }
   const extractStart = performance.now();
-  const yPlane = extractYLumaFromYuv420pRaw(full, videoWidth, videoHeight);
+  let yPlane: Uint8Array;
+  let uPlane: Uint8Array | undefined;
+  let vPlane: Uint8Array | undefined;
+  if (planes === "yuv") {
+    const p = extractYuv420pPlanes(full, videoWidth, videoHeight);
+    yPlane = p.y;
+    uPlane = p.u;
+    vPlane = p.v;
+  } else {
+    yPlane = extractYLumaFromYuv420pRaw(full, videoWidth, videoHeight);
+  }
   const lumaExtractMs = performance.now() - extractStart;
   try {
     await ff.deleteFile("in.h264");
@@ -318,6 +339,8 @@ async function decodeFrameToY(
   }
   return {
     yPlane,
+    uPlane,
+    vPlane,
     width: videoWidth,
     height: videoHeight,
     timings: {
@@ -329,6 +352,22 @@ async function decodeFrameToY(
       totalDecodeMs: Math.round(performance.now() - decodeStart),
     },
   };
+}
+
+/** Keyframes (sync samples) with presentation times, for keyframe-based verification. */
+function listKeyframes(trackId: number): KeyframeInfo[] {
+  const trak = mp4boxfile?.getTrackById(trackId) as {samples?: Sample[]} | null | undefined;
+  const out: KeyframeInfo[] = [];
+  for (const [index, s] of (trak?.samples ?? []).entries()) {
+    if (s.is_sync && s.timescale > 0) {
+      out.push({index, time: s.cts / s.timescale});
+    }
+  }
+  return out;
+}
+
+function toTransferable(plane: Uint8Array): ArrayBuffer {
+  return plane.buffer.slice(plane.byteOffset, plane.byteOffset + plane.byteLength) as ArrayBuffer;
 }
 
 /** Clear demux / video state only; keep FFmpeg loaded for the next init (new URL). */
@@ -414,6 +453,7 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
         nbSamples,
         width: videoWidth,
         height: videoHeight,
+        keyframes: listKeyframes(videoTrackId),
         timings: {
           moovParseMs: Math.round(moovParseMs),
           ffmpegLoadMs: Math.round(ffmpegLoadMs),
@@ -432,18 +472,26 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
       if (msg.frameIndex < 0 || msg.frameIndex >= nbSamples) {
         throw new Error(`frameIndex ${msg.frameIndex} out of range (nbSamples=${nbSamples})`);
       }
-      const {yPlane, width, height, timings} = await decodeFrameToY(msg.frameIndex, signal);
-      const buf = yPlane.buffer.slice(yPlane.byteOffset, yPlane.byteOffset + yPlane.byteLength) as ArrayBuffer;
+      const {yPlane, uPlane, vPlane, width, height, timings} = await decodeFrameToY(
+        msg.frameIndex,
+        signal,
+        msg.planes ?? "y"
+      );
+      const buf = toTransferable(yPlane);
+      const uBuf = uPlane ? toTransferable(uPlane) : undefined;
+      const vBuf = vPlane ? toTransferable(vPlane) : undefined;
       const r: WorkerResponse = {
         id: msg.id,
         ok: true,
         type: "decodeFrame",
         yPlane: buf,
+        uPlane: uBuf,
+        vPlane: vBuf,
         width,
         height,
         timings,
       };
-      self.postMessage(r, [buf]);
+      self.postMessage(r, uBuf && vBuf ? [buf, uBuf, vBuf] : [buf]);
       return;
     }
   } catch (e) {
