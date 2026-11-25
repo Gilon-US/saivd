@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
   ...(process.env.USE_STANDALONE_OUTPUT === "true" ? { output: "standalone" as const } : {}),
   env: {
     NEXT_PUBLIC_APP_VERSION: packageJson.version,
+    // Download buttons (src/lib/download-buttons.ts): on for Netlify deploy previews and branch deploys
+    // (debugging), off for production unless NEXT_PUBLIC_ENABLE_DOWNLOADS=true is set explicitly.
+    NEXT_PUBLIC_ENABLE_DOWNLOADS:
+      process.env.NEXT_PUBLIC_ENABLE_DOWNLOADS ??
+      (process.env.CONTEXT === "deploy-preview" || process.env.CONTEXT === "branch-deploy" ? "true" : "false"),
   },
   images: {
     remotePatterns: [

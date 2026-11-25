@@ -1,7 +1,8 @@
 "use client";
 import {Card, CardContent} from "@/components/ui/card";
+import {DOWNLOAD_BUTTONS_ENABLED} from "@/lib/download-buttons";
 import {Button} from "@/components/ui/button";
-import {UploadIcon, RefreshCwIcon, TrashIcon, Download as _Download, QrCode} from "lucide-react";
+import {UploadIcon, RefreshCwIcon, TrashIcon, Download, QrCode} from "lucide-react";
 import {MediaShareDropdown} from "@/components/media/MediaShareDropdown";
 import Image from "next/image";
 import {useToast} from "@/hooks/useToast";
@@ -306,7 +307,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     }
   };
 
-  const _handleDownloadWatermarked = async (video: Video) => {
+  const handleDownloadWatermarked = async (video: Video) => {
     try {
       // Check if watermarked version exists
       if (!video.processed_url || video.status !== "processed") {
@@ -372,7 +373,7 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
     }
   };
 
-  const _handleDownloadOriginal = async (video: Video) => {
+  const handleDownloadOriginal = async (video: Video) => {
     try {
       if (!video.original_url) {
         toast({
@@ -832,7 +833,9 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                   <div
                     className="w-60 max-w-[240px] aspect-video relative bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
                     onClick={() => handleVideoClick(video, "original")}>
-                    {/* DOWNLOAD UI HIDDEN — original upload download button
+                    {/* Original upload download button (debug builds only, see download-buttons.ts) */}
+                    {DOWNLOAD_BUTTONS_ENABLED && (
+                      <>
                     {video.original_url && (
                       <Button
                         type="button"
@@ -847,7 +850,8 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                         <Download className="h-3 w-3" />
                       </Button>
                     )}
-                    */}
+                      </>
+                    )}
                     {isOpeningVideo === video.id && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
                         <LoadingSpinner size="sm" />
@@ -902,7 +906,9 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                       <QrCode className="h-3 w-3" />
                     </Button>
 
-                    {/* DOWNLOAD UI HIDDEN — watermarked video download button
+                    {/* Watermarked video download button (debug builds only, see download-buttons.ts) */}
+                    {DOWNLOAD_BUTTONS_ENABLED && (
+                      <>
                     {video.status === "processed" && video.processed_url && (
                       <Button
                         type="button"
@@ -917,7 +923,8 @@ export function VideoGrid({videos, isLoading, error, onRefresh, onSilentRefresh,
                         <Download className="h-3 w-3" />
                       </Button>
                     )}
-                    */}
+                      </>
+                    )}
 
                     {/* Delete watermarked video button - only shown when watermarked version is available */}
                     {video.status === "processed" && video.processed_url && (
